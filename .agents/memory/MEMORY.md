@@ -1,0 +1,3 @@
+- [MySQL setup](mysql-setup.md) — switched lib/db from PostgreSQL to MySQL2 for Hostinger shared hosting; drizzle-orm helpers must be re-exported from @workspace/db, not imported directly in api-server routes.
+- [Admin dashboard](admin-dashboard.md) — simple HMAC token auth (no JWT); admin pages at /admin and /admin/login live outside the Layout wrapper in App.tsx.
+- [MySQL schema push quirk](mysql-schema-push.md) — drizzle-kit push fails on int(11)→int or when PK already exists; run raw SQL via Node script from lib/db instead.

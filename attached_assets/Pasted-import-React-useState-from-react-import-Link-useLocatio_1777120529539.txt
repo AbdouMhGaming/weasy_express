@@ -1,0 +1,92 @@
+import React, { useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu, PackageOpen } from "lucide-react";
+import logoPath from "@assets/WhatsApp_Image_2026-04-25_at_12.29.03_PM_1777116726283.jpeg";
+
+export function Navbar() {
+  const [location] = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const routes = [
+    { href: "/", label: "Accueil" },
+    { href: "/tracking", label: "Suivi" },
+    { href: "/locations", label: "Bureaux" },
+    { href: "/contact", label: "Contact" },
+  ];
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b bg-white shadow-sm">
+      <div className="container mx-auto flex h-20 items-center justify-between px-4">
+        <Link href="/">
+          <div className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity" data-testid="link-logo">
+            <div className="h-12 w-12 rounded-full overflow-hidden bg-primary flex items-center justify-center">
+              <img src={logoPath} alt="Weasy Express" className="h-full w-full object-cover" />
+            </div>
+            <span className="font-display font-bold text-xl text-primary hidden sm:inline-block">Weasy Express</span>
+          </div>
+        </Link>
+
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex items-center gap-8">
+          {routes.map((route) => (
+            <Link key={route.href} href={route.href}>
+              <div
+                className={`text-sm font-medium transition-colors cursor-pointer hover:text-primary ${
+                  location === route.href ? "text-primary" : "text-muted-foreground"
+                }`}
+                data-testid={`link-nav-${route.label.toLowerCase()}`}
+              >
+                {route.label}
+              </div>
+            </Link>
+          ))}
+          <Link href="/tracking">
+            <Button className="font-bold cursor-pointer" data-testid="btn-nav-suivre">
+              <PackageOpen className="mr-2 h-4 w-4" />
+              Suivre un colis
+            </Button>
+          </Link>
+        </nav>
+
+        {/* Mobile Nav */}
+        <div className="md:hidden flex items-center">
+          <Sheet open={isOpen} onOpenChange={setIsOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" data-testid="btn-mobile-menu">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">Menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+              <nav className="flex flex-col gap-6 mt-10">
+                {routes.map((route) => (
+                  <Link key={route.href} href={route.href}>
+                    <div
+                      className={`text-lg font-medium cursor-pointer ${
+                        location === route.href ? "text-primary" : "text-foreground"
+                      }`}
+                      onClick={() => setIsOpen(false)}
+                      data-testid={`link-mobile-nav-${route.label.toLowerCase()}`}
+                    >
+                      {route.label}
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href="/tracking">
+                    <Button className="w-full font-bold cursor-pointer" onClick={() => setIsOpen(false)} data-testid="btn-mobile-nav-suivre">
+                      <PackageOpen className="mr-2 h-4 w-4" />
+                      Suivre un colis
+                    </Button>
+                  </Link>
+                </div>
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </header>
+  );
+}

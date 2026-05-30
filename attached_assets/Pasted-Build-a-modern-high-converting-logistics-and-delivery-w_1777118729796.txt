@@ -1,0 +1,207 @@
+Build a modern, high-converting logistics and delivery website for a company named "weasy Express ". 
+
+Tech stack:
+- Frontend: Next.js (React) + Tailwind CSS
+- No database
+- No authentication
+- No WhatsApp integration
+- Tracking uses external API (mock for now)
+
+--------------------------------------------------
+
+DESIGN SYSTEM (VERY IMPORTANT):
+
+Theme based on brand logo:
+
+Primary color: #E10600 (strong red)
+Secondary: #FFFFFF (white)
+Accent: #1A1A1A (dark gray)
+Background: #F5F5F5 (light gray)
+
+Style:
+- Bold and modern
+- Clean and minimal
+- High contrast (red + white)
+- Focus on speed, trust, and professionalism
+
+Buttons:
+- Red background (#E10600)
+- White text
+- Rounded corners
+- Hover: darker red (#B80500)
+
+Hero section:
+- Red gradient background:
+  linear-gradient(135deg, #E10600, #B80500)
+- White text
+- Strong bold typography
+
+--------------------------------------------------
+
+PAGES TO BUILD:
+
+1. Homepage (HIGH PRIORITY)
+
+- Hero section:
+  Title: "Livraison rapide partout en Algérie 🚚"
+  Subtitle: "Service fiable pour particuliers et e-commerce"
+  Button:
+    - "Suivre un colis"
+
+- Tracking section (IMPORTANT):
+  Input field for tracking number
+  Button "Suivre"
+  On submit:
+    - Call mock API
+    - Show result:
+      - Status (En cours / Livré / Annulé)
+      - Wilaya
+
+- Services section:
+  - Livraison express
+  - Cash on Delivery (COD)
+  - Ramassage à domicile
+  - Livraison nationale
+
+- Stats section:
+  - 10,000+ colis livrés
+  - 48 wilayas couvertes
+  - 98% satisfaction
+
+- Business section:
+  Title: "Solutions pour e-commerce"
+  Features:
+    - Livraison rapide
+    - Paiement à la livraison
+    - Suivi en temps réel
+
+- Testimonials (static)
+
+- CTA section:
+  "Contactez-nous"
+
+--------------------------------------------------
+
+2. Tracking Page (/tracking)
+
+- Input tracking number
+- Call mock API
+- Display:
+  - Tracking number
+  - Status
+  - Wilaya
+  - Timeline:
+    - Colis reçu
+    - En transit
+    - En livraison
+    - Livré
+
+- Include:
+  - Loading state
+  - Error handling
+
+--------------------------------------------------
+
+3. Locations Page (/locations)  ✅ NEW
+
+Purpose:
+Show all company offices (bureaux) across wilayas
+
+For now:
+- Display one location using Google Maps link:
+  https://maps.app.goo.gl/rDCDjBEf66pbLcta6?g_st=ac
+
+Layout:
+- Page title: "Nos Bureaux"
+- Map embed or clickable map card
+- Card info:
+  - Wilaya name
+  - Address (placeholder)
+  - Button: "Voir sur Google Maps"
+
+Structure code so more locations can be added easily later (array of locations)
+
+--------------------------------------------------
+
+4. Contact Page (/contact) 
+
+Display:
+
+- Email:
+  contact@weasyexpress.com
+
+- Phone numbers:
+  0654 97 06 62
+  0671 72 27 36
+
+Layout:
+- Clean card design
+- Icons for phone and email
+- Clickable links:
+  - tel:0654970662
+  - tel:0671722736
+  - mailto:contact@weasyexpress.com
+
+Include:
+- Simple contact form (UI only or EmailJS optional)
+  Fields:
+    - Name
+    - Email
+    - Message
+
+- Section title:
+  "Contactez-nous"
+
+- Subtitle:
+  "Notre équipe est disponible pour répondre à toutes vos questions"
+
+--------------------------------------------------
+
+
+--------------------------------------------------
+
+FEATURES:
+
+- Fully responsive navbar
+- Sticky header
+- Mobile-first design
+- Clean animations
+- SEO-friendly structure
+- Fast loading
+
+--------------------------------------------------
+
+TRACKING MOCK FUNCTION:
+
+function getTrackingStatus(trackingNumber) {
+  return {
+    status: "En cours",
+    wilaya: "Alger",
+    steps: [
+      "Colis reçu",
+      "En transit",
+      "En livraison"
+    ]
+  }
+}
+
+Structure code so real API can be integrated easily later.
+
+--------------------------------------------------
+
+IMPORTANT:
+
+- Focus on trust and professionalism
+- Avoid clutter
+- Optimize for Algerian mobile users
+- Keep UX simple and fast
+- Make design look premium like international delivery companies
+
+--------------------------------------------------
+
+OUTPUT:
+
+- Full Next.js project
+- Clean reusable components
+- Organized file structure
+- Instructions to run locally

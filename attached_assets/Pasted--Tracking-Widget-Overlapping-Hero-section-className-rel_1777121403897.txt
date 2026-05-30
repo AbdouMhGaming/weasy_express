@@ -1,0 +1,91 @@
+{/* Tracking Widget - Overlapping Hero */}
+<section className="relative z-20 -mt-16 container mx-auto px-4">
+  <Card className="shadow-xl border-0 overflow-hidden">
+    <CardContent className="p-6 md:p-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+        <div className="lg:col-span-1">
+          <h3 className="font-display font-bold text-xl mb-2 flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            Suivre votre envoi
+          </h3>
+          <p className="text-muted-foreground text-sm">
+            Entrez votre numéro de suivi pour voir le statut de votre colis en temps réel.
+          </p>
+        </div>
+        <div className="lg:col-span-2">
+          <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3">
+            <Input
+              type="text"
+              placeholder="Ex: WZ-12345678"
+              className="h-14 text-lg"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              data-testid="input-quick-track"
+            />
+            <Button
+              type="submit"
+              size="lg"
+              className="h-14 px-8 font-bold shrink-0"
+              disabled={trackingState === "loading"}
+              data-testid="btn-quick-track"
+            >
+              {trackingState === "loading" ? "Recherche..." : "Suivre"}
+            </Button>
+          </form>
+
+          {trackingState === "success" && trackingResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6 p-4 bg-muted/50 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-border"
+            >
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">
+                  Colis {trackingResult.trackingNumber}
+                </div>
+                <div className="font-medium text-foreground flex items-center gap-2">
+                  Destination: <span className="font-bold">{trackingResult.wilaya}</span>
+                </div>
+              </div>
+              <Badge
+                variant={
+                  trackingResult.status === "Livré"
+                    ? "default"
+                    : trackingResult.status === "En cours"
+                    ? "secondary"
+                    : "destructive"
+                }
+                className={`text-sm px-3 py-1 ${
+                  trackingResult.status === "Livré"
+                    ? "bg-green-600 hover:bg-green-700"
+                    : trackingResult.status === "En cours"
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : ""
+                }`}
+                data-testid="badge-quick-status"
+              >
+                {trackingResult.status}
+              </Badge>
+              <Link href={`/tracking?id=${trackingResult.trackingNumber}`}>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="text-primary p-0 h-auto"
+                  data-testid="link-quick-details"
+                >
+                  Voir les détails <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </Link>
+            </motion.div>
+          )}
+
+          {trackingState === "error" && (
+            <div className="mt-4 text-destructive text-sm font-medium">
+              {trackingError}
+            </div>
+          )}
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+</section>

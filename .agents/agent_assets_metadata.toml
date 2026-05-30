@@ -1,0 +1,32 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "XMVoesBedtb5Gnqvg3JQA"
+uri = "file://exports/weasy-express-hostinger.zip"
+type = "unspecified"
+title = "Weasy Express - Hostinger bundle (PORT/HOST robust)"
+
+[[outputs]]
+id = "M8tMkpufzCokPjkJ88DWN"
+uri = "file://weasy-express-project.tar.gz"
+type = "unspecified"
+title = "Weasy Express — Full Project Archive"
+
+[[outputs]]
+id = "P03rLRQo3meDXccEdLmdF"
+uri = "file://exports/weasy-express-nodejs.zip"
+type = "unspecified"
+title = "Weasy Express — Hostinger Node.js package"
+
+[[outputs]]
+id = "y7oDiuhKANxEtfuUMUaZb"
+uri = "file://exports/weasy-hostinger.zip"
+type = "unspecified"
+title = "Weasy Express - Hostinger Deploy Bundle (logo full size)"
+
+[[outputs]]
+id = "K0bsk_BgxECcOWW3McGwu"
+uri = "file://weasy-express-hostinger.tar.gz"
+type = "unspecified"
+title = "Weasy Express — Hostinger Build"

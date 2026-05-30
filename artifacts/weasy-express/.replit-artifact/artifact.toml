@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Weasy Express"
+version = "1.0.0"
+id = "artifacts/weasy-express"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21229
+
+[services.development]
+run = "pnpm --filter @workspace/weasy-express run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/weasy-express", "run", "build" ]
+publicDir = "artifacts/weasy-express/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21229"
+BASE_PATH = "/"

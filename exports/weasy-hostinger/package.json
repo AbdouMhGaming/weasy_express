@@ -1,0 +1,13 @@
+{
+  "name": "weasy-express",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node --enable-source-maps index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

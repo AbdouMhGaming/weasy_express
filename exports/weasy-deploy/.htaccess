@@ -1,0 +1,8 @@
+# Optional: forward every request from your domain root to the Node.js app.
+# Only needed on Apache-based plans where the Node.js app does NOT
+# automatically handle the public URL.
+#
+# Replace PORT_NUMBER with the port shown in your Hostinger Node.js panel.
+
+RewriteEngine On
+RewriteRule ^(.*)$ http://127.0.0.1:PORT_NUMBER/$1 [P,L]

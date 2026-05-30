@@ -1,0 +1,70 @@
+{/* Background gradient layer (sibling, sits behind content) */}
+<div className="absolute inset-0 bg-gradient-to-br from-foreground via-foreground to-[#2a0000]"></div>
+
+{/* Main content container - sits ON TOP of the gradient */}
+<div className="container mx-auto px-4 relative z-10">
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+    {/* LEFT COLUMN - Text + Feature list */}
+    <motion.div
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true }}
+      variants={{
+        hidden: { opacity: 0, x: -30 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.6 } }
+      }}
+      className="order-2 lg:order-1"
+    >
+      <Badge className="bg-primary hover:bg-primary mb-6 text-sm px-4 py-1.5 font-bold">
+        Garantie Sécurité
+      </Badge>
+      <h2 className="font-display text-3xl md:text-5xl font-bold mb-6 leading-tight">
+        La sécurité de vos colis,<br />
+        <span className="text-primary">notre engagement.</span>
+      </h2>
+      <p className="text-lg text-white/80 mb-10 leading-relaxed">
+        Chaque colis confié à Weasy Express bénéficie d'un emballage renforcé, d'une manipulation soignée et d'une traçabilité complète. Vos marchandises voyagent en toute sérénité.
+      </p>
+
+      <div className="space-y-5">
+        {[
+          { icon: ShieldCheck, title: "Emballage renforcé", desc: "Protection optimale avec scellage Weasy certifié à chaque étape." },
+          { icon: Lock, title: "Traçabilité complète", desc: "Suivi en temps réel et confirmation à la livraison." },
+          { icon: Truck, title: "Manutention experte", desc: "Une équipe formée à la manipulation soigneuse de tous types de colis." },
+        ].map((item, i) => (
+          <div key={i} className="flex gap-4 items-start">
+            <div className="w-11 h-11 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
+              <item.icon className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h4 className="font-bold text-lg mb-1">{item.title}</h4>
+              <p className="text-white/70">{item.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+
+    {/* RIGHT COLUMN - Image with red glow */}
+    <motion.div
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true }}
+      variants={{
+        hidden: { opacity: 0, scale: 0.9 },
+        visible: { opacity: 1, scale: 1, transition: { duration: 0.7 } }
+      }}
+      className="order-1 lg:order-2 relative"
+    >
+      <div className="absolute -inset-4 bg-gradient-to-tr from-primary/30 to-transparent blur-3xl rounded-full"></div>
+      <div className="relative rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-[#E10600]">
+        <img
+          src={safetyShieldImg}
+          alt="Garantie de sécurité Weasy Express - Vos colis protégés"
+          className="w-full h-auto object-contain"
+          data-testid="img-safety-guarantee"
+        />
+      </div>
+    </motion.div>
+  </div>
+</div>
