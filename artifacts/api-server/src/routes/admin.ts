@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, partnersTable, officesTable, adminsTable, ordersTable, eq, desc, asc, count, isNotNull, sql } from "@workspace/db";
+import { db, partnersTable, officesTable, adminsTable, ordersTable, eq, desc, asc, count, isNotNull, sql, and } from "@workspace/db";
+import { gte, lte } from "drizzle-orm";
 import {
   adminAuth,
   superAdminOnly,
@@ -235,15 +236,35 @@ router.delete("/admin/offices/:id", adminAuth, async (req, res) => {
 
 router.get("/admin/stats", adminAuth, async (req, res) => {
   try {
+    const q = req.query as Record<string, unknown>;
+    const fromStr = typeof q.from === "string" && q.from ? q.from : null;
+    const toStr = typeof q.to === "string" && q.to ? q.to : null;
+    const wilayaStr = typeof q.wilaya === "string" && q.wilaya ? q.wilaya : null;
+
+    const conds = [];
+    if (fromStr) {
+      const d = new Date(fromStr);
+      if (!isNaN(d.getTime())) conds.push(gte(ordersTable.createdAt, d));
+    }
+    if (toStr) {
+      const d = new Date(toStr);
+      if (!isNaN(d.getTime())) conds.push(lte(ordersTable.createdAt, d));
+    }
+    if (wilayaStr) conds.push(eq(ordersTable.destinationWilayaCode, wilayaStr));
+
+    const where = conds.length > 0 ? and(...conds) : undefined;
+
     const statusRows = await db
       .select({ status: ordersTable.status, cnt: count() })
       .from(ordersTable)
+      .where(where)
       .groupBy(ordersTable.status);
 
     const sm: Record<string, number> = {};
     let total = 0;
     for (const r of statusRows) { sm[r.status] = Number(r.cnt); total += Number(r.cnt); }
 
+    const byWilayaConds = wilayaStr ? conds : [...conds, isNotNull(ordersTable.destinationWilayaCode)];
     const byWilaya = await db
       .select({
         code: ordersTable.destinationWilayaCode,
@@ -252,13 +273,14 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         delivered: sql<number>`SUM(CASE WHEN ${ordersTable.status} = 'delivered' THEN 1 ELSE 0 END)`,
       })
       .from(ordersTable)
-      .where(isNotNull(ordersTable.destinationWilayaCode))
+      .where(and(...byWilayaConds))
       .groupBy(ordersTable.destinationWilayaCode, ordersTable.destinationWilaya)
       .orderBy(desc(count()));
 
     const recentOrders = await db
       .select()
       .from(ordersTable)
+      .where(where)
       .orderBy(desc(ordersTable.createdAt))
       .limit(20);
 

@@ -49,9 +49,9 @@ function fmtDate(iso: string) {
 function wilayaHeatColor(count: number, maxCount: number): string {
   if (count === 0 || maxCount === 0) return "#e2e8f0";
   const r = count / maxCount;
-  const red = Math.round(254 + r * (127 - 254));
-  const green = Math.round(202 + r * (29 - 202));
-  const blue = Math.round(202 + r * (29 - 202));
+  const red = Math.round(254 + r * (225 - 254));
+  const green = Math.round(226 + r * (6 - 226));
+  const blue = Math.round(226 + r * (0 - 226));
   return `rgb(${red},${green},${blue})`;
 }
 
@@ -188,10 +188,45 @@ function EmptyRoleView({ role }: { role: AdminRole }) {
 
 const ORDER_STATUSES: OrderStatus[] = ["pending", "in_transit", "delivered", "returned", "failed", "cancelled"];
 
-const dashboardMapSvg = AlgeriaMapSvg
-  .replace(/fill="[^"]*"/g, 'fill="#e2e8f0"')
-  .replace(/stroke="[^"]*"/g, 'stroke="white"')
-  .replace(/stroke-width="[^"]*"/g, 'stroke-width="0.3"');
+type TimePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
+
+function getDateRangeFromPreset(preset: TimePreset, customFrom: string, customTo: string): { from?: string; to?: string } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case "today":
+      return { from: today.toISOString(), to: new Date(today.getTime() + 86400000).toISOString() };
+    case "yesterday": {
+      const y = new Date(today.getTime() - 86400000);
+      return { from: y.toISOString(), to: today.toISOString() };
+    }
+    case "7d":
+      return { from: new Date(today.getTime() - 7 * 86400000).toISOString() };
+    case "30d":
+      return { from: new Date(today.getTime() - 30 * 86400000).toISOString() };
+    case "custom":
+      return {
+        from: customFrom ? new Date(customFrom).toISOString() : undefined,
+        to: customTo ? new Date(new Date(customTo).getTime() + 86400000).toISOString() : undefined,
+      };
+    default:
+      return {};
+  }
+}
+
+function buildMapSvg(stats: DashboardStats | null): string {
+  const byWilaya = stats?.byWilaya ?? [];
+  const maxCount = Math.max(...byWilaya.map((w) => w.delivered), 1);
+  const styleRules = byWilaya
+    .filter((w) => w.delivered > 0)
+    .map((w) => `#${w.code}{fill:${wilayaHeatColor(w.delivered, maxCount)}!important}`)
+    .join(" ");
+  const base = AlgeriaMapSvg
+    .replace(/fill="[^"]*"/g, 'fill="#e2e8f0"')
+    .replace(/stroke="[^"]*"/g, 'stroke="white"')
+    .replace(/stroke-width="[^"]*"/g, 'stroke-width="0.3"');
+  return styleRules ? base.replace(/(<svg[^>]*>)/, `$1<style>${styleRules}</style>`) : base;
+}
 
 interface OrderForm {
   trackingNumber: string; senderName: string; recipientName: string;
@@ -201,6 +236,14 @@ const EMPTY_FORM: OrderForm = {
   trackingNumber: "", senderName: "", recipientName: "",
   originWilayaCode: "", destinationWilayaCode: "", status: "pending",
 };
+
+const TIME_PRESET_LABELS: { value: TimePreset; label: string }[] = [
+  { value: "all", label: "Tout" },
+  { value: "today", label: "Aujourd'hui" },
+  { value: "yesterday", label: "Hier" },
+  { value: "7d", label: "7 jours" },
+  { value: "30d", label: "30 jours" },
+];
 
 function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onRefreshBadge: () => void }) {
   const { t } = useTranslation();
@@ -215,34 +258,34 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const mapRef = useRef<HTMLDivElement>(null);
 
+  const [timePreset, setTimePreset] = useState<TimePreset>("all");
+  const [filterWilaya, setFilterWilaya] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [formWilaya, setFormWilaya] = useState("");
+  const [formFrom, setFormFrom] = useState("");
+  const [formTo, setFormTo] = useState("");
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+
+  const dashboardMapSvg = useMemo(() => buildMapSvg(stats), [stats]);
+
   const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: adminHeaders() });
+      const params = new URLSearchParams();
+      const range = getDateRangeFromPreset(timePreset, filterFrom, filterTo);
+      if (range.from) params.set("from", range.from);
+      if (range.to) params.set("to", range.to);
+      if (filterWilaya) params.set("wilaya", filterWilaya);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/api/admin/stats${qs ? `?${qs}` : ""}`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean; stats: DashboardStats };
       if (data.ok) setStats(data.stats);
     } catch { } finally { setLoading(false); }
-  }, [onUnauth]);
+  }, [onUnauth, timePreset, filterWilaya, filterFrom, filterTo]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
-
-  useEffect(() => {
-    if (!mapRef.current || !stats) return;
-    const svg = mapRef.current.querySelector("svg");
-    if (!svg) return;
-    const byWilaya = stats.byWilaya;
-    const countMap = new Map(byWilaya.map((w) => [w.code, w]));
-    const maxCount = Math.max(...byWilaya.map((w) => w.delivered), 1);
-    svg.querySelectorAll("path[id^='DZ']").forEach((path) => {
-      const code = path.getAttribute("id");
-      if (!code) return;
-      const w = countMap.get(code);
-      const count = w?.delivered ?? 0;
-      (path as SVGPathElement).style.fill = wilayaHeatColor(count, maxCount);
-      (path as SVGPathElement).style.transition = "fill 0.3s";
-    });
-  }, [stats]);
 
   useEffect(() => {
     const el = mapRef.current;
@@ -318,6 +361,27 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
     fetchStats(); onRefreshBadge();
   }
 
+  function selectPreset(preset: TimePreset) {
+    setTimePreset(preset);
+    setFilterFrom(""); setFilterTo("");
+    setFormFrom(""); setFormTo("");
+  }
+
+  function applyAdvancedFilter() {
+    setFilterFrom(formFrom); setFilterTo(formTo); setFilterWilaya(formWilaya);
+    setTimePreset("custom");
+    setShowAdvancedFilter(false);
+  }
+
+  function resetFilters() {
+    setTimePreset("all");
+    setFilterFrom(""); setFilterTo(""); setFilterWilaya("");
+    setFormFrom(""); setFormTo(""); setFormWilaya("");
+    setShowAdvancedFilter(false);
+  }
+
+  const hasActiveFilter = timePreset !== "all" || filterWilaya !== "";
+
   const filteredOrders = useMemo(() => {
     if (!stats) return [];
     return statusFilter === "all"
@@ -337,7 +401,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   return (
     <>
       <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-between mb-7">
+        <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.dashboard.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.dashboard.subtitle")}</p>
@@ -346,6 +410,104 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             {t("admin.dashboard.refresh")}
           </button>
+        </div>
+
+        {/* Filter bar */}
+        <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-gray-400 shrink-0">Période :</span>
+            {TIME_PRESET_LABELS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => selectPreset(p.value)}
+                className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
+                  timePreset === p.value && p.value !== "custom"
+                    ? "bg-[#E10600] text-white shadow-sm"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowAdvancedFilter((v) => !v)}
+              className={`ml-auto shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                showAdvancedFilter || (timePreset === "custom") || filterWilaya
+                  ? "border-[#E10600] text-[#E10600] bg-red-50"
+                  : "border-gray-200 text-gray-600 hover:border-[#E10600] hover:text-[#E10600]"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+              Filtres avancés
+              {hasActiveFilter && <span className="w-1.5 h-1.5 rounded-full bg-[#E10600]" />}
+            </button>
+          </div>
+
+          {showAdvancedFilter && (
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Du</label>
+                <input
+                  type="date" value={formFrom}
+                  onChange={(e) => setFormFrom(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Au</label>
+                <input
+                  type="date" value={formTo}
+                  onChange={(e) => setFormTo(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Wilaya destination</label>
+                <select
+                  value={formWilaya}
+                  onChange={(e) => setFormWilaya(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white"
+                >
+                  <option value="">Toutes les wilayas</option>
+                  {WILAYA_LIST.map((w) => (
+                    <option key={w.code} value={w.code}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end gap-2">
+                <button
+                  onClick={applyAdvancedFilter}
+                  className="flex-1 py-2 text-xs font-bold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl shadow-sm transition-colors"
+                >
+                  Appliquer
+                </button>
+                <button
+                  onClick={resetFilters}
+                  className="flex-1 py-2 text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors"
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            </div>
+          )}
+
+          {hasActiveFilter && !showAdvancedFilter && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {timePreset !== "all" && (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-[#E10600] font-semibold px-2.5 py-1 rounded-full">
+                  {TIME_PRESET_LABELS.find((p) => p.value === timePreset)?.label ?? "Période personnalisée"}
+                  {filterFrom && filterTo ? ` · ${filterFrom} → ${filterTo}` : filterFrom ? `· à partir du ${filterFrom}` : ""}
+                  <button onClick={() => selectPreset("all")} className="ml-0.5 hover:text-red-800">×</button>
+                </span>
+              )}
+              {filterWilaya && (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-[#E10600] font-semibold px-2.5 py-1 rounded-full">
+                  {WILAYA_LIST.find((w) => w.code === filterWilaya)?.name ?? filterWilaya}
+                  <button onClick={() => { setFilterWilaya(""); setFormWilaya(""); }} className="ml-0.5 hover:text-red-800">×</button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* KPI Cards */}
