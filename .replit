@@ -11,6 +11,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=21229 BASE_PATH=/ pnpm --filter @workspace/weasy-express run dev"
+waitForPort = 21229
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -46,5 +67,5 @@ externalPort = 3000
 [userenv]
 
 [userenv.shared]
-MAIL_FROM = "Weasy Express <noreply@amongusgenesis.xyz>"
-MAIL_TO = "contact@weasyexpress.com, bigsabdou@gmail.com"
+MAIL_FROM = "Weasy Express <noreply@weasydelivery.com>"
+MAIL_TO = "bigsabdou@gmail.com"
