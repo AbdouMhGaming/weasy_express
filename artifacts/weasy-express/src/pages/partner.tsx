@@ -108,16 +108,17 @@ export default function PartnerPage() {
           parcelsPerMonth: form.parcelsPerMonth,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
-        throw new Error("send_failed");
+        throw new Error(data.error ?? "send_failed");
       }
       toast({ title: t("partner.successTitle"), description: t("partner.successDesc") });
       setForm({ lastName: "", firstName: "", email: "", password: "", confirmPassword: "", phone: "", address: "", city: "", parcelsPerMonth: "" });
-    } catch {
+    } catch (e) {
+      const isEmailTaken = e instanceof Error && e.message === "email_already_registered";
       toast({
         title: t("partner.errorTitle"),
-        description: t("partner.errorDesc"),
+        description: isEmailTaken ? t("partner.errorEmailExists") : t("partner.errorDesc"),
         variant: "destructive",
       });
     } finally {

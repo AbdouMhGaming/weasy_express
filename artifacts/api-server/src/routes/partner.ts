@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, partnersTable } from "@workspace/db";
+import { db, partnersTable, eq } from "@workspace/db";
 import { escapeHtml, sendMail } from "../lib/mailer";
 
 const router: IRouter = Router();
@@ -48,6 +48,21 @@ router.post("/partner", async (req, res) => {
   }
 
   const fullName = `${firstName} ${lastName}`.trim();
+
+  // Check if this email has already submitted a registration
+  try {
+    const existing = await db
+      .select({ id: partnersTable.id })
+      .from(partnersTable)
+      .where(eq(partnersTable.email, email))
+      .limit(1);
+    if (existing.length > 0) {
+      res.status(409).json({ ok: false, error: "email_already_registered" });
+      return;
+    }
+  } catch (err) {
+    req.log.error({ err }, "Failed to check email uniqueness");
+  }
 
   let dbSaved = false;
   try {
