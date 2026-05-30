@@ -5,7 +5,7 @@ generated = []
 id = "XMVoesBedtb5Gnqvg3JQA"
 uri = "file://exports/weasy-express-hostinger.zip"
 type = "unspecified"
-title = "Weasy Express - Hostinger bundle (PORT/HOST robust)"
+title = "weasy-express-hostinger.zip"
 
 [[outputs]]
 id = "M8tMkpufzCokPjkJ88DWN"

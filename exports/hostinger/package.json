@@ -1,0 +1,11 @@
+{
+  "name": "weasy-express",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --enable-source-maps index.mjs"
+  },
+  "dependencies": {
+    "mysql2": "^3.22.4"
+  }
+}
