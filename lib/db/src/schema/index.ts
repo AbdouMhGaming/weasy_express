@@ -64,3 +64,22 @@ export type InsertOffice = z.infer<typeof insertOfficeSchema>;
 export type Office = typeof officesTable.$inferSelect;
 
 export type Admin = typeof adminsTable.$inferSelect;
+
+export const ORDER_STATUSES = ["pending", "in_transit", "delivered", "returned", "failed", "cancelled"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ordersTable = mysqlTable("orders", {
+  id: int("id").primaryKey().autoincrement(),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  senderName: varchar("sender_name", { length: 100 }),
+  recipientName: varchar("recipient_name", { length: 100 }),
+  destinationWilayaCode: varchar("destination_wilaya_code", { length: 10 }),
+  destinationWilaya: varchar("destination_wilaya", { length: 100 }),
+  originWilayaCode: varchar("origin_wilaya_code", { length: 10 }),
+  originWilaya: varchar("origin_wilaya", { length: 100 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export type Order = typeof ordersTable.$inferSelect;
