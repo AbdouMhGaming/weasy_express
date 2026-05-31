@@ -6,6 +6,20 @@ import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// ─── Ligature normalisation ───────────────────────────────────────────────────
+// pdf-parse renders OpenType ligatures as single Unicode codepoints.
+// Normalise them to their plain ASCII equivalents so all pattern matches work.
+function normaliseLigatures(text: string): string {
+  return text
+    .replace(/ﬀ/g, "ff")
+    .replace(/ﬁ/g, "fi")
+    .replace(/ﬂ/g, "fl")
+    .replace(/ﬃ/g, "ffi")
+    .replace(/ﬄ/g, "ffl")
+    .replace(/ﬅ/g, "st")
+    .replace(/ﬆ/g, "st");
+}
+
 // ─── Report type detection ────────────────────────────────────────────────────
 
 function detectReportType(text: string): "delivery_receipt" | "route_sheet" | "returns_list" | "unknown" {
@@ -280,7 +294,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
   try {
     const pdfParse = (await import("pdf-parse")).default;
     const pdfData = await pdfParse(file.buffer);
-    const text = pdfData.text;
+    const text = normaliseLigatures(pdfData.text);
 
     const reportType    = detectReportType(text);
     const reportDate    = extractDate(text);
