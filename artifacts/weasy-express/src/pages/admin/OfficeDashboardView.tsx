@@ -148,7 +148,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
       wilayaCount[w] = (wilayaCount[w] ?? 0) + n;
     }
   }
-  const topWilayas = Object.entries(wilayaCount).sort(([, a], [, b]) => b - a).slice(0, 30);
+  const topWilayas = Object.entries(wilayaCount).sort(([, a], [, b]) => b - a);
   const maxW = topWilayas[0]?.[1] ?? 1;
 
   const deliveries = reports.filter(r => r.report_type === "delivery_receipt");
