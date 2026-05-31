@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, partnersTable, officesTable, adminsTable, ordersTable, eq, desc, asc, count, isNotNull, sql, and } from "@workspace/db";
+import { db, pool, partnersTable, officesTable, adminsTable, ordersTable, chargesTable, payoutsTable, eq, desc, asc, count, isNotNull, sql, and } from "@workspace/db";
 import { gte, lte } from "drizzle-orm";
 import {
   adminAuth,
@@ -376,6 +376,188 @@ router.delete("/admin/orders/:id", adminAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete order");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Top Stats ──────────────────────────────────────────────────────────────────
+router.get("/admin/top-stats", adminAuth, async (req, res) => {
+  try {
+    const [topSenders, topWilayas, officeAgents, marketers] = await Promise.all([
+      db.select({
+        name: ordersTable.senderName,
+        count: count(),
+        delivered: sql<number>`SUM(CASE WHEN ${ordersTable.status} = 'delivered' THEN 1 ELSE 0 END)`,
+      }).from(ordersTable).where(isNotNull(ordersTable.senderName))
+        .groupBy(ordersTable.senderName).orderBy(desc(count())).limit(5),
+
+      db.select({ name: ordersTable.destinationWilaya, count: count() })
+        .from(ordersTable).where(isNotNull(ordersTable.destinationWilaya))
+        .groupBy(ordersTable.destinationWilaya).orderBy(desc(count())).limit(5),
+
+      db.select({ name: adminsTable.username, createdAt: adminsTable.createdAt })
+        .from(adminsTable).where(eq(adminsTable.role, "office"))
+        .orderBy(desc(adminsTable.createdAt)).limit(10),
+
+      db.select({ name: adminsTable.username, createdAt: adminsTable.createdAt })
+        .from(adminsTable).where(eq(adminsTable.role, "commercial"))
+        .orderBy(desc(adminsTable.createdAt)).limit(10),
+    ]);
+    res.json({ ok: true, topSenders, topWilayas, officeAgents, marketers });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch top stats");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Charges Summary ────────────────────────────────────────────────────────────
+router.get("/admin/charges-summary", adminAuth, superAdminOnly, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [catRows] = await conn.execute(
+        "SELECT category, SUM(amount_dzd) as total FROM charges GROUP BY category"
+      ) as [Array<{ category: string; total: string | number }>, unknown];
+      const [payRows] = await conn.execute(
+        "SELECT COALESCE(SUM(amount_dzd), 0) as total_paid FROM payouts"
+      ) as [Array<{ total_paid: string | number }>, unknown];
+      const [chgRows] = await conn.execute(
+        "SELECT COALESCE(SUM(amount_dzd), 0) as total_charges FROM charges"
+      ) as [Array<{ total_charges: string | number }>, unknown];
+      const byCategory: Record<string, number> = {};
+      for (const r of catRows) byCategory[r.category] = Number(r.total);
+      res.json({
+        ok: true, byCategory,
+        totalCharges: Number(chgRows[0]?.total_charges ?? 0),
+        totalPaid: Number(payRows[0]?.total_paid ?? 0),
+      });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch charges summary");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Charges ────────────────────────────────────────────────────────────────────
+router.get("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, string>;
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const params: string[] = [];
+      let where = "WHERE TRUE";
+      if (q.from) { where += " AND charge_date >= ?"; params.push(q.from); }
+      if (q.to) { where += " AND charge_date <= ?"; params.push(q.to); }
+      if (q.category) { where += " AND category = ?"; params.push(q.category); }
+      const [rows] = await conn.execute(
+        `SELECT * FROM charges ${where} ORDER BY charge_date DESC, created_at DESC`, params
+      );
+      res.json({ ok: true, charges: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch charges");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const validCats = ["marketing", "hr", "it", "packaging", "cod", "warehouse", "various"];
+  const category = String(b.category ?? "").trim();
+  const amount = parseInt(String(b.amount_dzd ?? "0"), 10);
+  const description = b.description ? String(b.description).trim().slice(0, 500) : null;
+  const chargeDate = String(b.charge_date ?? "").trim() || new Date().toISOString().split("T")[0];
+  if (!validCats.includes(category) || isNaN(amount) || amount < 0) {
+    res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        "INSERT INTO charges (category, amount_dzd, description, charge_date) VALUES (?, ?, ?, ?)",
+        [category, amount, description, chargeDate]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create charge");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/charges/:id", adminAuth, superAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM charges WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete charge");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Payouts ────────────────────────────────────────────────────────────────────
+router.get("/admin/payouts", adminAuth, superAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, string>;
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const params: string[] = [];
+      let where = "WHERE TRUE";
+      if (q.from) { where += " AND payout_date >= ?"; params.push(q.from); }
+      if (q.to) { where += " AND payout_date <= ?"; params.push(q.to); }
+      const [rows] = await conn.execute(
+        `SELECT * FROM payouts ${where} ORDER BY payout_date DESC, created_at DESC`, params
+      );
+      res.json({ ok: true, payouts: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch payouts");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/payouts", adminAuth, superAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const amount = parseInt(String(b.amount_dzd ?? "0"), 10);
+  const method = String(b.method ?? "virement").trim().slice(0, 50);
+  const category = String(b.category ?? "general").trim().slice(0, 50);
+  const reference = b.reference ? String(b.reference).trim().slice(0, 100) : null;
+  const notes = b.notes ? String(b.notes).trim().slice(0, 500) : null;
+  const payoutDate = String(b.payout_date ?? "").trim() || new Date().toISOString().split("T")[0];
+  if (isNaN(amount) || amount < 0) {
+    res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        "INSERT INTO payouts (category, amount_dzd, method, reference, notes, payout_date) VALUES (?, ?, ?, ?, ?, ?)",
+        [category, amount, method, reference, notes, payoutDate]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create payout");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/payouts/:id", adminAuth, superAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM payouts WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete payout");
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });

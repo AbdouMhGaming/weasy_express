@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
+import PerformanceView from "./PerformanceView";
+import ChargesView from "./ChargesView";
+import OfficeDashboardView from "./OfficeDashboardView";
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -38,6 +41,12 @@ interface DashboardStats {
   pending: number; failed: number; cancelled: number; successRate: number;
   byWilaya: WilayaStat[];
   recentOrders: Order[];
+}
+interface TopStats {
+  topSenders: Array<{ name: string; count: string | number; delivered: string | number }>;
+  topWilayas: Array<{ name: string; count: string | number }>;
+  officeAgents: Array<{ name: string; createdAt: string }>;
+  marketers: Array<{ name: string; createdAt: string }>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -79,7 +88,7 @@ const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins";
+type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "office-dashboard";
 
 function Sidebar({
   view, setView, role, username, onLogout, onChangePassword,
@@ -135,6 +144,22 @@ function Sidebar({
           )}
           {navItem("admins", t("admin.sidebar.admins"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+          )}
+          <div className="my-2 border-t border-white/5" />
+          {navItem("performance", "Performance", 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          )}
+          {navItem("charges", "Charges", 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {navItem("office-dashboard", "Tableau Agence", 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+          )}
+        </nav>
+      ) : role === "office" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItem("office-dashboard", "Mon Tableau de bord", 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
         </nav>
       ) : (
@@ -266,6 +291,19 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [formFrom, setFormFrom] = useState("");
   const [formTo, setFormTo] = useState("");
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+
+  const [topStats, setTopStats] = useState<TopStats | null>(null);
+
+  const fetchTopStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/top-stats`, { headers: adminHeaders() });
+      if (res.status !== 200) return;
+      const data = await res.json();
+      if (data.ok) setTopStats(data);
+    } catch { }
+  }, []);
+
+  useEffect(() => { fetchTopStats(); }, [fetchTopStats]);
 
   const dashboardMapSvg = useMemo(() => buildMapSvg(stats), [stats]);
 
@@ -703,6 +741,100 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
           </div>
         </div>
       </div>
+
+      {/* Top Sections */}
+      {topStats && (
+        <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-4">
+          {/* Top Senders */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🏆</span>Top Expéditeurs</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              {topStats.topSenders.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
+              ) : topStats.topSenders.map((s, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
+                  <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
+                  <span className="text-xs font-bold text-gray-900 shrink-0">{Number(s.count)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Destinations */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🗺️</span>Top Destinations</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              {topStats.topWilayas.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
+              ) : topStats.topWilayas.map((w, i) => {
+                const maxW = Number(topStats.topWilayas[0]?.count ?? 1);
+                const pct = Math.round((Number(w.count) / maxW) * 100);
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{w.name}</span>
+                    <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
+                      <div className="h-1.5 rounded-full bg-[#E10600]" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(w.count)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Office Agents */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🏢</span>Agents Agence</h3>
+            </div>
+            <div className="p-4">
+              {topStats.officeAgents.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">Aucun agent enregistré</p>
+              ) : (
+                <div className="space-y-2">
+                  {topStats.officeAgents.map((a, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-blue-700">{a.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs text-gray-700 font-medium truncate">{a.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Commercial */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>📣</span>Commercial</h3>
+            </div>
+            <div className="p-4">
+              {topStats.marketers.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">Aucun commercial enregistré</p>
+              ) : (
+                <div className="space-y-2">
+                  {topStats.marketers.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-orange-700">{m.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs text-gray-700 font-medium truncate">{m.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Order Modal */}
       {showModal && (
@@ -1422,7 +1554,9 @@ export default function AdminDashboard() {
         officeCount={offices.length}
       />
       <main className="flex-1 ml-64 min-h-screen overflow-y-auto">
-        {!isAdmin ? (
+        {role === "office" ? (
+          <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
+        ) : !isAdmin ? (
           <EmptyRoleView role={role} />
         ) : view === "dashboard" ? (
           <DashboardView onUnauth={unauth} onRefreshBadge={() => { fetchPartners(); fetchOffices(); }} />
@@ -1430,6 +1564,12 @@ export default function AdminDashboard() {
           <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} />
         ) : view === "offices" ? (
           <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
+        ) : view === "performance" ? (
+          <PerformanceView onUnauth={unauth} />
+        ) : view === "charges" ? (
+          <ChargesView onUnauth={unauth} />
+        ) : view === "office-dashboard" ? (
+          <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
         ) : (
           <AdminsView currentUsername={username} onUnauth={unauth} />
         )}

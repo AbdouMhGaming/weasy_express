@@ -83,3 +83,43 @@ export const ordersTable = mysqlTable("orders", {
 });
 
 export type Order = typeof ordersTable.$inferSelect;
+
+export const chargesTable = mysqlTable("charges", {
+  id: int("id").primaryKey().autoincrement(),
+  category: varchar("category", { length: 50 }).notNull(),
+  amountDzd: int("amount_dzd").notNull().default(0),
+  description: text("description"),
+  chargeDate: varchar("charge_date", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const payoutsTable = mysqlTable("payouts", {
+  id: int("id").primaryKey().autoincrement(),
+  category: varchar("category", { length: 50 }).notNull().default("general"),
+  amountDzd: int("amount_dzd").notNull().default(0),
+  method: varchar("method", { length: 50 }).default("virement"),
+  reference: varchar("reference", { length: 100 }),
+  notes: text("notes"),
+  payoutDate: varchar("payout_date", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const officeReportsTable = mysqlTable("office_reports", {
+  id: int("id").primaryKey().autoincrement(),
+  reportType: varchar("report_type", { length: 30 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  reportDate: varchar("report_date", { length: 10 }).notNull(),
+  totalParcels: int("total_parcels").notNull().default(0),
+  totalAmountDzd: int("total_amount_dzd").notNull().default(0),
+  netAmountDzd: int("net_amount_dzd").notNull().default(0),
+  station: varchar("station", { length: 255 }),
+  senderName: varchar("sender_name", { length: 255 }),
+  trackingNumbers: text("tracking_numbers"),
+  wilayas: text("wilayas"),
+  uploadedBy: varchar("uploaded_by", { length: 100 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type Charge = typeof chargesTable.$inferSelect;
+export type Payout = typeof payoutsTable.$inferSelect;
+export type OfficeReport = typeof officeReportsTable.$inferSelect;

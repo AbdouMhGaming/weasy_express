@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Mail, Phone, Clock, MapPin, Send, Loader2 } from "lucide-react";
+import { Mail, Phone, Clock, MapPin, Send, Loader2, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -83,15 +83,30 @@ export default function ContactPage() {
             <h2 className="text-2xl font-bold mb-2">{t("contact.coordinates")}</h2>
             
             <Card className="bg-white border-transparent shadow-sm">
-              <CardContent className="p-6 flex items-center gap-4">
+              <CardContent className="p-6 flex items-start gap-4">
                 <div className="h-12 w-12 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
                   <Mail className="h-6 w-6 text-[#E10600]" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-medium mb-1">{t("contact.email")}</p>
-                  <a href="mailto:contact@weasyexpress.com" className="font-semibold hover:text-[#E10600] transition-colors" dir="ltr">
-                    contact@weasyexpress.com
-                  </a>
+                <div className="flex flex-col gap-3 w-full">
+                  <div>
+                    <p className="text-sm text-muted-foreground font-medium mb-1">{t("contact.email")}</p>
+                    <a href="mailto:support@weasyexpress.com" className="font-semibold hover:text-[#E10600] transition-colors" dir="ltr">
+                      support@weasyexpress.com
+                    </a>
+                  </div>
+                  <div className="border-t pt-3">
+                    <p className="text-sm text-muted-foreground font-medium mb-1">WhatsApp</p>
+                    <a
+                      href="https://wa.me/213654970662"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 font-semibold text-[#25D366] hover:text-[#1db954] transition-colors"
+                      dir="ltr"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Discutez avec nous
+                    </a>
+                  </div>
                 </div>
               </CardContent>
             </Card>

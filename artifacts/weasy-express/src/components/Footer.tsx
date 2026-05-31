@@ -68,7 +68,7 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="h-5 w-5 shrink-0 text-[#E10600]" />
-                <a href="mailto:contact@weasyexpress.com" className="hover:text-white transition-colors" dir="ltr">contact@weasyexpress.com</a>
+                <a href="mailto:support@weasyexpress.com" className="hover:text-white transition-colors" dir="ltr">support@weasyexpress.com</a>
               </li>
             </ul>
           </div>

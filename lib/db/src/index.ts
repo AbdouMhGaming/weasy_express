@@ -14,7 +14,7 @@ if (!host || !database || !user) {
   );
 }
 
-const pool = mysql.createPool({
+export const pool = mysql.createPool({
   host,
   database,
   user,
