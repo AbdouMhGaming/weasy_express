@@ -44,6 +44,35 @@ const TYPE = {
 
 const fmtN  = (n: number) => n.toLocaleString("fr-DZ");
 const fmtDZ = (n: number) => `${fmtN(n)} DZD`;
+
+// Parse wilayas field which may be:
+//   new format: "Tébessa:3,Blida:1,Annaba:5"  (wilaya:count pairs)
+//   old format: "Tébessa,Blida,Annaba"          (names only, count assumed 1)
+function parseWilayaCounts(wilayas: string | null): Record<string, number> {
+  if (!wilayas) return {};
+  const result: Record<string, number> = {};
+  for (const entry of wilayas.split(",").map(s => s.trim()).filter(Boolean)) {
+    const colonIdx = entry.indexOf(":");
+    if (colonIdx !== -1) {
+      const name  = entry.slice(0, colonIdx).trim();
+      const count = parseInt(entry.slice(colonIdx + 1), 10);
+      if (name && !isNaN(count) && count > 0) result[name] = (result[name] ?? 0) + count;
+    } else {
+      if (entry) result[entry] = (result[entry] ?? 0) + 1;
+    }
+  }
+  return result;
+}
+
+// Return a display-friendly string of just the wilaya names (no counts).
+function wilayasDisplay(wilayas: string | null): string {
+  if (!wilayas) return "";
+  return wilayas
+    .split(",")
+    .map(e => { const i = e.indexOf(":"); return i !== -1 ? e.slice(0, i).trim() : e.trim(); })
+    .filter(Boolean)
+    .join(", ");
+}
 const fmtDate = (s: string) => {
   try { return new Date(s).toLocaleDateString("fr-DZ", { day: "2-digit", month: "short", year: "numeric" }); }
   catch { return s; }
@@ -115,8 +144,8 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
   // Wilaya breakdown from all reports
   const wilayaCount: Record<string, number> = {};
   for (const r of reports) {
-    for (const w of (r.wilayas ?? "").split(",").map(s => s.trim()).filter(Boolean)) {
-      wilayaCount[w] = (wilayaCount[w] ?? 0) + (r.total_parcels || 1);
+    for (const [w, n] of Object.entries(parseWilayaCounts(r.wilayas))) {
+      wilayaCount[w] = (wilayaCount[w] ?? 0) + n;
     }
   }
   const topWilayas = Object.entries(wilayaCount).sort(([, a], [, b]) => b - a).slice(0, 8);
@@ -315,7 +344,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                 <span className="text-xs font-bold text-gray-900">{r.total_parcels} colis</span>
               </div>
               {r.sender_name && <p className="text-xs text-gray-500 truncate mt-0.5">📦 {r.sender_name}</p>}
-              {r.wilayas    && <p className="text-xs text-[#E10600] truncate mt-0.5">📍 {r.wilayas}</p>}
+              {r.wilayas    && <p className="text-xs text-[#E10600] truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
               <div className="flex gap-2 mt-1 flex-wrap">
                 {r.total_amount_dzd > 0 && <span className="text-xs text-gray-400">COD: {fmtDZ(r.total_amount_dzd)}</span>}
                 {r.net_amount_dzd   > 0 && <span className="text-xs text-emerald-600 font-semibold">Net: {fmtDZ(r.net_amount_dzd)}</span>}
@@ -343,7 +372,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                 <span className="text-xs font-bold text-gray-900">{r.total_parcels} colis</span>
               </div>
               {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
-              {r.wilayas     && <p className="text-xs text-blue-600 truncate mt-0.5">📍 {r.wilayas}</p>}
+              {r.wilayas     && <p className="text-xs text-blue-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
               {r.sender_name && <p className="text-xs text-gray-400 truncate mt-0.5">📦 {r.sender_name}</p>}
               {r.total_amount_dzd > 0 && <p className="text-xs text-gray-500 mt-0.5">Valeur: {fmtDZ(r.total_amount_dzd)}</p>}
             </>
@@ -370,7 +399,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
               </div>
               {r.sender_name && <p className="text-xs text-gray-500 truncate mt-0.5">📦 {r.sender_name}</p>}
               {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
-              {r.wilayas     && <p className="text-xs text-orange-600 truncate mt-0.5">📍 {r.wilayas}</p>}
+              {r.wilayas     && <p className="text-xs text-orange-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
             </>
           )}
         />

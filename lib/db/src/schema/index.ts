@@ -112,6 +112,7 @@ export const officeReportsTable = mysqlTable("office_reports", {
   totalParcels: int("total_parcels").notNull().default(0),
   totalAmountDzd: int("total_amount_dzd").notNull().default(0),
   netAmountDzd: int("net_amount_dzd").notNull().default(0),
+  fraisLivraisonDzd: int("frais_livraison_dzd").notNull().default(0),
   station: varchar("station", { length: 255 }),
   senderName: varchar("sender_name", { length: 255 }),
   trackingNumbers: text("tracking_numbers"),

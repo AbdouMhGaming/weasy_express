@@ -57,7 +57,7 @@ function extractParcels(text: string, type: string, trackingCount: number): numb
     // Tracking count is one-to-one with parcels in FDR
     if (trackingCount > 0) return trackingCount;
     // Fallback: try both header formats
-    // New: phone\nPARCELS\nTOTAL\nDA\nDATE  → \d{10}\n(\d+)\n\d{4,}\nDA
+    // New: phone\nPARCELS\nTOTAL\nDA\nDATE  → \d{10}\n(\d+)\n\d{4,}\s*\nDA\n
     const mNew = text.match(/\d{10}\n(\d+)\n\d{4,}\s*\nDA\n/);
     if (mNew) return parseInt(mNew[1], 10);
     // Old: phone\n{PARCELS}{TOTAL} DA\nDATE  → non-greedy split
@@ -75,39 +75,52 @@ function extractParcels(text: string, type: string, trackingCount: number): numb
 }
 
 // ─── DECHARGE amounts ─────────────────────────────────────────────────────────
-// Row format (concatenated): {poids}.{2dp}{MONTANT}{3-digit-tarif}.000.000.00{...}
+// Each row when concatenated by pdf-parse:
+//   {poids}.{2dp}{MONTANT}{TARIF_LIV}.00{SURCHARGE}.00{COMMISSION}.00{TARIF_POIDS}.00{NET}
 // Examples:
-//   "0.001600600.000.000.000.001000"   → montant=1600, tarif=600
-//   "6.5010650550.000.000.00100.0010000" → montant=10650, tarif=550
-//   "18.8081250600.000.000.00700.0079950" → montant=81250, tarif=600
+//   "0.001600600.000.000.000.001000"      → montant=1600, tarif_liv=600, tarif_poids=0
+//   "6.5010650550.000.000.00100.0010000"  → montant=10650, tarif_liv=550, tarif_poids=100
+//   "18.8081250600.000.000.00700.0079950" → montant=81250, tarif_liv=600, tarif_poids=700
 //
-// The pattern captures montant only; tarif varies (500–999) so \d{3} covers it.
+// Pattern: \d+\.\d{2}  = poids
+//          (\d+)        = MONTANT (captured as group 1)
+//          (\d{3})      = TARIF_LIVRAISON — always 3 digits (500–999) (captured as group 2)
+//          \.000\.000\.00 = ".00" suffix of tarif + "0.00" surcharge + "0.00" commission
 
-function extractDeliveryAmounts(text: string): { total: number; net: number } {
+function extractDeliveryAmounts(text: string): { total: number; net: number; frais: number } {
   // Net = shown in the reference header row: "\nNET DA SENDER"
   // e.g. "\n291300 DACP Station Oued Rhiou" or "\n26800 DAspotlight-store"
   const netM = text.match(/\n(\d+)\s*DA[A-Za-z\u00C0-\u017E]/);
   const net = netM ? parseInt(netM[1], 10) : 0;
 
-  // Gross = sum of Montant column across all tracking rows
-  // Pattern: poids(d+.dd) + MONTANT(digits) + tarif_3digits(.00) + surFact(0.00) + comm(0.00)
+  // Gross = sum of Montant column; Frais = sum of Tarif livraison column (NOT tarif poids)
   const rowAmounts: number[] = [];
-  for (const m of text.matchAll(/\d+\.\d{2}(\d+)\d{3}\.000\.000\.00/g)) {
-    const n = parseInt(m[1], 10);
-    if (n > 0 && n < 1_000_000) rowAmounts.push(n);
+  let frais = 0;
+  for (const m of text.matchAll(/\d+\.\d{2}(\d+)(\d{3})\.000\.000\.00/g)) {
+    const montant = parseInt(m[1], 10);
+    const tarifLiv = parseInt(m[2], 10);
+    if (montant > 0 && montant < 1_000_000) rowAmounts.push(montant);
+    if (tarifLiv >= 100 && tarifLiv <= 999) frais += tarifLiv;
   }
   const total = rowAmounts.length > 0 ? rowAmounts.reduce((a, b) => a + b, 0) : net;
-  return { total, net };
+  return { total, net, frais };
 }
 
 // ─── FDR total amount ─────────────────────────────────────────────────────────
-// Route header contains the authoritative total in uppercase DA.
-// New format: "1473920\nDA\n"  (separate lines)
-// Old format: "119800 DA\n"    (space-separated)
-// Row amounts use lowercase "Da" or none → won't match uppercase DA.
+// Route header: phone\nNB_COLIS\nTOTAL\nDA  (new format — separate lines)
+//               phone\nNB_COLIS TOTAL DA\n   (old format — same line)
+// Falls back to scanning all uppercase-DA values and taking the max.
 
 function extractRouteTotal(text: string): number {
-  // All uppercase-DA occurrences: take the maximum (= route total)
+  // New format: 10-digit phone, then nb_colis, then total, then DA on its own line
+  const mNew = text.match(/\d{10}\n(\d+)\n(\d{4,})\s*\nDA\n/);
+  if (mNew) return parseInt(mNew[2], 10);
+
+  // Old / same-line format: phone\n nb_colis+total DA\n
+  const mOld = text.match(/\d{10}\n\d{1,4}(\d{4,})\s*DA\n/);
+  if (mOld) return parseInt(mOld[1], 10);
+
+  // Fallback: all uppercase-DA occurrences → take the maximum (= route total)
   const vals = [...text.matchAll(/(\d{4,})\s*DA(?:\n|\b)/g)]
     .map((m) => parseInt(m[1], 10))
     .filter((n) => n < 100_000_000);
@@ -117,10 +130,6 @@ function extractRouteTotal(text: string): number {
 // ─── LISTE-RETOUR amounts ─────────────────────────────────────────────────────
 // Each tracking row ends with: MONTANT + REF_RETOUR (4 digits, same for all rows in this doc).
 // Strategy: extract the return ref from "#NNNN" header, then match (\d{3,5}){ref} in text.
-// Examples for ref=2322:
-//   "AdrarReggane33002322" → amount=3300
-//   "Tizi OuzouTadmait46002322" → amount=4600
-//   "Sidi Bel\nAbbes\n6002322" → (on one line:) amount=600
 
 function extractReturnAmounts(text: string): number {
   // 1. Find the return list reference number
@@ -142,27 +151,18 @@ function extractReturnAmounts(text: string): number {
 
 function extractDeliverySender(text: string): string {
   // Header row: "#REFDATE\nCOUNT\nNET DA SENDER\n"
-  // e.g. "291300 DACP Station Oued Rhiou" or "26800 DAspotlight-store"
   const m = text.match(/\n\d+\s*DA([A-Za-z\u00C0-\u017E][^\n]{1,120})/);
   if (m) return m[1].trim().slice(0, 255);
   return "";
 }
 
 function extractFDRSenders(text: string): string[] {
-  // Each FDR tracking entry:
-  //   EC{CODE}\n
-  //   {SENDER_LINE1}\n
-  //   [{SENDER_LINE2}\n]          (optional, e.g. "EMBALLAGE")
-  //   [{SENDER_LINE3}\n]          (optional, e.g. "MAZOUNA")
-  //   {PHONE_10DIGITS}\n
-  //
-  // Use non-greedy capture of 1–3 lines before the 10-digit phone.
+  // Each FDR tracking entry: EC{CODE}\n{SENDER_LINES}\n{PHONE_10DIGITS}\n
   const senders = new Set<string>();
   for (const m of text.matchAll(/EC[A-Z0-9]{10,22}\n((?:[^\n]+\n){1,3}?)\d{10}\n/g)) {
     const raw = m[1]
       .replace(/\n/g, " ")
       .trim()
-      // remove numeric-only "senders" (false positives)
       .replace(/^\d+$/, "");
     if (raw.length > 0 && raw.length < 120) senders.add(raw);
   }
@@ -170,16 +170,11 @@ function extractFDRSenders(text: string): string[] {
 }
 
 function extractReturnSender(text: string): string {
-  // FDR-style rows exist too; for returns the sender appears after "Livraison" or "Echange"
-  // e.g. "LivraisonHIJABEبالحاج..." → captures "HIJABE" (stops at Arabic)
-  // e.g. "Livraison\nBouchra\nShop\n..." → captures "Bouchra Shop"
   const m = text.match(/(?:Livraison|Echange)\n?([A-Za-z\u00C0-\u017E][^\n\u0600-\u06FF]{1,60})/);
   if (m) {
-    // The match may span lines if sender is multi-word
     const parts = m[1].split("\n").slice(0, 2).join(" ").trim();
     return parts.slice(0, 255);
   }
-  // Fallback: concatenated "LivraisonHIJABE..."
   const m2 = text.match(/(?:Livraison|Echange)([A-Za-z\u00C0-\u017E][^\u0600-\u06FF\n]{1,60})/);
   if (m2) return m2[1].trim().slice(0, 255);
   return "";
@@ -188,14 +183,9 @@ function extractReturnSender(text: string): string {
 // ─── Station ──────────────────────────────────────────────────────────────────
 
 function extractStation(text: string): string {
-  // Station format: "48.1 Agence Oued Rhiou"
-  // In FDR the station spans two lines: "48.1 Agence\nOued Rhiou\nWeasy\nExpress..."
-  // In RETOUR it's on one line: "48.1 Agence Oued Rhiou\nTracking..."
-  // Strategy: normalize newlines, then stop capture at "Weasy", "Tracking", or 10-digit phone
   const norm = text.replace(/\n/g, " ");
   const m = norm.match(/(\d+\.\d+\s+Agence[^,]+?)(?=\s+(?:Weasy|Tracking|\d{10}))/);
   if (m) return m[1].trim().replace(/\s+/g, " ").slice(0, 100);
-  // Fallback: original text stops naturally at newline
   const m2 = text.match(/(\d+\.\d+\s+Agence[^\n,]{1,80})/);
   if (m2) return m2[1].trim().slice(0, 100);
   return "";
@@ -224,10 +214,56 @@ const KNOWN_WILAYAS = [
   "El M'Ghair", "El Meniaa",
 ];
 
-function extractWilayas(text: string): string[] {
-  // Normalize newlines to spaces so multi-word wilayas split across lines still match
-  const norm = text.replace(/\n/g, " ");
-  return [...new Set(KNOWN_WILAYAS.filter((w) => norm.includes(w)))];
+// Strip Ecotrack footer lines that contain the company's own wilaya (Relizane),
+// so those don't get counted as destination wilayas.
+function stripFooter(text: string): string {
+  return text
+    .replace(/RS\s*:.*?(?:\n|$)/g, " ")
+    .replace(/Ce document a été créé.*?(?:\n|$)/g, " ")
+    .replace(/Tous droits réservés.*?(?:\n|$)/g, " ");
+}
+
+// Returns a per-wilaya parcel count by scanning each parcel's row segment
+// (the text between consecutive EC tracking codes) individually.
+// This avoids counting wilayas that appear only in the document header or footer.
+function extractWilayaCounts(text: string): Record<string, number> {
+  const clean = stripFooter(text);
+
+  // Split at every EC tracking code; segments[0] = header (skipped),
+  // segments[1..n] = text following each tracking code (= that parcel's row data)
+  const segments = clean.split(/EC[A-Z0-9]{10,22}/);
+  const parcelSegments = segments.slice(1);
+
+  const counts: Record<string, number> = {};
+
+  if (parcelSegments.length > 0) {
+    for (const seg of parcelSegments) {
+      // Normalise newlines → spaces so multi-word wilayas spanning lines still match
+      const norm = seg.replace(/\n/g, " ");
+      for (const w of KNOWN_WILAYAS) {
+        if (norm.includes(w)) {
+          counts[w] = (counts[w] ?? 0) + 1;
+          break; // one destination wilaya per parcel row
+        }
+      }
+    }
+  } else {
+    // No EC codes found — scan whole text as fallback
+    const norm = clean.replace(/\n/g, " ");
+    for (const w of KNOWN_WILAYAS) {
+      if (norm.includes(w)) counts[w] = 1;
+    }
+  }
+
+  return counts;
+}
+
+// Serialise wilaya counts as "Wilaya:N,Wilaya:N,..." for storage in the wilayas column.
+function serialiseWilayaCounts(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([w, n]) => `${w}:${n}`)
+    .join(",");
 }
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
@@ -249,22 +285,23 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
     const reportType    = detectReportType(text);
     const reportDate    = extractDate(text);
     const trackingNums  = extractTrackingNumbers(text);
-    const wilayas       = extractWilayas(text);
+    const wilayaCounts  = extractWilayaCounts(text);
     const totalParcels  = extractParcels(text, reportType, trackingNums.length);
     const station       = extractStation(text);
 
     let totalAmount = 0;
     let netAmount   = 0;
+    let fraisLivraison = 0;
     let senderName  = "";
 
     if (reportType === "delivery_receipt") {
-      const { total, net } = extractDeliveryAmounts(text);
-      totalAmount = total;
-      netAmount   = net;
-      senderName  = extractDeliverySender(text);
+      const { total, net, frais } = extractDeliveryAmounts(text);
+      totalAmount    = total;
+      netAmount      = net;
+      fraisLivraison = frais;
+      senderName     = extractDeliverySender(text);
     } else if (reportType === "route_sheet") {
       totalAmount = extractRouteTotal(text);
-      // Store all unique senders (may be many for a large route sheet)
       const allSenders = extractFDRSenders(text);
       if (allSenders.length <= 3) {
         senderName = allSenders.join(", ");
@@ -276,14 +313,17 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
       senderName  = extractReturnSender(text);
     }
 
+    const wilayasStr = serialiseWilayaCounts(wilayaCounts);
+    const wilayas    = Object.keys(wilayaCounts); // names only (for response)
+
     const conn = await pool.getConnection();
     try {
       await conn.execute(
         `INSERT INTO office_reports
            (report_type, file_name, report_date, total_parcels,
-            total_amount_dzd, net_amount_dzd, station, sender_name,
-            tracking_numbers, wilayas, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
+            station, sender_name, tracking_numbers, wilayas, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           reportType,
           file.originalname.slice(0, 255),
@@ -291,10 +331,11 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
           totalParcels,
           totalAmount,
           netAmount,
+          fraisLivraison,
           station,
           senderName,
           trackingNums.join(","),
-          wilayas.join(","),
+          wilayasStr,
           authReq.adminUsername ?? "",
         ],
       );
@@ -307,6 +348,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
       totalParcels,
       totalAmount,
       netAmount,
+      fraisLivraison,
       trackingCount: trackingNums.length,
       wilayas,
       station,
@@ -351,22 +393,22 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
     try {
       const [summary] = await conn.execute(`
         SELECT
-          COUNT(*)                                                                          AS total_reports,
-          SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels  ELSE 0 END)  AS total_delivered,
-          SUM(CASE WHEN report_type = 'route_sheet'      THEN total_parcels  ELSE 0 END)  AS total_dispatched,
-          SUM(CASE WHEN report_type = 'returns_list'     THEN total_parcels  ELSE 0 END)  AS total_returns,
-          SUM(CASE WHEN report_type = 'delivery_receipt' THEN net_amount_dzd   ELSE 0 END) AS total_net_dzd,
-          SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_amount_dzd ELSE 0 END) AS total_cod_dzd,
-          SUM(CASE WHEN report_type = 'route_sheet'      THEN total_amount_dzd ELSE 0 END) AS total_dispatched_dzd
+          COUNT(*)                                                                             AS total_reports,
+          SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels   ELSE 0 END)    AS total_delivered,
+          SUM(CASE WHEN report_type = 'route_sheet'      THEN total_parcels   ELSE 0 END)    AS total_dispatched,
+          SUM(CASE WHEN report_type = 'returns_list'     THEN total_parcels   ELSE 0 END)    AS total_returns,
+          SUM(CASE WHEN report_type = 'delivery_receipt' THEN net_amount_dzd     ELSE 0 END) AS total_net_dzd,
+          SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_amount_dzd   ELSE 0 END) AS total_cod_dzd,
+          SUM(CASE WHEN report_type = 'delivery_receipt' THEN frais_livraison_dzd ELSE 0 END) AS total_frais_dzd,
+          SUM(CASE WHEN report_type = 'route_sheet'      THEN total_amount_dzd   ELSE 0 END) AS total_dispatched_dzd
         FROM office_reports
       `);
 
-      // Top senders: only from delivery receipts (one sender per receipt → meaningful)
       const [senders] = await conn.execute(`
         SELECT
           sender_name,
-          COUNT(*)           AS report_count,
-          SUM(total_parcels) AS total_parcels,
+          COUNT(*)            AS report_count,
+          SUM(total_parcels)  AS total_parcels,
           SUM(net_amount_dzd) AS net_dzd
         FROM office_reports
         WHERE report_type = 'delivery_receipt'
@@ -381,6 +423,14 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
       );
 
       const s = (summary as Array<Record<string, unknown>>)[0] ?? {};
+
+      // fraisLivraison: prefer stored frais_livraison_dzd (tarif livraison only).
+      // Fall back to COD - Net for old records that predate the frais column.
+      const totalFrais     = Number(s.total_frais_dzd ?? 0);
+      const fraisLivraison = totalFrais > 0
+        ? totalFrais
+        : Number(s.total_cod_dzd ?? 0) - Number(s.total_net_dzd ?? 0);
+
       res.json({
         ok: true,
         stats: {
@@ -391,7 +441,7 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
           totalNetDzd:        Number(s.total_net_dzd      ?? 0),
           totalCodDzd:        Number(s.total_cod_dzd      ?? 0),
           totalDispatchedDzd: Number(s.total_dispatched_dzd ?? 0),
-          fraisLivraison:     Number(s.total_cod_dzd ?? 0) - Number(s.total_net_dzd ?? 0),
+          fraisLivraison,
         },
         topSenders:    senders,
         recentReports: recent,
