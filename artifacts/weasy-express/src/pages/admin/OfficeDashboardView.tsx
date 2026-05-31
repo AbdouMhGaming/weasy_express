@@ -148,7 +148,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
       wilayaCount[w] = (wilayaCount[w] ?? 0) + n;
     }
   }
-  const topWilayas = Object.entries(wilayaCount).sort(([, a], [, b]) => b - a).slice(0, 8);
+  const topWilayas = Object.entries(wilayaCount).sort(([, a], [, b]) => b - a).slice(0, 30);
   const maxW = topWilayas[0]?.[1] ?? 1;
 
   const deliveries = reports.filter(r => r.report_type === "delivery_receipt");
@@ -268,17 +268,24 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
 
         {/* Wilaya breakdown */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h3 className="font-bold text-gray-900 mb-1">Wilayas couvertes</h3>
+          <div className="flex items-start justify-between mb-1">
+            <h3 className="font-bold text-gray-900">Wilayas couvertes</h3>
+            {topWilayas.length > 0 && (
+              <span className="text-xs text-gray-400 bg-gray-50 rounded-full px-2 py-0.5 shrink-0">
+                {topWilayas.length} wilaya{topWilayas.length > 1 ? "s" : ""} · {fmtN(Object.values(wilayaCount).reduce((a, b) => a + b, 0))} colis
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-400 mb-4">Nombre de colis par wilaya (tous rapports)</p>
           {loading ? (
             <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-7 bg-gray-100 rounded-lg animate-pulse" />)}</div>
           ) : topWilayas.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-8">Aucune donnée — importez des PDFs</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
               {topWilayas.map(([name, count]) => (
                 <div key={name} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-700 w-32 truncate shrink-0 font-medium">{name}</span>
+                  <span className="text-sm text-gray-700 w-36 truncate shrink-0 font-medium">{name}</span>
                   <div className="flex-1 bg-gray-100 rounded-full h-2.5">
                     <div
                       className="h-2.5 rounded-full bg-gradient-to-r from-[#E10600] to-[#FF4444] transition-all"
