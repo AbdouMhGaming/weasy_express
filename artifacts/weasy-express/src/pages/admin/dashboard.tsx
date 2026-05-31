@@ -152,9 +152,6 @@ function Sidebar({
           {navItem("charges", "Charges", 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
-          {navItem("office-dashboard", "Tableau Agence", 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-          )}
         </nav>
       ) : role === "office" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -744,7 +741,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
       {/* Top Sections */}
       {topStats && (
-        <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Top Senders */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
@@ -753,68 +750,50 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             <div className="p-4 space-y-3">
               {topStats.topSenders.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
-              ) : topStats.topSenders.map((s, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
-                  <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
-                  <span className="text-xs font-bold text-gray-900 shrink-0">{Number(s.count)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Top Destinations */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🗺️</span>Top Destinations</h3>
-            </div>
-            <div className="p-4 space-y-3">
-              {topStats.topWilayas.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
-              ) : topStats.topWilayas.map((w, i) => {
-                const maxW = Number(topStats.topWilayas[0]?.count ?? 1);
-                const pct = Math.round((Number(w.count) / maxW) * 100);
+              ) : topStats.topSenders.map((s, i) => {
+                const maxS = Number(topStats.topSenders[0]?.count ?? 1);
+                const pct = Math.round((Number(s.count) / maxS) * 100);
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{w.name}</span>
+                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
                     <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
                       <div className="h-1.5 rounded-full bg-[#E10600]" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(w.count)}</span>
+                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(s.count)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Office Agents */}
+          {/* Top Clients (by delivered) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🏢</span>Agents Agence</h3>
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>⭐</span>Top Clients</h3>
             </div>
-            <div className="p-4">
-              {topStats.officeAgents.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">Aucun agent enregistré</p>
-              ) : (
-                <div className="space-y-2">
-                  {topStats.officeAgents.map((a, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-blue-700">{a.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <span className="text-xs text-gray-700 font-medium truncate">{a.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="p-4 space-y-3">
+              {topStats.topSenders.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
+              ) : [...topStats.topSenders].sort((a, b) => Number(b.delivered) - Number(a.delivered)).map((s, i) => {
+                const cnt = Number(s.count); const del = Number(s.delivered);
+                const rate = cnt > 0 ? Math.round((del / cnt) * 100) : 0;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
+                    <span className={`text-xs font-bold shrink-0 ${rate >= 80 ? "text-emerald-600" : rate >= 60 ? "text-amber-600" : "text-red-600"}`}>{rate}%</span>
+                    <span className="text-xs text-gray-400 shrink-0">{del}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Commercial */}
+          {/* Top Marketers */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>📣</span>Commercial</h3>
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>📣</span>Top Marketers</h3>
             </div>
             <div className="p-4">
               {topStats.marketers.length === 0 ? (
@@ -823,10 +802,11 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 <div className="space-y-2">
                   {topStats.marketers.map((m, i) => (
                     <div key={i} className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-orange-100 text-xs font-bold text-orange-700 flex items-center justify-center shrink-0">{i + 1}</span>
                       <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                         <span className="text-xs font-bold text-orange-700">{m.name.charAt(0).toUpperCase()}</span>
                       </div>
-                      <span className="text-xs text-gray-700 font-medium truncate">{m.name}</span>
+                      <span className="text-xs text-gray-700 font-medium truncate flex-1">{m.name}</span>
                     </div>
                   ))}
                 </div>
