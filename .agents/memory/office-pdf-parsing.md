@@ -28,14 +28,15 @@ FDR layout per row: `EC... → sender lines (1-4) → sender phone → recipient
 - Address markers: `Sd,` `SD,` `DM,` `AD,` `BR,` `Domicile,` `Centre,` `Noest,` etc.
 - Strip trailing marker word from name before boundary.
 - **ADDR_MARKER_RE must use `/i` flag** — "Sd," (mixed case) was being missed causing address to bleed into the name.
+- When no addr marker found (e.g. `بلواضح امينAin Arnat ,عين ارنات`): Arabic names → trim at first Latin char using `^[\u0600-\u06FF][^\u0021-\u007E\u00C0-\u017E]*`; Latin names → strip from first comma.
 
 ## Recipient extraction — returns_list (`extractReturnsRecipientNames`)
-Supports Arabic AND Latin/French names (4-step fallback):
-1. Arabic text immediately before a 10-digit phone (single-line Arabic).
-2. First line with Arabic characters (multi-line Arabic).
-3. Last non-keyword Latin line before first phone, scanning backward (multi-line Latin/French).
-4. Latin text immediately before first phone regex (single-line Latin/French).
-Skip keywords: `Livraison`, `Echange`, `Retour`, `NA`, `EXCH`. Strip leading digits from each line.
+Uses "common sender prefix" strategy — do NOT use fallback Arabic/Latin regex chains:
+1. For each tracking code, extract text between type keyword (Livraison/Echange/Retour) and first phone; flatten newlines → spaces. This is the "middle".
+2. Find the longest common prefix across ALL middles → that's the sender name.
+3. Strip sender prefix from each middle → recipient remains.
+Critical: strip the CX-ref with `/^CX[a-f0-9]{8,16}/i` (hex digits only). Using `[A-Za-z0-9]+` is WRONG — it greedily swallows `LivraisonSENDER` since they're all alphanumeric.
+Bound each row's window to the next tracking code to avoid cross-row bleed.
 
 ## FDR per-order senders (`extractFDRSenderNames`)
 `extractFDRSenders` (Set of unique senders) is for the REPORT-LEVEL display in the header.

@@ -115,69 +115,60 @@ function extractRecipientNames(text: string, trackingNums: string[]): string {
 }
 
 // ─── Recipient extraction — returns_list ──────────────────────────────────────
-// Returns_list format has recipient names in Arabic, French, or English. Two layouts:
-//   Single-line: EC... REF Livraison SENDER RECIPIENT PHONE WILAYA...
-//   Multi-line:  EC... Livraison\nSenderLine(s)\nRecipient phone wilaya...
-// Strategy (in order):
-//   1. Arabic text immediately before a 10-digit phone (single-line Arabic)
-//   2. First line with Arabic characters (multi-line Arabic)
-//   3. Last non-keyword Latin line before first phone (multi-line Latin/French)
-//   4. Latin text immediately before first phone (single-line Latin/French)
+// RETOUR PDF column layout (all merged by pdf-parse on one line, or spilling to next lines):
+//   EC[tracking][CX-ref?][Livraison|Echange|Retour][Sender][Recipient][Phone][Wilaya]...
+// The sender name is CONSISTENT across all rows in a single RETOUR report.
+// Strategy:
+//   1. For each row, extract the text between the type keyword and the first phone → "middle"
+//   2. Find the longest common prefix across all "middle" strings → that's the sender
+//   3. Strip the sender prefix from each middle → recipient name remains
 function extractReturnsRecipientNames(text: string, trackingNums: string[]): string {
   if (trackingNums.length === 0) return "";
-  const recipients: string[] = [];
+
+  const TYPE_RE = /Livraison|Echange|Retour/i;
+  const PHONE_RE = /0[5-7]\d{8}/;
+
+  // First pass: build (code → middle) where middle = flat text after TYPE keyword up to first phone
+  const rows: { code: string; middle: string }[] = [];
   for (const code of trackingNums) {
-    const idx = text.indexOf(code);
-    if (idx === -1) { recipients.push(""); continue; }
-    const after = getBoundedWindow(text, idx + code.length, 500);
+    const codeIdx = text.indexOf(code);
+    if (codeIdx === -1) continue;
+    const win = text.slice(codeIdx + code.length, codeIdx + code.length + 500);
+    // Bound to next tracking code to avoid bleeding into the next row
+    const nextEC = win.match(/EC[A-Z0-9]{4}\d{11}/);
+    const rowText = (nextEC && nextEC.index! > 0) ? win.slice(0, nextEC.index!) : win.slice(0, 300);
+    // Remove optional CX-ref (hex digits only, e.g. "CX2930353e2e1"); must stop before type keyword
+    const noRef = rowText.replace(/^CX[a-f0-9]{8,16}/i, "");
+    // Find type keyword
+    const typeMatch = TYPE_RE.exec(noRef);
+    if (!typeMatch) continue;
+    // Flatten newlines → spaces so multi-line names are handled uniformly
+    const flat = noRef.slice(typeMatch.index + typeMatch[0].length).replace(/\n/g, " ");
+    const phoneMatch = PHONE_RE.exec(flat);
+    if (!phoneMatch) continue;
+    rows.push({ code, middle: flat.slice(0, phoneMatch.index) });
+  }
 
-    // 1. Arabic text immediately before a 10-digit phone number (single-line)
-    const arabicBeforePhone = after.match(/([\u0600-\u06FF][\u0600-\u06FF\s]{1,50}?)(?=\s*\d{10})/);
-    if (arabicBeforePhone) {
-      recipients.push(arabicBeforePhone[1].trim().slice(0, 100));
-      continue;
-    }
-
-    // 2. Multi-line: first line that contains Arabic characters
-    const lines = after.split("\n").map(s => s.trim()).filter(Boolean);
-    let found = "";
-    for (const line of lines.slice(0, 10)) {
-      if (/[\u0600-\u06FF]{2,}/.test(line)) {
-        found = line.replace(/\s*\d{10}.*$/, "").trim().slice(0, 100);
+  // Second pass: find sender prefix length (longest prefix common to ALL rows)
+  let senderLen = 0;
+  if (rows.length >= 2) {
+    const first = rows[0].middle;
+    for (let i = 0; i < first.length; i++) {
+      if (rows.every(r => i < r.middle.length && r.middle[i] === first[i])) {
+        senderLen = i + 1;
+      } else {
         break;
       }
     }
-    if (found) { recipients.push(found); continue; }
-
-    // 3. Multi-line Latin/French: scan lines backward from first phone
-    const firstPhoneIdx = after.search(/0[5-7]\d{8}/);
-    if (firstPhoneIdx > 0) {
-      const beforePhone = after.slice(0, firstPhoneIdx);
-      const linesB = beforePhone.split("\n").map(s => s.trim()).filter(Boolean);
-      const SKIP_KW = /^(?:Livraison|Echange|Retour|NA|EXCH)$/i;
-      for (let i = linesB.length - 1; i >= 0; i--) {
-        const line = linesB[i].replace(/^\d+\s*/, ""); // strip leading ref digits
-        if (!line || SKIP_KW.test(line)) continue;
-        if (/[A-Za-z\u00C0-\u017E]{2,}/.test(line)) {
-          found = line.trim().slice(0, 100);
-          break;
-        }
-      }
-    }
-    if (found) { recipients.push(found); continue; }
-
-    // 4. Single-line Latin: Latin text immediately before first phone
-    const latinBeforePhone = after.match(/([A-Za-z\u00C0-\u017E][A-Za-z\u00C0-\u017E\s]{1,50}?)(?=\s*0[5-7]\d{8})/);
-    if (latinBeforePhone) {
-      const candidate = latinBeforePhone[1].trim();
-      if (!/^(?:Livraison|Echange|Retour)$/i.test(candidate)) {
-        found = candidate.slice(0, 100);
-      }
-    }
-
-    recipients.push(found);
   }
-  return recipients.join("|");
+
+  // Third pass: recipient = everything after the sender prefix, trimmed
+  const recipientMap = new Map<string, string>();
+  for (const { code, middle } of rows) {
+    recipientMap.set(code, middle.slice(senderLen).trim().slice(0, 100));
+  }
+
+  return trackingNums.map(code => recipientMap.get(code) ?? "").join("|");
 }
 
 // ─── Parcel count ─────────────────────────────────────────────────────────────
@@ -276,8 +267,8 @@ function extractFDRSenderNames(text: string, trackingNums: string[]): string {
   for (const code of trackingNums) {
     const idx = text.indexOf(code);
     if (idx === -1) { senders.push(""); continue; }
-    // Slice just past the tracking code; limit to 400 chars to stay within the row
-    const after = text.slice(idx + code.length, idx + code.length + 400);
+    // Slice just past the tracking code; strip leading newline (FDR tracking codes are on their own line)
+    const after = text.slice(idx + code.length, idx + code.length + 400).replace(/^\n/, "");
     // Match 1-6 sender lines followed by a 10-digit phone
     const m = after.match(/^((?:[^\n]+\n){1,6}?)\d{10}\n/);
     if (m) {
@@ -340,6 +331,16 @@ function extractFDRRecipientNames(text: string, trackingNums: string[]): string 
       );
     } else {
       nameRaw = recipientArea.slice(0, boundary);
+      // No addr marker found: address may still be embedded (e.g. "بلواضح امينAin Arnat ,عين ارنات").
+      // For Arabic-starting names, stop at the first Latin character (city names are Latin).
+      // For Latin-starting names, stop at the first comma (address separator).
+      const trimmed = nameRaw.trim();
+      if (/^[\u0600-\u06FF]/.test(trimmed)) {
+        const arabicOnly = trimmed.match(/^[\u0600-\u06FF][^\u0021-\u007E\u00C0-\u017E]*/);
+        if (arabicOnly) nameRaw = arabicOnly[0];
+      } else {
+        nameRaw = trimmed.replace(/[,،].*$/, "").trim();
+      }
     }
 
     // Clean up multi-line names and filter out pure numeric lines
