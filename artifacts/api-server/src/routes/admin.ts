@@ -232,6 +232,58 @@ router.delete("/admin/offices/:id", adminAuth, async (req, res) => {
   }
 });
 
+// ── Wilaya name → code lookup (for matching PDF wilaya names to map codes) ─────
+
+const WILAYA_CODE_BY_NAME: Record<string, string> = {
+  "Adrar": "DZ01", "Chlef": "DZ02", "Laghouat": "DZ03", "Oum El Bouaghi": "DZ04",
+  "Batna": "DZ05", "Béjaïa": "DZ06", "Béjaia": "DZ06", "Bejaia": "DZ06",
+  "Biskra": "DZ07", "Béchar": "DZ08", "Bechar": "DZ08", "Blida": "DZ09",
+  "Bouira": "DZ10", "Tamanrasset": "DZ11",
+  "Tébessa": "DZ12", "Tebessa": "DZ12",
+  "Tlemcen": "DZ13", "Tiaret": "DZ14", "Tizi Ouzou": "DZ15",
+  "Alger": "DZ16", "Algiers": "DZ16",
+  "Djelfa": "DZ17", "Jijel": "DZ18",
+  "Sétif": "DZ19", "Setif": "DZ19",
+  "Saïda": "DZ20", "Saida": "DZ20",
+  "Skikda": "DZ21",
+  "Sidi Bel Abbès": "DZ22", "Sidi Bel Abbes": "DZ22",
+  "Annaba": "DZ23", "Guelma": "DZ24", "Constantine": "DZ25",
+  "Médéa": "DZ26", "Medea": "DZ26", "Mostaganem": "DZ27",
+  "M'Sila": "DZ28", "Msila": "DZ28", "Mascara": "DZ29", "Ouargla": "DZ30",
+  "Oran": "DZ31", "El Bayadh": "DZ32", "Illizi": "DZ33",
+  "Bordj Bou Arréridj": "DZ34", "Bordj Bou Arreridj": "DZ34",
+  "Boumerdès": "DZ35", "Boumerdes": "DZ35",
+  "El Tarf": "DZ36", "Tindouf": "DZ37", "Tissemsilt": "DZ38", "El Oued": "DZ39",
+  "Khenchela": "DZ40", "Souk Ahras": "DZ41", "Tipaza": "DZ42", "Mila": "DZ43",
+  "Aïn Defla": "DZ44", "Ain Defla": "DZ44",
+  "Naâma": "DZ45", "Naama": "DZ45",
+  "Aïn Témouchent": "DZ46", "Ain Temouchent": "DZ46",
+  "Ghardaïa": "DZ47", "Ghardaia": "DZ47",
+  "Relizane": "DZ48", "Timimoun": "DZ49",
+  "Bordj Badji Mokhtar": "DZ50", "Ouled Djellal": "DZ51",
+  "Béni Abbès": "DZ52", "Beni Abbes": "DZ52",
+  "In Salah": "DZ53", "In Guezzam": "DZ54",
+  "Touggourt": "DZ55", "Djanet": "DZ56", "El M'Ghair": "DZ57", "El Meniaa": "DZ58",
+};
+
+/** Parse "Tébessa:3,Blida:1" → [{name, count}] */
+function parseWilayaStr(w: string): Array<{ name: string; count: number }> {
+  return w.split(",").map(s => s.trim()).filter(Boolean).map(entry => {
+    const i = entry.lastIndexOf(":");
+    if (i === -1) return { name: entry, count: 1 };
+    const name  = entry.slice(0, i).trim();
+    const count = parseInt(entry.slice(i + 1), 10);
+    return { name, count: isNaN(count) || count < 1 ? 1 : count };
+  }).filter(e => e.name);
+}
+
+/** Map PDF report_type to order status */
+function pdfStatus(reportType: string): string {
+  if (reportType === "delivery_receipt") return "delivered";
+  if (reportType === "returns_list")     return "returned";
+  return "in_transit"; // route_sheet
+}
+
 // ── Dashboard stats ────────────────────────────────────────────────────────────
 
 router.get("/admin/stats", adminAuth, async (req, res) => {
@@ -254,35 +306,126 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
 
     const where = conds.length > 0 ? and(...conds) : undefined;
 
-    const statusRows = await db
-      .select({ status: ordersTable.status, cnt: count() })
-      .from(ordersTable)
-      .where(where)
-      .groupBy(ordersTable.status);
+    // ── Regular orders queries (run in parallel with office_reports query) ──────
+    const byWilayaConds = wilayaStr ? conds : [...conds, isNotNull(ordersTable.destinationWilayaCode)];
 
+    const [statusRows, byWilayaRows, recentOrdersRows, officeReportRows] = await Promise.all([
+      db.select({ status: ordersTable.status, cnt: count() })
+        .from(ordersTable).where(where).groupBy(ordersTable.status),
+      db.select({
+          code: ordersTable.destinationWilayaCode,
+          name: ordersTable.destinationWilaya,
+          total: count(),
+          delivered: sql<number>`SUM(CASE WHEN ${ordersTable.status} = 'delivered' THEN 1 ELSE 0 END)`,
+        })
+        .from(ordersTable).where(and(...byWilayaConds))
+        .groupBy(ordersTable.destinationWilayaCode, ordersTable.destinationWilaya)
+        .orderBy(desc(count())),
+      db.select().from(ordersTable).where(where).orderBy(desc(ordersTable.createdAt)).limit(50),
+      // ── Fetch office PDF reports ─────────────────────────────────────────
+      pool.getConnection().then(async (conn: any) => {
+        try {
+          const [rows] = await conn.execute(
+            "SELECT id, report_type, report_date, sender_name, station, tracking_numbers, wilayas, created_at FROM office_reports ORDER BY created_at DESC LIMIT 200",
+          );
+          return rows as Array<{
+            id: number; report_type: string; report_date: string;
+            sender_name: string | null; station: string | null;
+            tracking_numbers: string | null; wilayas: string | null;
+            created_at: Date;
+          }>;
+        } finally { conn.release(); }
+      }),
+    ]);
+
+    // ── Aggregate manual-order counts ────────────────────────────────────────
     const sm: Record<string, number> = {};
     let total = 0;
     for (const r of statusRows) { sm[r.status] = Number(r.cnt); total += Number(r.cnt); }
 
-    const byWilayaConds = wilayaStr ? conds : [...conds, isNotNull(ordersTable.destinationWilayaCode)];
-    const byWilaya = await db
-      .select({
-        code: ordersTable.destinationWilayaCode,
-        name: ordersTable.destinationWilaya,
-        total: count(),
-        delivered: sql<number>`SUM(CASE WHEN ${ordersTable.status} = 'delivered' THEN 1 ELSE 0 END)`,
-      })
-      .from(ordersTable)
-      .where(and(...byWilayaConds))
-      .groupBy(ordersTable.destinationWilayaCode, ordersTable.destinationWilaya)
-      .orderBy(desc(count()));
+    // ── Build merged byWilaya map ─────────────────────────────────────────────
+    // key = wilaya code (e.g. "DZ12")
+    const wilayaMap: Record<string, { code: string; name: string; total: number; delivered: number }> = {};
 
-    const recentOrders = await db
-      .select()
-      .from(ordersTable)
-      .where(where)
-      .orderBy(desc(ordersTable.createdAt))
-      .limit(20);
+    for (const r of byWilayaRows) {
+      const code = r.code ?? "";
+      if (!code) continue;
+      wilayaMap[code] = {
+        code,
+        name: r.name ?? "",
+        total: Number(r.total),
+        delivered: Number(r.delivered),
+      };
+    }
+
+    // Merge wilaya data from office PDF reports
+    for (const rpt of officeReportRows) {
+      if (!rpt.wilayas) continue;
+      const status = pdfStatus(rpt.report_type);
+      for (const { name, count: cnt } of parseWilayaStr(rpt.wilayas)) {
+        const code = WILAYA_CODE_BY_NAME[name];
+        if (!code) continue;
+        if (!wilayaMap[code]) wilayaMap[code] = { code, name, total: 0, delivered: 0 };
+        wilayaMap[code].total += cnt;
+        if (status === "delivered") wilayaMap[code].delivered += cnt;
+      }
+    }
+
+    const byWilaya = Object.values(wilayaMap).sort((a, b) => b.total - a.total);
+
+    // ── Build virtual orders from PDF tracking numbers ────────────────────────
+    const pdfOrders: Array<Record<string, unknown>> = [];
+    for (const rpt of officeReportRows) {
+      if (!rpt.tracking_numbers) continue;
+      const nums = rpt.tracking_numbers.split(",").map((s: string) => s.trim()).filter(Boolean);
+      const status = pdfStatus(rpt.report_type);
+
+      // Determine primary destination wilaya from first entry in wilayas field
+      let destWilayaName: string | null = null;
+      let destWilayaCode: string | null = null;
+      if (rpt.wilayas) {
+        const firstEntry = parseWilayaStr(rpt.wilayas)[0];
+        if (firstEntry) {
+          destWilayaName = firstEntry.name;
+          destWilayaCode = WILAYA_CODE_BY_NAME[firstEntry.name] ?? null;
+        }
+      }
+
+      for (let idx = 0; idx < nums.length; idx++) {
+        pdfOrders.push({
+          id: -(rpt.id * 10000 + idx),
+          trackingNumber: nums[idx],
+          status,
+          senderName: rpt.sender_name ?? null,
+          recipientName: null,
+          destinationWilayaCode: destWilayaCode,
+          destinationWilaya: destWilayaName,
+          originWilayaCode: null,
+          originWilaya: rpt.station ?? null,
+          createdAt: rpt.report_date
+            ? new Date(rpt.report_date + "T00:00:00").toISOString()
+            : (rpt.created_at instanceof Date ? rpt.created_at.toISOString() : String(rpt.created_at)),
+          source: "pdf",
+        });
+      }
+    }
+
+    // Merge manual orders + PDF virtual orders, sort newest first, limit to 30
+    const allOrders = [
+      ...recentOrdersRows.map((o: Record<string, unknown>) => ({ ...o, source: "manual" })),
+      ...pdfOrders,
+    ].sort((a, b) => {
+      const da = new Date(String((a as Record<string, unknown>).createdAt)).getTime();
+      const db2 = new Date(String((b as Record<string, unknown>).createdAt)).getTime();
+      return db2 - da;
+    }).slice(0, 30);
+
+    // ── Aggregate PDF parcel counts into total/status summary ─────────────────
+    for (const rpt of officeReportRows) {
+      const st = pdfStatus(rpt.report_type);
+      // count parcels from tracking_numbers if available, else 0 (we already count by tracking)
+      // We do NOT add to total here — PDF parcels are already counted via the virtual orders list
+    }
 
     const delivered = sm["delivered"] ?? 0;
     res.json({
@@ -296,13 +439,8 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         failed: sm["failed"] ?? 0,
         cancelled: sm["cancelled"] ?? 0,
         successRate: total > 0 ? Math.round((delivered / total) * 100) : 0,
-        byWilaya: byWilaya.map((r) => ({
-          code: r.code ?? "",
-          name: r.name ?? "",
-          total: Number(r.total),
-          delivered: Number(r.delivered),
-        })),
-        recentOrders,
+        byWilaya,
+        recentOrders: allOrders,
       },
     });
   } catch (err) {

@@ -34,6 +34,7 @@ interface Order {
   destinationWilayaCode: string | null; destinationWilaya: string | null;
   originWilayaCode: string | null; originWilaya: string | null;
   createdAt: string;
+  source?: "manual" | "pdf";
 }
 interface WilayaStat { code: string; name: string; total: number; delivered: number; }
 interface DashboardStats {
@@ -625,6 +626,8 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                     <tr className="border-b border-gray-100 bg-gray-50/60">
                       <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">{t("admin.dashboard.orders.cols.tracking")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden sm:table-cell">{t("admin.dashboard.orders.cols.sender")}</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden xl:table-cell">Destinataire</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">Origine</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden md:table-cell">{t("admin.dashboard.orders.cols.destination")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3">{t("admin.dashboard.orders.cols.status")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">{t("admin.dashboard.orders.cols.date")}</th>
@@ -633,29 +636,51 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filteredOrders.map((o) => (
-                      <tr key={o.id} className="hover:bg-gray-50/60 transition-colors">
+                      <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors ${o.source === "pdf" ? "bg-blue-50/20" : ""}`}>
                         <td className="px-5 py-3">
-                          <span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                            {o.trackingNumber ?? `#${o.id}`}
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded w-fit">
+                              {o.trackingNumber ?? `#${Math.abs(o.id)}`}
+                            </span>
+                            {o.source === "pdf" && (
+                              <span className="text-xs text-blue-600 font-semibold flex items-center gap-0.5">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8 17v-1h8v1H8zm0-3v-1h8v1H8zm0-3V10h5v1H8z"/></svg>
+                                PDF
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3 py-3 text-gray-700 text-xs hidden sm:table-cell">{o.senderName ?? "—"}</td>
-                        <td className="px-3 py-3 text-gray-700 text-xs hidden md:table-cell">{o.destinationWilaya ?? "—"}</td>
+                        <td className="px-3 py-3 text-gray-700 text-xs hidden sm:table-cell max-w-[120px]">
+                          <span className="block truncate">{o.senderName ?? "—"}</span>
+                        </td>
+                        <td className="px-3 py-3 text-gray-500 text-xs hidden xl:table-cell max-w-[100px]">
+                          <span className="block truncate">{o.recipientName ?? "—"}</span>
+                        </td>
+                        <td className="px-3 py-3 text-gray-500 text-xs hidden lg:table-cell max-w-[100px]">
+                          <span className="block truncate">{o.originWilaya ?? "—"}</span>
+                        </td>
+                        <td className="px-3 py-3 text-gray-700 text-xs hidden md:table-cell max-w-[120px]">
+                          <span className="block truncate font-medium">{o.destinationWilaya ?? "—"}</span>
+                        </td>
                         <td className="px-3 py-3">
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${ORDER_STATUS_STYLE[o.status]}`}>
                             {t(`admin.dashboard.orders.status.${o.status}`)}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-gray-400 hidden lg:table-cell">{fmtDate(o.createdAt)}</td>
+                        <td className="px-3 py-3 text-xs text-gray-400 hidden lg:table-cell whitespace-nowrap">{fmtDate(o.createdAt)}</td>
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openEdit(o)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button onClick={() => deleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                          </div>
+                          {o.source !== "pdf" ? (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => openEdit(o)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                              <button onClick={() => deleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-300 px-2">PDF</span>
+                          )}
                         </td>
                       </tr>
                     ))}
