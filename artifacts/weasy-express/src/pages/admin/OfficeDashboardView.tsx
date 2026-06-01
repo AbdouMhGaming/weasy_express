@@ -1,23 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
-/** For FDR reports, sender_name stores all senders pipe-separated.
- *  Render each sender on its own line (inline list). */
-function SenderCell({ name, truncate = false }: { name: string | null; truncate?: boolean }) {
-  if (!name) return <span className="text-gray-400">—</span>;
+/** Format pipe-separated FDR senders as compact string: "A, B (+N autres)" */
+function formatSenderCompact(name: string | null, maxShow = 2): string {
+  if (!name) return "—";
   const parts = name.split("|").map(s => s.trim()).filter(Boolean);
-  if (parts.length <= 1) {
-    return truncate
-      ? <span className="text-xs text-gray-700 font-medium truncate block">{name}</span>
-      : <span className="text-xs text-gray-700 font-medium">{name}</span>;
-  }
-  return (
-    <div className="flex flex-col gap-0.5">
-      {parts.map((s, i) => (
-        <span key={i} className="text-xs text-gray-700 font-medium leading-snug">{s}</span>
-      ))}
-    </div>
-  );
+  if (parts.length === 0) return "—";
+  if (parts.length <= maxShow) return parts.join(", ");
+  return `${parts.slice(0, maxShow).join(", ")} (+${parts.length - maxShow} autres)`;
 }
 
 interface OfficeStats {
@@ -469,7 +459,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
               ) : senders.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-8">Aucun expéditeur détecté</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {senders.map((s, i) => (
                     <div key={s.sender_name} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
                       <span className="text-xs font-bold text-gray-400 w-5 shrink-0">#{i + 1}</span>
@@ -519,12 +509,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                   </div>
                   {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
                   {r.wilayas     && <p className="text-xs text-blue-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
-                  {r.sender_name && (
-                    <div className="text-xs text-gray-400 mt-0.5 flex items-start gap-1">
-                      <span>📦</span>
-                      <SenderCell name={r.sender_name} />
-                    </div>
-                  )}
+                  {r.sender_name && <p className="text-xs text-gray-400 truncate mt-0.5">📦 {formatSenderCompact(r.sender_name)}</p>}
                   {r.total_amount_dzd > 0 && <p className="text-xs text-gray-500 mt-0.5">Valeur: {fmtDZ(r.total_amount_dzd)}</p>}
                 </>
               )}
@@ -614,7 +599,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                     <span className="text-xs text-gray-700">{r.station ?? "—"}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <SenderCell name={r.sender_name} />
+                    <span className="text-xs text-gray-700 font-medium">{formatSenderCompact(r.sender_name)}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-bold text-gray-900">{r.total_parcels}</span>
@@ -780,7 +765,7 @@ function ReportSection({
       {rows.length === 0 ? (
         <p className="text-gray-400 text-xs text-center py-8">{empty}</p>
       ) : (
-        <div className="divide-y divide-gray-50">
+        <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
           {rows.map(r => (
             <div key={r.id} className="px-4 py-3 hover:bg-gray-50 transition-colors flex gap-2">
               <div className="flex-1 min-w-0">{renderRow(r)}</div>

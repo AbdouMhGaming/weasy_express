@@ -294,6 +294,16 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [topStats, setTopStats] = useState<TopStats | null>(null);
   const [searchOrders, setSearchOrders] = useState("");
 
+  interface OfficeReportRow {
+    id: number; report_type: string; file_name: string;
+    report_date: string; total_parcels: number;
+    total_amount_dzd: number; net_amount_dzd: number;
+    sender_name: string | null; station: string | null;
+    uploaded_by: string | null; created_at: string;
+  }
+  const [officeReports, setOfficeReports] = useState<OfficeReportRow[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+
   const fetchTopStats = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/top-stats`, { headers: adminHeaders() });
@@ -303,7 +313,17 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
     } catch { }
   }, []);
 
-  useEffect(() => { fetchTopStats(); }, [fetchTopStats]);
+  const fetchOfficeReports = useCallback(async () => {
+    setReportsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/office/reports`, { headers: adminHeaders() });
+      if (res.status !== 200) return;
+      const data = await res.json();
+      if (data.ok) setOfficeReports(data.reports ?? []);
+    } catch { } finally { setReportsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchTopStats(); fetchOfficeReports(); }, [fetchTopStats, fetchOfficeReports]);
 
   const dashboardMapSvg = useMemo(() => buildMapSvg(stats), [stats]);
 
@@ -455,7 +475,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.dashboard.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.dashboard.subtitle")}</p>
           </div>
-          <button onClick={() => { fetchStats(); fetchTopStats(); }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
+          <button onClick={() => { fetchStats(); fetchTopStats(); fetchOfficeReports(); }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
             <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             {t("admin.dashboard.refresh")}
           </button>
@@ -876,6 +896,119 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
           </div>
         </div>
       )}
+
+      {/* ── Tous les rapports importés ─────────────────────────────────── */}
+      <div className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📂</span>
+            <h3 className="font-bold text-gray-900 text-base">Tous les rapports importés</h3>
+            {officeReports.length > 0 && (
+              <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                {officeReports.length}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={fetchOfficeReports}
+            className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors"
+          >
+            <svg className={`w-3.5 h-3.5 ${reportsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Actualiser
+          </button>
+        </div>
+        {reportsLoading ? (
+          <div className="py-10 flex justify-center">
+            <svg className="animate-spin w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        ) : officeReports.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-12">Aucun rapport importé</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/80">
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Type</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Fichier</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Date rapport</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden sm:table-cell">Expéditeur / Station</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Colis</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden md:table-cell">Importé par</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 hidden lg:table-cell">Importé le</th>
+                  <th className="w-12 px-3 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {officeReports.map((r) => {
+                  const typeLabel = r.report_type === "delivery_receipt" ? { icon: "✅", label: "Décharge", badge: "bg-emerald-100 text-emerald-700" }
+                    : r.report_type === "route_sheet" ? { icon: "🗺️", label: "Feuille de route", badge: "bg-blue-100 text-blue-700" }
+                    : r.report_type === "returns_list" ? { icon: "↩️", label: "Retours", badge: "bg-orange-100 text-orange-700" }
+                    : { icon: "❓", label: "Inconnu", badge: "bg-gray-100 text-gray-600" };
+                  const displaySender = r.sender_name
+                    ? (() => {
+                        const parts = r.sender_name.split("|").filter(Boolean);
+                        if (parts.length <= 1) return r.sender_name;
+                        return parts.length <= 2
+                          ? parts.join(", ")
+                          : `${parts.slice(0, 2).join(", ")} (+${parts.length - 2} autres)`;
+                      })()
+                    : (r.station ?? "—");
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${typeLabel.badge}`}>
+                          <span>{typeLabel.icon}</span> {typeLabel.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 max-w-[180px]">
+                        <span className="text-xs text-gray-600 truncate block font-mono">{r.file_name}</span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-xs font-semibold text-gray-700">
+                          {r.report_date ? fmtDate(r.report_date) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell max-w-[160px]">
+                        <span className="text-xs text-gray-600 truncate block">{displaySender}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold text-gray-900">{r.total_parcels}</span>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <span className="text-xs text-gray-500 font-medium">{r.uploaded_by ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
+                        <span className="text-xs text-gray-400">{r.created_at ? fmtDate(String(r.created_at)) : "—"}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={async () => {
+                            if (!confirm("Supprimer ce rapport PDF ?")) return;
+                            try {
+                              await fetch(`${API_BASE}/api/office/reports/${r.id}`, { method: "DELETE", headers: adminHeaders() });
+                              fetchOfficeReports(); fetchStats(); fetchTopStats();
+                            } catch { }
+                          }}
+                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit Order Modal */}
       {showModal && (

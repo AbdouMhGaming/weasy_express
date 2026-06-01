@@ -417,19 +417,30 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         ? new Date(rpt.report_date + "T00:00:00").toISOString()
         : (rpt.created_at instanceof Date ? rpt.created_at.toISOString() : String(rpt.created_at));
 
+      // For route sheets: sender_name is pipe-separated (multiple merchants) — cannot be
+      // attributed per-order. Recipients in route sheets are also not per-parcel data.
+      const isRouteSheet = rpt.report_type === "route_sheet";
+      const orderSenderName = isRouteSheet ? null : (rpt.sender_name ?? null);
+
       for (let idx = 0; idx < nums.length; idx++) {
+        // For route_sheet: recipient_names contains names near EC codes which are merchant
+        // sender names, not recipient names — so set recipientName to null.
+        const orderRecipientName = isRouteSheet
+          ? null
+          : ((recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null);
         pdfOrders.push({
           id: -(rpt.id * 10000 + idx),
           trackingNumber: nums[idx],
           status,
-          senderName: rpt.sender_name ?? null,
-          recipientName: (recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null,
+          senderName: orderSenderName,
+          recipientName: orderRecipientName,
           destinationWilayaCode: destWilayaCode,
           destinationWilaya: destWilayaName,
           originWilayaCode: null,
           originWilaya: rpt.station ?? null,
           createdAt,
           source: "pdf",
+          reportType: rpt.report_type,
         });
       }
 
@@ -441,14 +452,15 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           id: -(rpt.id * 10000 + idx),
           trackingNumber: null,
           status,
-          senderName: rpt.sender_name ?? null,
-          recipientName: (recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null,
+          senderName: orderSenderName,
+          recipientName: null,
           destinationWilayaCode: destWilayaCode,
           destinationWilaya: destWilayaName,
           originWilayaCode: null,
           originWilaya: rpt.station ?? null,
           createdAt,
           source: "pdf",
+          reportType: rpt.report_type,
         });
       }
     }
@@ -580,43 +592,96 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
         .from(adminsTable).where(eq(adminsTable.role, "commercial"))
         .orderBy(desc(adminsTable.createdAt)).limit(10),
 
-      // Get senders + recipient_names + wilayas from PDF office_reports
+      // Get sender/recipient/wilaya data from PDF office_reports (two sub-queries)
       pool.getConnection().then(async (conn: any) => {
         try {
-          const [rows] = await conn.execute(
+          // delivery_receipt: single sender per report — counts are accurate
+          const [drRows] = await conn.execute(
             `SELECT sender_name,
                SUM(total_parcels) AS cnt,
-               SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels ELSE 0 END) AS del,
+               SUM(total_parcels) AS del,
                GROUP_CONCAT(recipient_names SEPARATOR '|') AS all_recipients,
                GROUP_CONCAT(wilayas ORDER BY created_at SEPARATOR ',') AS all_wilayas
              FROM office_reports
+             WHERE report_type = 'delivery_receipt'
+               AND sender_name IS NOT NULL AND sender_name != ''
              GROUP BY sender_name`
           );
-          return rows as Array<{
-            sender_name: string | null;
-            cnt: number | string;
-            del: number | string;
-            all_recipients: string | null;
-            all_wilayas: string | null;
-          }>;
+          // route_sheet: sender_name is pipe-separated (multiple merchants).
+          // We split each and distribute total_parcels equally across senders.
+          const [rsRows] = await conn.execute(
+            `SELECT sender_name, SUM(total_parcels) AS cnt,
+               GROUP_CONCAT(wilayas ORDER BY created_at SEPARATOR ',') AS all_wilayas
+             FROM office_reports
+             WHERE report_type = 'route_sheet'
+               AND sender_name IS NOT NULL AND sender_name != ''
+             GROUP BY sender_name`
+          );
+          // returns_list: single sender per report
+          const [retRows] = await conn.execute(
+            `SELECT sender_name,
+               SUM(total_parcels) AS cnt,
+               GROUP_CONCAT(wilayas ORDER BY created_at SEPARATOR ',') AS all_wilayas
+             FROM office_reports
+             WHERE report_type = 'returns_list'
+               AND sender_name IS NOT NULL AND sender_name != ''
+             GROUP BY sender_name`
+          );
+          // all wilayas across all types (for wilaya aggregation)
+          const [wilayaRows] = await conn.execute(
+            `SELECT GROUP_CONCAT(wilayas ORDER BY created_at SEPARATOR ',') AS all_wilayas
+             FROM office_reports`
+          );
+          return {
+            drRows: drRows as Array<{ sender_name: string; cnt: string|number; del: string|number; all_recipients: string|null; all_wilayas: string|null }>,
+            rsRows: rsRows as Array<{ sender_name: string; cnt: string|number; all_wilayas: string|null }>,
+            retRows: retRows as Array<{ sender_name: string; cnt: string|number; all_wilayas: string|null }>,
+            allWilayas: ((wilayaRows as Array<{all_wilayas:string|null}>)[0]?.all_wilayas ?? ""),
+          };
         } finally { conn.release(); }
       }),
     ]);
 
     // ── Merge senders ────────────────────────────────────────────────────────
+    // Only delivery_receipt gives accurate per-sender parcel counts.
     const senderMap: Record<string, { name: string; count: number; delivered: number }> = {};
     for (const s of manualSenders) {
       if (!s.name) continue;
       senderMap[s.name] = { name: s.name, count: Number(s.count), delivered: Number(s.delivered) };
     }
-    for (const s of pdfRaw) {
-      if (!s.sender_name) continue;
+    // delivery_receipt PDF rows — single sender, accurate counts
+    for (const s of pdfRaw.drRows) {
       const name = s.sender_name;
+      if (!name) continue;
       if (senderMap[name]) {
         senderMap[name].count    += Number(s.cnt);
         senderMap[name].delivered += Number(s.del);
       } else {
         senderMap[name] = { name, count: Number(s.cnt), delivered: Number(s.del) };
+      }
+    }
+    // route_sheet PDF rows — pipe-separated senders, distribute parcels equally
+    for (const s of pdfRaw.rsRows) {
+      const parts = s.sender_name.split("|").map((p: string) => p.trim()).filter(Boolean);
+      if (parts.length === 0) continue;
+      const perSender = Math.round(Number(s.cnt) / parts.length);
+      for (const name of parts) {
+        if (!name) continue;
+        if (senderMap[name]) {
+          senderMap[name].count += perSender;
+        } else {
+          senderMap[name] = { name, count: perSender, delivered: 0 };
+        }
+      }
+    }
+    // returns_list — single sender, count as returned (not delivered)
+    for (const s of pdfRaw.retRows) {
+      const name = s.sender_name;
+      if (!name) continue;
+      if (senderMap[name]) {
+        senderMap[name].count += Number(s.cnt);
+      } else {
+        senderMap[name] = { name, count: Number(s.cnt), delivered: 0 };
       }
     }
     const topSenders = Object.values(senderMap)
@@ -634,10 +699,9 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       recipientMap[key] = (recipientMap[key] ?? 0) + Number(r.count);
     }
 
-    // From PDF reports: recipient_names is pipe-separated per-report, rows grouped by sender
-    for (const row of pdfRaw) {
+    // From PDF delivery_receipt rows — recipient_names is pipe-separated
+    for (const row of pdfRaw.drRows) {
       if (!row.all_recipients) continue;
-      // all_recipients is GROUP_CONCAT of pipe-separated fields → split by both | and \n
       const names = row.all_recipients.split(/[|\n]/).map((n: string) => n.trim()).filter(Boolean);
       for (const name of names) {
         if (name.length < 2 || name.length > 100) continue;
@@ -650,11 +714,11 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // ── Merge top wilayas (manual orders + PDF reports) ──────────────────────
+    // ── Merge top wilayas from all PDF report types ───────────────────────────
     const wilayaMap: Record<string, number> = {};
-    for (const row of pdfRaw) {
-      if (!row.all_wilayas) continue;
-      for (const entry of row.all_wilayas.split(",")) {
+    const allWilayasStr = pdfRaw.allWilayas ?? "";
+    if (allWilayasStr) {
+      for (const entry of allWilayasStr.split(",")) {
         const i = entry.lastIndexOf(":");
         if (i === -1) continue;
         const name = entry.slice(0, i).trim();
