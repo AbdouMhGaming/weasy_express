@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
 interface PerfData {
@@ -23,11 +24,6 @@ interface TopStats {
 const fmtN = (n: number) => Math.round(n).toLocaleString("fr-DZ");
 const fmtDZ = (n: number) => `${fmtN(n)} DZD`;
 
-const catLabels: Record<string, string> = {
-  marketing: "Marketing", hr: "RH", it: "IT", packaging: "Emballage",
-  cod: "COD", warehouse: "Entrepôt", various: "Divers",
-};
-
 function MiniBar({ value, max, color = "bg-[#E10600]" }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
@@ -51,6 +47,7 @@ function MetricRow({ label, value, sub, highlight }: { label: string; value: str
 }
 
 export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<PerfData | null>(null);
   const [charges, setCharges] = useState<ChargesSummary | null>(null);
   const [topStats, setTopStats] = useState<TopStats | null>(null);
@@ -78,6 +75,16 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
     <div className={`bg-gray-100 rounded animate-pulse ${className}`} />
   );
 
+  const catLabels: Record<string, string> = {
+    marketing: t("admin.performance.catLabels.marketing"),
+    hr: t("admin.performance.catLabels.hr"),
+    it: t("admin.performance.catLabels.it"),
+    packaging: t("admin.performance.catLabels.packaging"),
+    cod: t("admin.performance.catLabels.cod"),
+    warehouse: t("admin.performance.catLabels.warehouse"),
+    various: t("admin.performance.catLabels.various"),
+  };
+
   const estRevPerDelivery = 800;
   const delivered = stats?.delivered ?? 0;
   const total = stats?.total ?? 0;
@@ -104,45 +111,45 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
     <div className="p-6 lg:p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Performance</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Tableau de bord analytique</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("admin.performance.title")}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{t("admin.performance.subtitle")}</p>
         </div>
         <button onClick={fetchAll} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
           <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          Actualiser
+          {t("admin.performance.refresh")}
         </button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
-        {/* ── Panel 1: Revenus & Profits ────────────────────────────── */}
+        {/* Panel 1: Revenue & Profit */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center gap-2">
             <span className="text-lg">📈</span>
-            <h2 className="font-bold text-white text-sm">Revenus & Profits</h2>
+            <h2 className="font-bold text-white text-sm">{t("admin.performance.panels.revenue")}</h2>
           </div>
           <div className="p-5">
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
             ) : (
               <>
-                <MetricRow label="Ventes (total commandes)" value={fmtN(total)} />
-                <MetricRow label="Revenus estimés" value={fmtDZ(estTotalRev)} sub={`${delivered} liv. × 800 DZD`} highlight="green" />
-                <MetricRow label="Charges totales" value={fmtDZ(totalCharges)} highlight="red" />
-                <MetricRow label="Bénéfice estimé" value={fmtDZ(estProfit)} highlight={estProfit >= 0 ? "green" : "red"} />
-                <MetricRow label="Marge / ROI" value={`${margin}%`} highlight={margin >= 30 ? "green" : margin >= 10 ? "amber" : "red"} />
-                <MetricRow label="Virements effectués" value={fmtDZ(totalPaid)} />
+                <MetricRow label={t("admin.performance.metrics.totalSales")} value={fmtN(total)} />
+                <MetricRow label={t("admin.performance.metrics.estRevenue")} value={fmtDZ(estTotalRev)} sub={`${delivered} × 800 DZD`} highlight="green" />
+                <MetricRow label={t("admin.performance.metrics.totalCharges")} value={fmtDZ(totalCharges)} highlight="red" />
+                <MetricRow label={t("admin.performance.metrics.estProfit")} value={fmtDZ(estProfit)} highlight={estProfit >= 0 ? "green" : "red"} />
+                <MetricRow label={t("admin.performance.metrics.margin")} value={`${margin}%`} highlight={margin >= 30 ? "green" : margin >= 10 ? "amber" : "red"} />
+                <MetricRow label={t("admin.performance.metrics.payouts")} value={fmtDZ(totalPaid)} />
               </>
             )}
             {!loading && total > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-50">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Répartition par statut</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t("admin.performance.sections.byStatus")}</p>
                 <div className="space-y-2">
                   {[
-                    { label: "Livré", value: delivered, color: "bg-emerald-500" },
-                    { label: "En transit", value: inTransit, color: "bg-blue-500" },
-                    { label: "Retourné", value: returned, color: "bg-orange-500" },
-                    { label: "Échoué", value: failed, color: "bg-red-500" },
+                    { label: t("admin.performance.status.delivered"), value: delivered, color: "bg-emerald-500" },
+                    { label: t("admin.performance.status.inTransit"), value: inTransit, color: "bg-blue-500" },
+                    { label: t("admin.performance.status.returned"), value: returned, color: "bg-orange-500" },
+                    { label: t("admin.performance.status.failed"), value: failed, color: "bg-red-500" },
                   ].map(row => (
                     <div key={row.label} className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 w-20 shrink-0">{row.label}</span>
@@ -156,25 +163,25 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
           </div>
         </div>
 
-        {/* ── Panel 2: Dépenses & Frais ─────────────────────────────── */}
+        {/* Panel 2: Expenses */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gradient-to-r from-[#E10600] to-[#C50500] flex items-center gap-2">
             <span className="text-lg">💸</span>
-            <h2 className="font-bold text-white text-sm">Dépenses & Frais</h2>
+            <h2 className="font-bold text-white text-sm">{t("admin.performance.panels.expenses")}</h2>
           </div>
           <div className="p-5">
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
             ) : (
               <>
-                <MetricRow label="Total charges" value={fmtDZ(totalCharges)} highlight="red" />
-                <MetricRow label="Virements effectués" value={fmtDZ(totalPaid)} highlight="green" />
-                <MetricRow label="Solde restant à payer" value={fmtDZ(solde)} highlight={solde > 0 ? "amber" : "green"} />
+                <MetricRow label={t("admin.performance.metrics.charges")} value={fmtDZ(totalCharges)} highlight="red" />
+                <MetricRow label={t("admin.performance.metrics.payouts")} value={fmtDZ(totalPaid)} highlight="green" />
+                <MetricRow label={t("admin.performance.metrics.remaining")} value={fmtDZ(solde)} highlight={solde > 0 ? "amber" : "green"} />
               </>
             )}
             {!loading && catEntries.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-50">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Par catégorie</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t("admin.performance.sections.byCategory")}</p>
                 <div className="space-y-2">
                   {catEntries.map(([cat, val]) => (
                     <div key={cat} className="flex items-center gap-2">
@@ -187,32 +194,32 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
               </div>
             )}
             {!loading && catEntries.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-6 mt-2">Aucune charge enregistrée</p>
+              <p className="text-xs text-gray-400 text-center py-6 mt-2">{t("admin.performance.empty.noCharges")}</p>
             )}
           </div>
         </div>
 
-        {/* ── Panel 3: Métriques Clients ────────────────────────────── */}
+        {/* Panel 3: Client Metrics */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gradient-to-r from-blue-500 to-blue-600 flex items-center gap-2">
             <span className="text-lg">👥</span>
-            <h2 className="font-bold text-white text-sm">Métriques Clients</h2>
+            <h2 className="font-bold text-white text-sm">{t("admin.performance.panels.clients")}</h2>
           </div>
           <div className="p-5">
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
             ) : (
               <>
-                <MetricRow label="Total commandes" value={fmtN(total)} />
-                <MetricRow label="Expéditeurs actifs" value={fmtN(uniqueSenders)} sub="Clients uniques détectés" />
-                <MetricRow label="Taux de succès" value={`${successRate}%`} highlight={successRate >= 80 ? "green" : successRate >= 60 ? "amber" : "red"} />
-                <MetricRow label="Taux de retour" value={`${returnRate}%`} highlight={returnRate <= 10 ? "green" : returnRate <= 20 ? "amber" : "red"} />
-                <MetricRow label="AOV (valeur moy. commande)" value={aov > 0 ? fmtDZ(aov) : "—"} sub="Revenu estimé ÷ total" />
+                <MetricRow label={t("admin.performance.metrics.orders")} value={fmtN(total)} />
+                <MetricRow label={t("admin.performance.metrics.activeSenders")} value={fmtN(uniqueSenders)} sub={t("admin.performance.subs.uniqueClients")} />
+                <MetricRow label={t("admin.performance.metrics.successRate")} value={`${successRate}%`} highlight={successRate >= 80 ? "green" : successRate >= 60 ? "amber" : "red"} />
+                <MetricRow label={t("admin.performance.metrics.returnRate")} value={`${returnRate}%`} highlight={returnRate <= 10 ? "green" : returnRate <= 20 ? "amber" : "red"} />
+                <MetricRow label={t("admin.performance.metrics.aov")} value={aov > 0 ? fmtDZ(aov) : "—"} sub={t("admin.performance.subs.aov")} />
               </>
             )}
             {!loading && (topStats?.topSenders ?? []).length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-50">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Top expéditeurs</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t("admin.performance.sections.topSenders")}</p>
                 <div className="space-y-2">
                   {(topStats?.topSenders ?? []).slice(0, 5).map((s, i) => {
                     const cnt = Number(s.count); const del = Number(s.delivered);
@@ -234,27 +241,27 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
           </div>
         </div>
 
-        {/* ── Panel 4: Impact de Livraison ──────────────────────────── */}
+        {/* Panel 4: Delivery Impact */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gradient-to-r from-slate-600 to-slate-700 flex items-center gap-2">
             <span className="text-lg">🚚</span>
-            <h2 className="font-bold text-white text-sm">Impact de Livraison</h2>
+            <h2 className="font-bold text-white text-sm">{t("admin.performance.panels.delivery")}</h2>
           </div>
           <div className="p-5">
             {loading ? (
               <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
             ) : (
               <>
-                <MetricRow label="Livraisons réussies" value={fmtN(delivered)} highlight="green" />
-                <MetricRow label="En cours de livraison" value={fmtN(inTransit)} />
-                <MetricRow label="Retours à traiter" value={fmtN(returned)} highlight={returned > 0 ? "amber" : "green"} />
-                <MetricRow label="Taux de livraison" value={`${successRate}%`} highlight={successRate >= 80 ? "green" : "amber"} />
-                <MetricRow label="Taux d'échec" value={`${failRate}%`} highlight={failRate <= 5 ? "green" : failRate <= 15 ? "amber" : "red"} />
+                <MetricRow label={t("admin.performance.metrics.delivered")} value={fmtN(delivered)} highlight="green" />
+                <MetricRow label={t("admin.performance.metrics.inTransit")} value={fmtN(inTransit)} />
+                <MetricRow label={t("admin.performance.metrics.returns")} value={fmtN(returned)} highlight={returned > 0 ? "amber" : "green"} />
+                <MetricRow label={t("admin.performance.metrics.deliveryRate")} value={`${successRate}%`} highlight={successRate >= 80 ? "green" : "amber"} />
+                <MetricRow label={t("admin.performance.metrics.failRate")} value={`${failRate}%`} highlight={failRate <= 5 ? "green" : failRate <= 15 ? "amber" : "red"} />
               </>
             )}
             {!loading && topWilayas.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-50">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Top wilayas livrées</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t("admin.performance.sections.topWilayas")}</p>
                 <div className="space-y-2">
                   {topWilayas.map((w) => (
                     <div key={w.code} className="flex items-center gap-2">
@@ -268,7 +275,7 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
               </div>
             )}
             {!loading && topWilayas.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-6 mt-2">Aucune livraison enregistrée</p>
+              <p className="text-xs text-gray-400 text-center py-6 mt-2">{t("admin.performance.empty.noDeliveries")}</p>
             )}
           </div>
         </div>
