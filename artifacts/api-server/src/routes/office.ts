@@ -115,9 +115,14 @@ function extractRecipientNames(text: string, trackingNums: string[]): string {
 }
 
 // ─── Recipient extraction — returns_list ──────────────────────────────────────
-// Returns_list format has Arabic recipient names. Two layouts:
-//   Single-line: EC... REF Livraison SENDER RECIPIENT_ARABIC PHONE WILAYA...
-//   Multi-line:  EC... Livraison\nSenderLine(s)\nRecipient_ARABIC phone wilaya...
+// Returns_list format has recipient names in Arabic, French, or English. Two layouts:
+//   Single-line: EC... REF Livraison SENDER RECIPIENT PHONE WILAYA...
+//   Multi-line:  EC... Livraison\nSenderLine(s)\nRecipient phone wilaya...
+// Strategy (in order):
+//   1. Arabic text immediately before a 10-digit phone (single-line Arabic)
+//   2. First line with Arabic characters (multi-line Arabic)
+//   3. Last non-keyword Latin line before first phone (multi-line Latin/French)
+//   4. Latin text immediately before first phone (single-line Latin/French)
 function extractReturnsRecipientNames(text: string, trackingNums: string[]): string {
   if (trackingNums.length === 0) return "";
   const recipients: string[] = [];
@@ -126,22 +131,50 @@ function extractReturnsRecipientNames(text: string, trackingNums: string[]): str
     if (idx === -1) { recipients.push(""); continue; }
     const after = getBoundedWindow(text, idx + code.length, 500);
 
-    // Single-line: Arabic text immediately before a 10-digit phone number
+    // 1. Arabic text immediately before a 10-digit phone number (single-line)
     const arabicBeforePhone = after.match(/([\u0600-\u06FF][\u0600-\u06FF\s]{1,50}?)(?=\s*\d{10})/);
     if (arabicBeforePhone) {
       recipients.push(arabicBeforePhone[1].trim().slice(0, 100));
       continue;
     }
-    // Multi-line: first line that contains Arabic characters
+
+    // 2. Multi-line: first line that contains Arabic characters
     const lines = after.split("\n").map(s => s.trim()).filter(Boolean);
     let found = "";
     for (const line of lines.slice(0, 10)) {
       if (/[\u0600-\u06FF]{2,}/.test(line)) {
-        // Strip phone number and trailing content
         found = line.replace(/\s*\d{10}.*$/, "").trim().slice(0, 100);
         break;
       }
     }
+    if (found) { recipients.push(found); continue; }
+
+    // 3. Multi-line Latin/French: scan lines backward from first phone
+    const firstPhoneIdx = after.search(/0[5-7]\d{8}/);
+    if (firstPhoneIdx > 0) {
+      const beforePhone = after.slice(0, firstPhoneIdx);
+      const linesB = beforePhone.split("\n").map(s => s.trim()).filter(Boolean);
+      const SKIP_KW = /^(?:Livraison|Echange|Retour|NA|EXCH)$/i;
+      for (let i = linesB.length - 1; i >= 0; i--) {
+        const line = linesB[i].replace(/^\d+\s*/, ""); // strip leading ref digits
+        if (!line || SKIP_KW.test(line)) continue;
+        if (/[A-Za-z\u00C0-\u017E]{2,}/.test(line)) {
+          found = line.trim().slice(0, 100);
+          break;
+        }
+      }
+    }
+    if (found) { recipients.push(found); continue; }
+
+    // 4. Single-line Latin: Latin text immediately before first phone
+    const latinBeforePhone = after.match(/([A-Za-z\u00C0-\u017E][A-Za-z\u00C0-\u017E\s]{1,50}?)(?=\s*0[5-7]\d{8})/);
+    if (latinBeforePhone) {
+      const candidate = latinBeforePhone[1].trim();
+      if (!/^(?:Livraison|Echange|Retour)$/i.test(candidate)) {
+        found = candidate.slice(0, 100);
+      }
+    }
+
     recipients.push(found);
   }
   return recipients.join("|");
@@ -233,15 +266,44 @@ function extractFDRSenders(text: string): string[] {
   return [...senders];
 }
 
+// ─── Per-order sender extraction — FDR (route_sheet) ─────────────────────────
+// For each tracking number, extract only that order's sender (1-6 lines before the sender phone).
+// Returns a pipe-separated string aligned with trackingNums (same index = same order).
+// This is separate from extractFDRSenders which returns unique senders for the report header.
+function extractFDRSenderNames(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const senders: string[] = [];
+  for (const code of trackingNums) {
+    const idx = text.indexOf(code);
+    if (idx === -1) { senders.push(""); continue; }
+    // Slice just past the tracking code; limit to 400 chars to stay within the row
+    const after = text.slice(idx + code.length, idx + code.length + 400);
+    // Match 1-6 sender lines followed by a 10-digit phone
+    const m = after.match(/^((?:[^\n]+\n){1,6}?)\d{10}\n/);
+    if (m) {
+      const raw = m[1]
+        .replace(/\n/g, " ")
+        .trim()
+        .replace(/^\d+\s*/, ""); // strip leading ref number if present
+      senders.push(raw.length > 0 && raw.length < 120 ? raw : "");
+    } else {
+      senders.push("");
+    }
+  }
+  return senders.join("|");
+}
+
 // ─── Recipient extraction — FDR (route_sheet) ────────────────────────────────
 // FDR format: EC... \n senderName(1-4 lines) \n senderPhone \n recipientName[addressMarker,City] \n ...
 // After the sender phone the recipient name appears, followed by an address marker (Sd, SD, DM, etc.)
 // and a comma. We take text between sender phone and address marker, stripping the marker itself.
+// ADDR_MARKER_RE uses /i so "Sd,", "SD,", "sd," and all case variants are matched correctly.
 function extractFDRRecipientNames(text: string, trackingNums: string[]): string {
   if (trackingNums.length === 0) return "";
   const SENDER_PHONE_RE = /0[5-9]\d{8}/g;
-  // Common Ecotrack address-type markers that appear right after the recipient name
-  const ADDR_MARKER_RE = /(?:NOEST\s+express|BR\s+NOEST|SD?|sd|DM|dm|AD|ad|BR|br|Domicile|Centre|Noest|noest|centre)\s*,/;
+  // Common Ecotrack address-type markers that appear right after the recipient name.
+  // Case-insensitive (/i) so "Sd,", "SD,", "sd," etc. are all matched.
+  const ADDR_MARKER_RE = /(?:NOEST\s+express|BR\s+NOEST|SD?|DM|AD|BR|Domicile|Centre|Noest|centre)\s*,/i;
 
   const recipients: string[] = [];
   for (const code of trackingNums) {
@@ -432,6 +494,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
     let netAmount      = 0;
     let fraisLivraison = 0;
     let senderName     = "";
+    let perOrderSendersStr: string | null = null;
 
     if (reportType === "delivery_receipt") {
       const { total, net, frais } = extractDeliveryAmounts(text);
@@ -441,7 +504,11 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
       senderName     = extractDeliverySender(text);
     } else if (reportType === "route_sheet") {
       totalAmount = extractRouteTotal(text);
+      // Compact list of unique senders for report-level display
       senderName  = extractFDRSenders(text).join("|").slice(0, 255);
+      // Per-order senders aligned with tracking numbers (used for individual order rows)
+      const perOrderSenders = extractFDRSenderNames(text, trackingNums);
+      perOrderSendersStr = perOrderSenders || null;
     } else if (reportType === "returns_list") {
       totalAmount = extractReturnAmounts(text);
       senderName  = extractReturnSender(text);
@@ -468,8 +535,8 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
            (report_type, file_name, report_date, total_parcels,
             total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
             station, sender_name, tracking_numbers, recipient_names, wilayas,
-            uploaded_by, file_data, order_wilayas)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            uploaded_by, file_data, order_wilayas, per_order_senders)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           reportType, file.originalname.slice(0, 255), reportDate, totalParcels,
           totalAmount, netAmount, fraisLivraison, station, senderName,
@@ -477,6 +544,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
           authReq.adminUsername ?? "",
           file.buffer,          // store PDF binary for later download
           orderWilayasStr,
+          perOrderSendersStr,
         ],
       );
     } finally { conn.release(); }

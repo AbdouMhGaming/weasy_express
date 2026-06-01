@@ -332,7 +332,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           if (toStr)   { whereSql += " AND report_date <= ?"; sqlParams.push(toStr.slice(0, 10)); }
           if (officeStr) { whereSql += " AND uploaded_by = ?"; sqlParams.push(officeStr); }
           const [rows] = await conn.execute(
-            `SELECT id, report_type, report_date, sender_name, station, tracking_numbers, recipient_names, wilayas, order_wilayas, total_parcels, created_at FROM office_reports ${whereSql} ORDER BY created_at DESC LIMIT 500`,
+            `SELECT id, report_type, report_date, sender_name, station, tracking_numbers, recipient_names, wilayas, order_wilayas, per_order_senders, total_parcels, created_at FROM office_reports ${whereSql} ORDER BY created_at DESC LIMIT 500`,
             sqlParams,
           );
           return rows as Array<{
@@ -340,6 +340,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
             sender_name: string | null; station: string | null;
             tracking_numbers: string | null; recipient_names: string | null;
             wilayas: string | null; order_wilayas: string | null;
+            per_order_senders: string | null;
             total_parcels: number; created_at: Date;
           }>;
         } finally { conn.release(); }
@@ -426,6 +427,11 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         ? new Date(rpt.report_date + "T00:00:00").toISOString()
         : (rpt.created_at instanceof Date ? rpt.created_at.toISOString() : String(rpt.created_at));
 
+      // Per-order senders: pipe-separated, aligned with tracking_numbers (route_sheet only)
+      const perOrderSendersArr = (rpt.report_type === "route_sheet" && rpt.per_order_senders)
+        ? String(rpt.per_order_senders).split("|")
+        : [];
+
       for (let idx = 0; idx < nums.length; idx++) {
         // Per-order destination: use per-order wilaya if available, else fallback
         const perOrderWilayaName = (orderWilayasArr[idx] && orderWilayasArr[idx].trim())
@@ -434,7 +440,10 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           ? (WILAYA_CODE_BY_NAME[perOrderWilayaName] ?? fallbackWilayaCode) : fallbackWilayaCode;
 
         const orderRecipientName = (recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null;
-        const orderSenderName = rpt.sender_name ?? null;
+        // For route_sheet: use the per-order sender; for other types: use the report-level sender
+        const orderSenderName = perOrderSendersArr.length > 0
+          ? (perOrderSendersArr[idx]?.trim() || rpt.sender_name || null)
+          : (rpt.sender_name ?? null);
         pdfOrders.push({
           id: -(rpt.id * 10000 + idx),
           trackingNumber: nums[idx],
@@ -458,7 +467,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           id: -(rpt.id * 10000 + idx),
           trackingNumber: null,
           status,
-          senderName: orderSenderName,
+          senderName: rpt.sender_name ?? null,
           recipientName: null,
           destinationWilayaCode: fallbackWilayaCode,
           destinationWilaya: fallbackWilayaName,
