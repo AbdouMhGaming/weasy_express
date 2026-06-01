@@ -678,7 +678,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                     <tr className="border-b border-gray-100 bg-gray-50/80 backdrop-blur-sm">
                       <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">{t("admin.dashboard.orders.cols.tracking")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden sm:table-cell">{t("admin.dashboard.orders.cols.sender")}</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden xl:table-cell">{t("admin.dashboard.orders.cols.recipient")}</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden md:table-cell">{t("admin.dashboard.orders.cols.recipient")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">{t("admin.dashboard.orders.cols.origin")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden md:table-cell">{t("admin.dashboard.orders.cols.destination")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3">{t("admin.dashboard.orders.cols.status")}</th>
@@ -705,7 +705,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                         <td className="px-3 py-3 text-gray-700 text-xs hidden sm:table-cell max-w-[120px]">
                           <span className="block truncate">{o.senderName ?? "—"}</span>
                         </td>
-                        <td className="px-3 py-3 text-gray-500 text-xs hidden xl:table-cell max-w-[100px]">
+                        <td className="px-3 py-3 text-gray-500 text-xs hidden md:table-cell max-w-[100px]">
                           <span className="block truncate">{o.recipientName ?? "—"}</span>
                         </td>
                         <td className="px-3 py-3 text-gray-500 text-xs hidden lg:table-cell max-w-[100px]">
@@ -986,20 +986,33 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                         <span className="text-xs text-gray-400">{r.created_at ? fmtDate(String(r.created_at)) : "—"}</span>
                       </td>
                       <td className="px-3 py-3">
-                        <button
-                          onClick={async () => {
-                            if (!confirm("Supprimer ce rapport PDF ?")) return;
-                            try {
-                              await fetch(`${API_BASE}/api/office/reports/${r.id}`, { method: "DELETE", headers: adminHeaders() });
-                              fetchOfficeReports(); fetchStats(); fetchTopStats();
-                            } catch { }
-                          }}
-                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={`${API_BASE}/api/office/reports/${r.id}/file`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Ouvrir le PDF"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Supprimer ce rapport PDF ?")) return;
+                              try {
+                                await fetch(`${API_BASE}/api/office/reports/${r.id}`, { method: "DELETE", headers: adminHeaders() });
+                                fetchOfficeReports(); fetchStats(); fetchTopStats();
+                              } catch { }
+                            }}
+                            className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

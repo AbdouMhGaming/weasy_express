@@ -330,14 +330,15 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           if (fromStr) { whereSql += " AND report_date >= ?"; sqlParams.push(fromStr.slice(0, 10)); }
           if (toStr)   { whereSql += " AND report_date <= ?"; sqlParams.push(toStr.slice(0, 10)); }
           const [rows] = await conn.execute(
-            `SELECT id, report_type, report_date, sender_name, station, tracking_numbers, recipient_names, wilayas, total_parcels, created_at FROM office_reports ${whereSql} ORDER BY created_at DESC LIMIT 500`,
+            `SELECT id, report_type, report_date, sender_name, station, tracking_numbers, recipient_names, wilayas, order_wilayas, total_parcels, created_at FROM office_reports ${whereSql} ORDER BY created_at DESC LIMIT 500`,
             sqlParams,
           );
           return rows as Array<{
             id: number; report_type: string; report_date: string;
             sender_name: string | null; station: string | null;
             tracking_numbers: string | null; recipient_names: string | null;
-            wilayas: string | null; total_parcels: number; created_at: Date;
+            wilayas: string | null; order_wilayas: string | null;
+            total_parcels: number; created_at: Date;
           }>;
         } finally { conn.release(); }
       }),
@@ -363,9 +364,10 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
       };
     }
 
-    // Merge wilaya data from office PDF reports
+    // Merge wilaya data from office PDF reports — exclude returns_list (not delivered)
     for (const rpt of officeReportRows) {
       if (!rpt.wilayas) continue;
+      if (rpt.report_type === "returns_list") continue; // returned parcels excluded from delivery map
       const status = pdfStatus(rpt.report_type);
       for (const { name, count: cnt } of parseWilayaStr(rpt.wilayas)) {
         const code = WILAYA_CODE_BY_NAME[name];
@@ -405,13 +407,18 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         if (!hasMatch) continue;
       }
 
-      // Primary destination wilaya = first entry in wilayas field
-      let destWilayaName: string | null = null;
-      let destWilayaCode: string | null = null;
+      // Fallback destination wilaya = first entry in wilayas field
+      let fallbackWilayaName: string | null = null;
+      let fallbackWilayaCode: string | null = null;
       if (wilayaEntries.length > 0) {
-        destWilayaName = wilayaEntries[0].name;
-        destWilayaCode = WILAYA_CODE_BY_NAME[wilayaEntries[0].name] ?? null;
+        fallbackWilayaName = wilayaEntries[0].name;
+        fallbackWilayaCode = WILAYA_CODE_BY_NAME[wilayaEntries[0].name] ?? null;
       }
+
+      // Per-order wilaya: pipe-separated list aligned with tracking_numbers
+      const orderWilayasArr = (rpt as any).order_wilayas
+        ? String((rpt as any).order_wilayas).split("|")
+        : [];
 
       const createdAt = rpt.report_date
         ? new Date(rpt.report_date + "T00:00:00").toISOString()
@@ -423,8 +430,12 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
       const orderSenderName = isRouteSheet ? null : (rpt.sender_name ?? null);
 
       for (let idx = 0; idx < nums.length; idx++) {
-        // For route_sheet: recipient_names contains names near EC codes which are merchant
-        // sender names, not recipient names — so set recipientName to null.
+        // Per-order destination: use per-order wilaya if available, else fallback
+        const perOrderWilayaName = (orderWilayasArr[idx] && orderWilayasArr[idx].trim())
+          ? orderWilayasArr[idx].trim() : fallbackWilayaName;
+        const perOrderWilayaCode = perOrderWilayaName
+          ? (WILAYA_CODE_BY_NAME[perOrderWilayaName] ?? fallbackWilayaCode) : fallbackWilayaCode;
+
         const orderRecipientName = isRouteSheet
           ? null
           : ((recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null);
@@ -434,8 +445,8 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           status,
           senderName: orderSenderName,
           recipientName: orderRecipientName,
-          destinationWilayaCode: destWilayaCode,
-          destinationWilaya: destWilayaName,
+          destinationWilayaCode: perOrderWilayaCode,
+          destinationWilaya: perOrderWilayaName,
           originWilayaCode: null,
           originWilaya: rpt.station ?? null,
           createdAt,
@@ -444,8 +455,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         });
       }
 
-      // If total_parcels > tracking numbers found, add placeholder rows for the missing parcels
-      // so all parcels appear in the orders table, not just those with extracted tracking codes.
+      // Placeholder rows for parcels without extracted tracking codes
       const totalParcels = rpt.total_parcels > 0 ? rpt.total_parcels : nums.length;
       for (let idx = nums.length; idx < totalParcels; idx++) {
         pdfOrders.push({
@@ -454,8 +464,8 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           status,
           senderName: orderSenderName,
           recipientName: null,
-          destinationWilayaCode: destWilayaCode,
-          destinationWilaya: destWilayaName,
+          destinationWilayaCode: fallbackWilayaCode,
+          destinationWilaya: fallbackWilayaName,
           originWilayaCode: null,
           originWilaya: rpt.station ?? null,
           createdAt,
@@ -674,19 +684,10 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
         }
       }
     }
-    // returns_list — single sender, count as returned (not delivered)
-    for (const s of pdfRaw.retRows) {
-      const name = s.sender_name;
-      if (!name) continue;
-      if (senderMap[name]) {
-        senderMap[name].count += Number(s.cnt);
-      } else {
-        senderMap[name] = { name, count: Number(s.cnt), delivered: 0 };
-      }
-    }
+    // retRows = returns_list: excluded from senderMap (returned parcels must not inflate sender counts)
     const topSenders = Object.values(senderMap)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+      .slice(0, 10);
 
     // ── Merge recipients ─────────────────────────────────────────────────────
     const recipientMap: Record<string, number> = {};
