@@ -33,50 +33,75 @@ function extractDate(text: string): string {
 }
 
 // ─── Tracking numbers ─────────────────────────────────────────────────────────
-// EC codes always end with a digit sequence. We strip:
-//   - Reference field suffixes like "CX..." that immediately follow the code
-//   - Trailing uppercase letters that bleed from recipient/sender names
+// Ecotrack tracking codes are exactly: EC + 4 alphanumeric chars + 11 digits = 17 chars.
+// Using a precise pattern prevents greedily capturing reference numbers or phone digits
+// that immediately follow the code in the concatenated pdf-parse output.
 function extractTrackingNumbers(text: string): string[] {
-  const raw = text.match(/EC[A-Z0-9]{10,18}/g) ?? [];
+  const raw = text.match(/EC[A-Z0-9]{4}\d{11}/g) ?? [];
   const seen = new Set<string>();
   const result: string[] = [];
-  for (let n of raw) {
-    n = n.replace(/CX\w*$/, "");          // strip reference field (CX2930...)
-    n = n.replace(/[A-Z]+$/, "");        // strip trailing uppercase from names
-    if (n.length < 12) continue;
+  for (const n of raw) {
     if (!seen.has(n)) { seen.add(n); result.push(n); }
   }
   return result;
 }
 
 // ─── Recipient extraction — delivery_receipt ──────────────────────────────────
-// Strips phone number contamination; handles multi-line names (Mohamed\nghelam).
+// The pdf-parse output concatenates table columns without separators, causing:
+//   - Reference numbers (2-3 digits) or type suffixes (-EXCH) to appear right after tracking
+//   - Phone numbers to appear before the name (when Reference column holds a phone)
+//   - Recipient phone to appear right after the name on the same line
+// Strategy:
+//   1. Strip type suffix like "-EXCH" at the start
+//   2. Locate all Algerian phone numbers (0[5-7] + 8 digits) in the window
+//   3. If letters exist before the first phone → name is before first phone
+//   4. If first phone is at start (no letters before it) → name is between first and second phone
+//   5. Strip leading digits (reference number remnants) from each name line
 function extractRecipientNames(text: string, trackingNums: string[]): string {
   if (trackingNums.length === 0) return "";
+  const PHONE_RE = /0[5-7]\d{8}/g;
+
   const recipients: string[] = [];
   for (const code of trackingNums) {
     const idx = text.indexOf(code);
     if (idx === -1) { recipients.push(""); continue; }
-    const after = text.slice(idx + code.length, idx + code.length + 400);
-    const rawLines = after.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
-    const nameParts: string[] = [];
-    for (const line of rawLines.slice(0, 6)) {
-      // Strip Algerian phone number (0 + 9 digits) and everything after
-      const stripped = line.replace(/\s*0\d{8,9}.*$/, "").trim();
-      if (!stripped || stripped.length < 2) break;
-      if (!/^\d+[\.,]?\d*$/.test(stripped) && !/^\d{8,}$/.test(stripped) && !/^[\d\s\.,]+$/.test(stripped)) {
-        if (/[A-Za-z\u00C0-\u017E]{2,}/.test(stripped) || /[\u0600-\u06FF]{2,}/.test(stripped)) {
-          nameParts.push(stripped);
-          if (nameParts.join(" ").length >= 4) break;
-        } else {
-          break;
-        }
+    const after = text.slice(idx + code.length, idx + code.length + 500);
+
+    // 1. Strip type suffix at the very start (e.g. "-EXCH", "-EXC")
+    const afterClean = after.replace(/^[\s\-]*[A-Z]{2,8}(?=\d)/, "");
+
+    // 2. Find all Algerian phone positions
+    const phones: number[] = [];
+    PHONE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PHONE_RE.exec(afterClean)) !== null) phones.push(m.index);
+
+    let nameRaw = "";
+    if (phones.length === 0) {
+      nameRaw = afterClean.slice(0, 200);
+    } else {
+      const textBeforeFirst = afterClean.slice(0, phones[0]);
+      const hasLetters = /[A-Za-z\u00C0-\u017E]{2,}/.test(textBeforeFirst);
+      if (hasLetters) {
+        // Normal layout: name comes before the first phone
+        nameRaw = textBeforeFirst;
+      } else if (phones.length >= 2) {
+        // Reference/other phone is first; name is between first and second phone
+        nameRaw = afterClean.slice(phones[0] + 10, phones[1]);
       } else {
-        break;
+        // Only one phone and nothing before it; take text after the phone
+        nameRaw = afterClean.slice(phones[0] + 10, phones[0] + 210);
       }
     }
-    recipients.push(nameParts.join(" ").trim().slice(0, 100));
+
+    // 3. Parse: split by newline, strip leading digits, keep lines with letters
+    const parts = nameRaw
+      .split("\n")
+      .map(l => l.replace(/^\d+/, "").trim())
+      .filter(l => l.length >= 2 && /[A-Za-z\u00C0-\u017E]{2,}/.test(l));
+
+    recipients.push(parts.join(" ").trim().slice(0, 100));
   }
   return recipients.join("|");
 }
@@ -179,20 +204,83 @@ function extractReturnAmounts(text: string): number {
 }
 
 // ─── Sender extraction — delivery_receipt ─────────────────────────────────────
+// Pattern: "291300 DACP Station Oued Rhiou" — digits + DA + sender name (no space between DA and name).
+// m[1] captures the sender name (the part after DA).
 function extractDeliverySender(text: string): string {
-  const m = text.match(/\n\d+\s*DA([A-Za-z\u00C0-\u017E\u0600-\u06FF][^\n]{1,120})/);
+  const m = text.match(/\n\d[\d\s]*\s*DA([A-Za-z\u00C0-\u017E0-9][^\n]{1,120})/);
   if (m) return m[1].trim().slice(0, 255);
   return "";
 }
 
 // ─── Sender extraction — FDR (route_sheet) ───────────────────────────────────
+// FDR format per row: EC... \n sender_line1 \n [sender_line2...] \n sender_phone \n recipient...
+// Sender name can span 1-4 lines (e.g. "48.1 CP Wasseli\nStation\nRelizane (Oued\nRhiou)").
+// Increased {1,6}? from {1,3}? to handle 4-line station names.
 function extractFDRSenders(text: string): string[] {
   const senders = new Set<string>();
-  for (const m of text.matchAll(/EC[A-Z0-9]{10,22}\n((?:[^\n]+\n){1,3}?)\d{10}\n/g)) {
+  for (const m of text.matchAll(/EC[A-Z0-9]{4}\d{11}\n((?:[^\n]+\n){1,6}?)\d{10}\n/g)) {
     const raw = m[1].replace(/\n/g, " ").trim().replace(/^\d+$/, "");
     if (raw.length > 0 && raw.length < 120) senders.add(raw);
   }
   return [...senders];
+}
+
+// ─── Recipient extraction — FDR (route_sheet) ────────────────────────────────
+// FDR format: EC... \n senderName(1-4 lines) \n senderPhone \n recipientName[addressMarker,City] \n ...
+// After the sender phone the recipient name appears, followed by an address marker (Sd, SD, DM, etc.)
+// and a comma. We take text between sender phone and address marker, stripping the marker itself.
+function extractFDRRecipientNames(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const SENDER_PHONE_RE = /0[5-9]\d{8}/g;
+  // Common Ecotrack address-type markers that appear right after the recipient name
+  const ADDR_MARKER_RE = /(?:NOEST\s+express|BR\s+NOEST|SD?|sd|DM|dm|AD|ad|BR|br|Domicile|Centre|Noest|noest|centre)\s*,/;
+
+  const recipients: string[] = [];
+  for (const code of trackingNums) {
+    const idx = text.indexOf(code);
+    if (idx === -1) { recipients.push(""); continue; }
+
+    const after = text.slice(idx + code.length, idx + code.length + 600);
+
+    // Find sender phone (first Algerian mobile)
+    SENDER_PHONE_RE.lastIndex = 0;
+    const phoneMatch = SENDER_PHONE_RE.exec(after);
+    if (!phoneMatch) { recipients.push(""); continue; }
+
+    // Recipient area starts right after the sender's 10-digit phone
+    const recipientArea = after.slice(phoneMatch.index + 10).replace(/^\n/, "");
+
+    // Find address marker (separates name from address)
+    const addrMatch = ADDR_MARKER_RE.exec(recipientArea);
+    // Find next phone number (backup boundary)
+    const nextPhoneMatch = /0[5-9]\d{8}/.exec(recipientArea);
+
+    let nameRaw = "";
+    const addrIdx = addrMatch?.index ?? Infinity;
+    const phoneIdx = nextPhoneMatch?.index ?? Infinity;
+    const boundary = Math.min(addrIdx, phoneIdx, 200);
+
+    if (boundary === addrIdx && addrMatch) {
+      // Take everything before the address marker; strip trailing marker word
+      const beforeAddr = recipientArea.slice(0, addrMatch.index);
+      nameRaw = beforeAddr.replace(
+        /\s*(?:NOEST\s+express|BR\s+NOEST|SD?|sd|S\.d|DM|dm|AD|ad|BR|br|Domicile|Centre|Noest|noest|centre)\s*$/i,
+        ""
+      );
+    } else {
+      nameRaw = recipientArea.slice(0, boundary);
+    }
+
+    // Clean up multi-line names and filter out pure numeric lines
+    const parts = nameRaw
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l.length >= 1 && !/^\d+$/.test(l))
+      .slice(0, 3);
+
+    recipients.push(parts.join(" ").trim().slice(0, 100));
+  }
+  return recipients.join("|");
 }
 
 // ─── Sender extraction — returns_list ────────────────────────────────────────
@@ -325,10 +413,11 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
     const orderWilayasArr = extractPerOrderWilayas(text, trackingNums);
     const orderWilayasStr = orderWilayasArr.some(Boolean) ? orderWilayasArr.join("|") : null;
 
-    // Recipient names — use specialised extractor for returns_list
-    const recipientNamesStr = reportType === "returns_list"
-      ? extractReturnsRecipientNames(text, trackingNums)
-      : extractRecipientNames(text, trackingNums);
+    // Recipient names — use specialised extractors per report type
+    const recipientNamesStr =
+      reportType === "returns_list"  ? extractReturnsRecipientNames(text, trackingNums) :
+      reportType === "route_sheet"   ? extractFDRRecipientNames(text, trackingNums) :
+                                       extractRecipientNames(text, trackingNums);
 
     let totalAmount    = 0;
     let netAmount      = 0;
@@ -408,7 +497,16 @@ router.get("/office/reports", adminAuth, async (req, res) => {
 });
 
 // ─── Download PDF ─────────────────────────────────────────────────────────────
-router.get("/office/reports/:id/file", adminAuth, async (req, res) => {
+// Browser navigation (<a target="_blank">) cannot set Authorization headers, so we also
+// accept the token as a ?token= query parameter for this read-only file endpoint.
+router.get("/office/reports/:id/file", async (req, res, next) => {
+  const qToken = (req.query as Record<string, string>).token;
+  if (qToken) {
+    // Inject as Authorization header so the adminAuth middleware sees it
+    req.headers["authorization"] = `Bearer ${qToken}`;
+  }
+  next();
+}, adminAuth, async (req, res) => {
   const authReq = req as AuthedRequest;
   if (!["admin", "office"].includes(authReq.adminRole ?? "")) {
     res.status(403).json({ ok: false, error: "forbidden" }); return;

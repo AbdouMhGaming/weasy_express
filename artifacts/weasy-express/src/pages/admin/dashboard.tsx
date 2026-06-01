@@ -988,7 +988,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
                           <a
-                            href={`${API_BASE}/api/office/reports/${r.id}/file`}
+                            href={`${API_BASE}/api/office/reports/${r.id}/file?token=${encodeURIComponent(localStorage.getItem("admin_token") ?? "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
