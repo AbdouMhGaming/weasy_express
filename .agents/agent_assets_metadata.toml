@@ -30,3 +30,9 @@ id = "K0bsk_BgxECcOWW3McGwu"
 uri = "file://weasy-express-hostinger.tar.gz"
 type = "unspecified"
 title = "Weasy Express — Hostinger Build"
+
+[[outputs]]
+id = "zJ62BVv9XDAgBKUUEvbGk"
+uri = "file://weasy-express-hostinger.zip"
+type = "unspecified"
+title = "weasy-express-hostinger.zip — Hostinger Node.js build (6.8 MB)"
