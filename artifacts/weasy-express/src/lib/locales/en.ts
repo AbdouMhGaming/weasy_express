@@ -493,9 +493,15 @@ const en: Translations = {
         cols: {
           tracking: "Tracking #",
           sender: "Sender",
+          recipient: "Recipient",
+          origin: "Origin",
           destination: "Destination",
           status: "Status",
           date: "Date",
+        },
+        filter: {
+          all: "All",
+          search: "Search (tracking, sender, destination…)",
         },
       },
     },

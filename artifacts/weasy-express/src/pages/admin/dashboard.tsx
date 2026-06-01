@@ -239,10 +239,10 @@ function getDateRangeFromPreset(preset: TimePreset, customFrom: string, customTo
 
 function buildMapSvg(stats: DashboardStats | null): string {
   const byWilaya = stats?.byWilaya ?? [];
-  const maxCount = Math.max(...byWilaya.map((w) => w.delivered), 1);
+  const maxCount = Math.max(...byWilaya.map((w) => w.total), 1);
   const styleRules = byWilaya
-    .filter((w) => w.delivered > 0)
-    .map((w) => `#${w.code}{fill:${wilayaHeatColor(w.delivered, maxCount)}!important}`)
+    .filter((w) => w.total > 0)
+    .map((w) => `#${w.code}{fill:${wilayaHeatColor(w.total, maxCount)}!important}`)
     .join(" ");
   const base = AlgeriaMapSvg
     .replace(/fill="[^"]*"/g, 'fill="#e2e8f0"')
@@ -291,6 +291,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
   const [topStats, setTopStats] = useState<TopStats | null>(null);
+  const [searchOrders, setSearchOrders] = useState("");
 
   const fetchTopStats = useCallback(async () => {
     try {
@@ -420,10 +421,21 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
   const filteredOrders = useMemo(() => {
     if (!stats) return [];
-    return statusFilter === "all"
+    let orders = statusFilter === "all"
       ? stats.recentOrders
       : stats.recentOrders.filter((o) => o.status === statusFilter);
-  }, [stats, statusFilter]);
+    if (searchOrders.trim()) {
+      const q = searchOrders.trim().toLowerCase();
+      orders = orders.filter((o) =>
+        o.trackingNumber?.toLowerCase().includes(q) ||
+        o.senderName?.toLowerCase().includes(q) ||
+        o.recipientName?.toLowerCase().includes(q) ||
+        o.destinationWilaya?.toLowerCase().includes(q) ||
+        o.originWilaya?.toLowerCase().includes(q)
+      );
+    }
+    return orders;
+  }, [stats, statusFilter, searchOrders]);
 
   const kpiCards = stats ? [
     { label: t("admin.dashboard.kpi.total"), value: stats.total, color: "from-slate-600 to-slate-700", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
@@ -598,7 +610,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   }`}
                 >
-                  {s === "all" ? "Tous" : t(`admin.dashboard.orders.status.${s}`)}
+                  {s === "all" ? t("admin.dashboard.orders.filter.all") : t(`admin.dashboard.orders.status.${s}`)}
                   {s !== "all" && stats && (
                     <span className="ml-1.5 opacity-70">
                       {s === "in_transit" ? stats.in_transit
@@ -613,6 +625,25 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
               ))}
             </div>
 
+            {/* Search bar */}
+            <div className="px-5 py-2.5 border-b border-gray-50">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchOrders}
+                  onChange={(e) => setSearchOrders(e.target.value)}
+                  placeholder={t("admin.dashboard.orders.filter.search")}
+                  className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-gray-50/60"
+                />
+                {searchOrders && (
+                  <button onClick={() => setSearchOrders("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-sm leading-none">×</button>
+                )}
+              </div>
+            </div>
+
             {loading ? (
               <div className="flex items-center justify-center py-20 text-gray-400 text-sm gap-2">
                 <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -620,14 +651,14 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             ) : filteredOrders.length === 0 ? (
               <div className="py-20 text-center text-gray-400 text-sm">{t("admin.dashboard.orders.noData")}</div>
             ) : (
-              <div className="overflow-x-auto flex-1">
+              <div className="overflow-x-auto overflow-y-auto max-h-[460px]">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="border-b border-gray-100 bg-gray-50/80 backdrop-blur-sm">
                       <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">{t("admin.dashboard.orders.cols.tracking")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden sm:table-cell">{t("admin.dashboard.orders.cols.sender")}</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden xl:table-cell">Destinataire</th>
-                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">Origine</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden xl:table-cell">{t("admin.dashboard.orders.cols.recipient")}</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">{t("admin.dashboard.orders.cols.origin")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden md:table-cell">{t("admin.dashboard.orders.cols.destination")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3">{t("admin.dashboard.orders.cols.status")}</th>
                       <th className="text-left text-xs font-semibold text-gray-500 px-3 py-3 hidden lg:table-cell">{t("admin.dashboard.orders.cols.date")}</th>
@@ -735,21 +766,21 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
               </div>
 
               {/* Top wilayas */}
-              {stats && stats.byWilaya.filter((w) => w.delivered > 0).length > 0 && (
+              {stats && stats.byWilaya.filter((w) => w.total > 0).length > 0 && (
                 <div className="w-full mt-4 space-y-1.5">
                   <p className="text-xs text-white/40 font-semibold uppercase tracking-widest px-1 mb-2">Top wilayas</p>
-                  {stats.byWilaya.filter((w) => w.delivered > 0).slice(0, 5).map((w) => {
-                    const maxD = stats.byWilaya[0]?.delivered ?? 1;
+                  {stats.byWilaya.filter((w) => w.total > 0).slice(0, 5).map((w) => {
+                    const maxT = stats.byWilaya.filter((x) => x.total > 0)[0]?.total ?? 1;
                     return (
                       <div key={w.code} className="flex items-center gap-2">
                         <span className="text-xs text-white/60 w-28 truncate shrink-0">{w.name || w.code}</span>
                         <div className="flex-1 bg-white/10 rounded-full h-1.5">
                           <div
                             className="h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.round((w.delivered / maxD) * 100)}%`, backgroundColor: wilayaHeatColor(w.delivered, maxD) }}
+                            style={{ width: `${Math.round((w.total / maxT) * 100)}%`, backgroundColor: wilayaHeatColor(w.total, maxT) }}
                           />
                         </div>
-                        <span className="text-xs text-white/60 w-6 text-right shrink-0">{w.delivered}</span>
+                        <span className="text-xs text-white/60 w-6 text-right shrink-0">{w.total}</span>
                       </div>
                     );
                   })}

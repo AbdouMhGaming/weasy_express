@@ -55,7 +55,42 @@ function extractDate(text: string): string {
 // ─── Tracking numbers ─────────────────────────────────────────────────────────
 
 function extractTrackingNumbers(text: string): string[] {
-  return [...new Set(text.match(/EC[A-Z0-9]{10,22}/g) ?? [])];
+  const raw = text.match(/EC[A-Z0-9]{10,18}/g) ?? [];
+  // Keep only standard Ecotrack format: EC + 2-6 uppercase letters + 9-13 digits
+  // This filters out tracking numbers that had a reference number appended (e.g. "ECKOSX250908364946112")
+  const valid = raw.filter((n) => /^EC[A-Z]{2,6}[0-9]{9,13}$/.test(n));
+  return [...new Set(valid.length > 0 ? valid : raw)];
+}
+
+// ─── Recipient extraction (one entry per tracking code) ───────────────────────
+// For delivery_receipt and returns_list PDFs, the first name-like line after
+// each tracking code is the recipient (Destinataire).
+// Returns pipe-separated names aligned with the tracking_numbers list.
+function extractRecipientNames(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const recipients: string[] = [];
+  for (const code of trackingNums) {
+    const idx = text.indexOf(code);
+    if (idx === -1) { recipients.push(""); continue; }
+    const after = text.slice(idx + code.length, idx + code.length + 400);
+    const lines = after.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+    let found = "";
+    for (const line of lines.slice(0, 5)) {
+      if (
+        line.length >= 3 &&
+        line.length <= 80 &&
+        /[A-Za-z\u00C0-\u017E]{2,}/.test(line) &&
+        !/^\d+[\.,]?\d*$/.test(line) &&
+        !/^\d{8,}$/.test(line) &&
+        !/^[\d\s\.,]+$/.test(line)
+      ) {
+        found = line.slice(0, 100);
+        break;
+      }
+    }
+    recipients.push(found);
+  }
+  return recipients.join("|");
 }
 
 // ─── Parcel count ─────────────────────────────────────────────────────────────
@@ -302,6 +337,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
     const wilayaCounts  = extractWilayaCounts(text);
     const totalParcels  = extractParcels(text, reportType, trackingNums.length);
     const station       = extractStation(text);
+    const recipientNamesStr = extractRecipientNames(text, trackingNums);
 
     let totalAmount = 0;
     let netAmount   = 0;
@@ -336,8 +372,8 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
         `INSERT INTO office_reports
            (report_type, file_name, report_date, total_parcels,
             total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
-            station, sender_name, tracking_numbers, wilayas, uploaded_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            station, sender_name, tracking_numbers, recipient_names, wilayas, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           reportType,
           file.originalname.slice(0, 255),
@@ -349,6 +385,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
           station,
           senderName,
           trackingNums.join(","),
+          recipientNamesStr || null,
           wilayasStr,
           authReq.adminUsername ?? "",
         ],

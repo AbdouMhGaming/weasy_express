@@ -321,18 +321,23 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         .from(ordersTable).where(and(...byWilayaConds))
         .groupBy(ordersTable.destinationWilayaCode, ordersTable.destinationWilaya)
         .orderBy(desc(count())),
-      db.select().from(ordersTable).where(where).orderBy(desc(ordersTable.createdAt)).limit(50),
-      // ── Fetch office PDF reports ─────────────────────────────────────────
+      db.select().from(ordersTable).where(where).orderBy(desc(ordersTable.createdAt)).limit(500),
+      // ── Fetch office PDF reports (with optional date filter) ──────────────
       pool.getConnection().then(async (conn: any) => {
         try {
+          const sqlParams: string[] = [];
+          let whereSql = "WHERE 1=1";
+          if (fromStr) { whereSql += " AND report_date >= ?"; sqlParams.push(fromStr.slice(0, 10)); }
+          if (toStr)   { whereSql += " AND report_date <= ?"; sqlParams.push(toStr.slice(0, 10)); }
           const [rows] = await conn.execute(
-            "SELECT id, report_type, report_date, sender_name, station, tracking_numbers, wilayas, created_at FROM office_reports ORDER BY created_at DESC LIMIT 200",
+            `SELECT id, report_type, report_date, sender_name, station, tracking_numbers, recipient_names, wilayas, total_parcels, created_at FROM office_reports ${whereSql} ORDER BY created_at DESC LIMIT 500`,
+            sqlParams,
           );
           return rows as Array<{
             id: number; report_type: string; report_date: string;
             sender_name: string | null; station: string | null;
-            tracking_numbers: string | null; wilayas: string | null;
-            created_at: Date;
+            tracking_numbers: string | null; recipient_names: string | null;
+            wilayas: string | null; total_parcels: number; created_at: Date;
           }>;
         } finally { conn.release(); }
       }),
@@ -373,22 +378,39 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
 
     const byWilaya = Object.values(wilayaMap).sort((a, b) => b.total - a.total);
 
+    // ── Aggregate PDF parcel counts into total/status summary ─────────────────
+    for (const rpt of officeReportRows) {
+      const st = pdfStatus(rpt.report_type);
+      const cnt = rpt.total_parcels > 0
+        ? rpt.total_parcels
+        : (rpt.tracking_numbers?.split(",").filter(Boolean).length ?? 0);
+      sm[st] = (sm[st] ?? 0) + cnt;
+      total += cnt;
+    }
+
     // ── Build virtual orders from PDF tracking numbers ────────────────────────
     const pdfOrders: Array<Record<string, unknown>> = [];
     for (const rpt of officeReportRows) {
       if (!rpt.tracking_numbers) continue;
       const nums = rpt.tracking_numbers.split(",").map((s: string) => s.trim()).filter(Boolean);
+      const recipients = rpt.recipient_names ? rpt.recipient_names.split("|") : [];
       const status = pdfStatus(rpt.report_type);
 
-      // Determine primary destination wilaya from first entry in wilayas field
+      // Determine per-wilaya destination map for this report
+      const wilayaEntries = rpt.wilayas ? parseWilayaStr(rpt.wilayas) : [];
+
+      // If a wilaya filter is set, skip this report if none of its wilayas match
+      if (wilayaStr) {
+        const hasMatch = wilayaEntries.some((e) => WILAYA_CODE_BY_NAME[e.name] === wilayaStr);
+        if (!hasMatch) continue;
+      }
+
+      // Primary destination wilaya = first entry in wilayas field
       let destWilayaName: string | null = null;
       let destWilayaCode: string | null = null;
-      if (rpt.wilayas) {
-        const firstEntry = parseWilayaStr(rpt.wilayas)[0];
-        if (firstEntry) {
-          destWilayaName = firstEntry.name;
-          destWilayaCode = WILAYA_CODE_BY_NAME[firstEntry.name] ?? null;
-        }
+      if (wilayaEntries.length > 0) {
+        destWilayaName = wilayaEntries[0].name;
+        destWilayaCode = WILAYA_CODE_BY_NAME[wilayaEntries[0].name] ?? null;
       }
 
       for (let idx = 0; idx < nums.length; idx++) {
@@ -397,7 +419,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           trackingNumber: nums[idx],
           status,
           senderName: rpt.sender_name ?? null,
-          recipientName: null,
+          recipientName: (recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null,
           destinationWilayaCode: destWilayaCode,
           destinationWilaya: destWilayaName,
           originWilayaCode: null,
@@ -410,7 +432,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
       }
     }
 
-    // Merge manual orders + PDF virtual orders, sort newest first, limit to 30
+    // Merge manual orders + PDF virtual orders, sort newest first (no hard cap)
     const allOrders = [
       ...recentOrdersRows.map((o: Record<string, unknown>) => ({ ...o, source: "manual" })),
       ...pdfOrders,
@@ -418,14 +440,7 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
       const da = new Date(String((a as Record<string, unknown>).createdAt)).getTime();
       const db2 = new Date(String((b as Record<string, unknown>).createdAt)).getTime();
       return db2 - da;
-    }).slice(0, 30);
-
-    // ── Aggregate PDF parcel counts into total/status summary ─────────────────
-    for (const rpt of officeReportRows) {
-      const st = pdfStatus(rpt.report_type);
-      // count parcels from tracking_numbers if available, else 0 (we already count by tracking)
-      // We do NOT add to total here — PDF parcels are already counted via the virtual orders list
-    }
+    });
 
     const delivered = sm["delivered"] ?? 0;
     res.json({
@@ -521,13 +536,13 @@ router.delete("/admin/orders/:id", adminAuth, async (req, res) => {
 // ── Top Stats ──────────────────────────────────────────────────────────────────
 router.get("/admin/top-stats", adminAuth, async (req, res) => {
   try {
-    const [topSenders, topWilayas, officeAgents, marketers] = await Promise.all([
+    const [manualSenders, topWilayas, officeAgents, marketers, pdfSendersRaw] = await Promise.all([
       db.select({
         name: ordersTable.senderName,
         count: count(),
         delivered: sql<number>`SUM(CASE WHEN ${ordersTable.status} = 'delivered' THEN 1 ELSE 0 END)`,
       }).from(ordersTable).where(isNotNull(ordersTable.senderName))
-        .groupBy(ordersTable.senderName).orderBy(desc(count())).limit(5),
+        .groupBy(ordersTable.senderName).orderBy(desc(count())).limit(50),
 
       db.select({ name: ordersTable.destinationWilaya, count: count() })
         .from(ordersTable).where(isNotNull(ordersTable.destinationWilaya))
@@ -540,7 +555,44 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       db.select({ name: adminsTable.username, createdAt: adminsTable.createdAt })
         .from(adminsTable).where(eq(adminsTable.role, "commercial"))
         .orderBy(desc(adminsTable.createdAt)).limit(10),
+
+      // Also get senders from PDF office_reports
+      pool.getConnection().then(async (conn: any) => {
+        try {
+          const [rows] = await conn.execute(
+            `SELECT sender_name AS name,
+               SUM(total_parcels) AS cnt,
+               SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels ELSE 0 END) AS del
+             FROM office_reports
+             WHERE sender_name IS NOT NULL AND sender_name != ''
+             GROUP BY sender_name
+             ORDER BY cnt DESC
+             LIMIT 50`
+          );
+          return rows as Array<{ name: string; cnt: number | string; del: number | string }>;
+        } finally { conn.release(); }
+      }),
     ]);
+
+    // Merge manual + PDF senders; key = sender name
+    const senderMap: Record<string, { name: string; count: number; delivered: number }> = {};
+    for (const s of manualSenders) {
+      if (!s.name) continue;
+      senderMap[s.name] = { name: s.name, count: Number(s.count), delivered: Number(s.delivered) };
+    }
+    for (const s of pdfSendersRaw) {
+      if (!s.name) continue;
+      if (senderMap[s.name]) {
+        senderMap[s.name].count    += Number(s.cnt);
+        senderMap[s.name].delivered += Number(s.del);
+      } else {
+        senderMap[s.name] = { name: s.name, count: Number(s.cnt), delivered: Number(s.del) };
+      }
+    }
+    const topSenders = Object.values(senderMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
     res.json({ ok: true, topSenders, topWilayas, officeAgents, marketers });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch top stats");

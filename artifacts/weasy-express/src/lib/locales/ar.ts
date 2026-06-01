@@ -493,9 +493,15 @@ const ar: Translations = {
         cols: {
           tracking: "رقم التتبع",
           sender: "المُرسِل",
+          recipient: "المُستلِم",
+          origin: "المصدر",
           destination: "الوجهة",
           status: "الحالة",
           date: "التاريخ",
+        },
+        filter: {
+          all: "الكل",
+          search: "بحث (تتبع، مُرسِل، وجهة…)",
         },
       },
     },

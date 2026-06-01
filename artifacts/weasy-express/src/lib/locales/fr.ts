@@ -491,9 +491,15 @@ const fr = {
         cols: {
           tracking: "N° Suivi",
           sender: "Expéditeur",
+          recipient: "Destinataire",
+          origin: "Origine",
           destination: "Destination",
           status: "Statut",
           date: "Date",
+        },
+        filter: {
+          all: "Tous",
+          search: "Rechercher (suivi, expéditeur, destination…)",
         },
       },
     },
