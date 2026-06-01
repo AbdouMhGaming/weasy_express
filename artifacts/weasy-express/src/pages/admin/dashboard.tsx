@@ -286,9 +286,11 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [filterWilaya, setFilterWilaya] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [filterOffice, setFilterOffice] = useState("");
   const [formWilaya, setFormWilaya] = useState("");
   const [formFrom, setFormFrom] = useState("");
   const [formTo, setFormTo] = useState("");
+  const [formOffice, setFormOffice] = useState("");
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
   const [topStats, setTopStats] = useState<TopStats | null>(null);
@@ -306,12 +308,15 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
   const fetchTopStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/top-stats`, { headers: adminHeaders() });
+      const params = new URLSearchParams();
+      if (filterOffice) params.set("office", filterOffice);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/api/admin/top-stats${qs ? `?${qs}` : ""}`, { headers: adminHeaders() });
       if (res.status !== 200) return;
       const data = await res.json();
       if (data.ok) setTopStats(data);
     } catch { }
-  }, []);
+  }, [filterOffice]);
 
   const fetchOfficeReports = useCallback(async () => {
     setReportsLoading(true);
@@ -335,13 +340,14 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
       if (range.from) params.set("from", range.from);
       if (range.to) params.set("to", range.to);
       if (filterWilaya) params.set("wilaya", filterWilaya);
+      if (filterOffice) params.set("office", filterOffice);
       const qs = params.toString();
       const res = await fetch(`${API_BASE}/api/admin/stats${qs ? `?${qs}` : ""}`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean; stats: DashboardStats };
       if (data.ok) setStats(data.stats);
     } catch { } finally { setLoading(false); }
-  }, [onUnauth, timePreset, filterWilaya, filterFrom, filterTo]);
+  }, [onUnauth, timePreset, filterWilaya, filterFrom, filterTo, filterOffice]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -427,18 +433,19 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
   function applyAdvancedFilter() {
     setFilterFrom(formFrom); setFilterTo(formTo); setFilterWilaya(formWilaya);
+    setFilterOffice(formOffice);
     setTimePreset("custom");
     setShowAdvancedFilter(false);
   }
 
   function resetFilters() {
     setTimePreset("all");
-    setFilterFrom(""); setFilterTo(""); setFilterWilaya("");
-    setFormFrom(""); setFormTo(""); setFormWilaya("");
+    setFilterFrom(""); setFilterTo(""); setFilterWilaya(""); setFilterOffice("");
+    setFormFrom(""); setFormTo(""); setFormWilaya(""); setFormOffice("");
     setShowAdvancedFilter(false);
   }
 
-  const hasActiveFilter = timePreset !== "all" || filterWilaya !== "";
+  const hasActiveFilter = timePreset !== "all" || filterWilaya !== "" || filterOffice !== "";
 
   const filteredOrders = useMemo(() => {
     if (!stats) return [];
@@ -513,7 +520,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
           </div>
 
           {showAdvancedFilter && (
-            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-5 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1.5">Du</label>
                 <input
@@ -540,6 +547,19 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                   <option value="">Toutes les wilayas</option>
                   {WILAYA_LIST.map((w) => (
                     <option key={w.code} value={w.code}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Agence</label>
+                <select
+                  value={formOffice}
+                  onChange={(e) => setFormOffice(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white"
+                >
+                  <option value="">Toutes les agences</option>
+                  {(topStats?.officeAgents ?? []).map((a: { name: string }) => (
+                    <option key={a.name} value={a.name}>{a.name}</option>
                   ))}
                 </select>
               </div>
@@ -573,6 +593,12 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 <span className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-[#E10600] font-semibold px-2.5 py-1 rounded-full">
                   {WILAYA_LIST.find((w) => w.code === filterWilaya)?.name ?? filterWilaya}
                   <button onClick={() => { setFilterWilaya(""); setFormWilaya(""); }} className="ml-0.5 hover:text-red-800">×</button>
+                </span>
+              )}
+              {filterOffice && (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-[#E10600] font-semibold px-2.5 py-1 rounded-full">
+                  Agence : {filterOffice}
+                  <button onClick={() => { setFilterOffice(""); setFormOffice(""); }} className="ml-0.5 hover:text-red-800">×</button>
                 </span>
               )}
             </div>

@@ -46,6 +46,14 @@ function extractTrackingNumbers(text: string): string[] {
   return result;
 }
 
+// ─── Helper: get extraction window bounded by next tracking number ────────────
+function getBoundedWindow(text: string, fromIdx: number, maxLen = 500): string {
+  const slice = text.slice(fromIdx, fromIdx + maxLen + 30);
+  const nextMatch = slice.match(/EC[A-Z0-9]{4}\d{11}/);
+  const end = nextMatch && nextMatch.index! > 0 ? Math.min(nextMatch.index!, maxLen) : maxLen;
+  return slice.slice(0, end);
+}
+
 // ─── Recipient extraction — delivery_receipt ──────────────────────────────────
 // The pdf-parse output concatenates table columns without separators, causing:
 //   - Reference numbers (2-3 digits) or type suffixes (-EXCH) to appear right after tracking
@@ -66,7 +74,7 @@ function extractRecipientNames(text: string, trackingNums: string[]): string {
     const idx = text.indexOf(code);
     if (idx === -1) { recipients.push(""); continue; }
 
-    const after = text.slice(idx + code.length, idx + code.length + 500);
+    const after = getBoundedWindow(text, idx + code.length, 500);
 
     // 1. Strip type suffix at the very start (e.g. "-EXCH", "-EXC")
     const afterClean = after.replace(/^[\s\-]*[A-Z]{2,8}(?=\d)/, "");
@@ -116,7 +124,7 @@ function extractReturnsRecipientNames(text: string, trackingNums: string[]): str
   for (const code of trackingNums) {
     const idx = text.indexOf(code);
     if (idx === -1) { recipients.push(""); continue; }
-    const after = text.slice(idx + code.length, idx + code.length + 500);
+    const after = getBoundedWindow(text, idx + code.length, 500);
 
     // Single-line: Arabic text immediately before a 10-digit phone number
     const arabicBeforePhone = after.match(/([\u0600-\u06FF][\u0600-\u06FF\s]{1,50}?)(?=\s*\d{10})/);
@@ -240,12 +248,13 @@ function extractFDRRecipientNames(text: string, trackingNums: string[]): string 
     const idx = text.indexOf(code);
     if (idx === -1) { recipients.push(""); continue; }
 
-    const after = text.slice(idx + code.length, idx + code.length + 600);
+    const after = getBoundedWindow(text, idx + code.length, 600);
 
     // Find sender phone (first Algerian mobile)
     SENDER_PHONE_RE.lastIndex = 0;
     const phoneMatch = SENDER_PHONE_RE.exec(after);
     if (!phoneMatch) { recipients.push(""); continue; }
+
 
     // Recipient area starts right after the sender's 10-digit phone
     const recipientArea = after.slice(phoneMatch.index + 10).replace(/^\n/, "");
@@ -443,6 +452,17 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
 
     const conn = await pool.getConnection();
     try {
+      // ── Duplicate PDF check ───────────────────────────────────────────────
+      const [existing] = await conn.execute(
+        "SELECT id FROM office_reports WHERE file_name = ? AND uploaded_by = ? LIMIT 1",
+        [file.originalname.slice(0, 255), authReq.adminUsername ?? ""],
+      ) as [Array<{ id: number }>, unknown];
+      if ((existing as Array<{ id: number }>).length > 0) {
+        conn.release();
+        res.status(409).json({ ok: false, error: "duplicate_file", detail: "Ce fichier PDF a déjà été importé." });
+        return;
+      }
+
       await conn.execute(
         `INSERT INTO office_reports
            (report_type, file_name, report_date, total_parcels,
@@ -474,19 +494,25 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
 // ─── List reports ─────────────────────────────────────────────────────────────
 router.get("/office/reports", adminAuth, async (req, res) => {
   const authReq = req as AuthedRequest;
-  if (!["admin", "office"].includes(authReq.adminRole ?? "")) {
+  const role = authReq.adminRole ?? "";
+  if (!["admin", "office"].includes(role)) {
     res.status(403).json({ ok: false, error: "forbidden" }); return;
   }
   try {
     const conn = await pool.getConnection();
     try {
       // Exclude file_data (binary) from list — use /file endpoint to download
+      // Office agents only see their own uploads; admins see all
+      const isOffice = role === "office";
+      const params: unknown[] = isOffice ? [authReq.adminUsername ?? ""] : [];
+      const whereClause = isOffice ? "WHERE uploaded_by = ?" : "";
       const [rows] = await conn.execute(
         `SELECT id, report_type, file_name, report_date, total_parcels,
                 total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
                 station, sender_name, tracking_numbers, recipient_names,
                 wilayas, order_wilayas, uploaded_by, created_at
-         FROM office_reports ORDER BY created_at DESC LIMIT 100`,
+         FROM office_reports ${whereClause} ORDER BY created_at DESC LIMIT 200`,
+        params,
       );
       res.json({ ok: true, reports: rows });
     } finally { conn.release(); }
@@ -536,12 +562,18 @@ router.get("/office/reports/:id/file", async (req, res, next) => {
 // ─── Stats ────────────────────────────────────────────────────────────────────
 router.get("/office/reports/stats", adminAuth, async (req, res) => {
   const authReq = req as AuthedRequest;
-  if (!["admin", "office"].includes(authReq.adminRole ?? "")) {
+  const role = authReq.adminRole ?? "";
+  if (!["admin", "office"].includes(role)) {
     res.status(403).json({ ok: false, error: "forbidden" }); return;
   }
   try {
     const conn = await pool.getConnection();
     try {
+      // Office agents only see their own data; admins see all
+      const isOffice = role === "office";
+      const ownerWhere = isOffice ? "WHERE uploaded_by = ?" : "WHERE 1=1";
+      const ownerParams: unknown[] = isOffice ? [authReq.adminUsername ?? ""] : [];
+
       const [summary] = await conn.execute(`
         SELECT
           COUNT(*)                                                                             AS total_reports,
@@ -552,22 +584,24 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
           SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_amount_dzd   ELSE 0 END) AS total_cod_dzd,
           SUM(CASE WHEN report_type = 'delivery_receipt' THEN frais_livraison_dzd ELSE 0 END) AS total_frais_dzd,
           SUM(CASE WHEN report_type = 'route_sheet'      THEN total_amount_dzd   ELSE 0 END) AS total_dispatched_dzd
-        FROM office_reports
-      `);
+        FROM office_reports ${ownerWhere}
+      `, ownerParams);
 
       const [senders] = await conn.execute(`
         SELECT sender_name, COUNT(*) AS report_count, SUM(total_parcels) AS total_parcels, SUM(net_amount_dzd) AS net_dzd
         FROM office_reports
         WHERE report_type = 'delivery_receipt' AND sender_name IS NOT NULL AND sender_name != ''
+          ${isOffice ? "AND uploaded_by = ?" : ""}
         GROUP BY sender_name ORDER BY total_parcels DESC LIMIT 8
-      `);
+      `, ownerParams);
 
       const [recent] = await conn.execute(
         `SELECT id, report_type, file_name, report_date, total_parcels,
                 total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
                 station, sender_name, tracking_numbers, recipient_names,
                 wilayas, order_wilayas, uploaded_by, created_at
-         FROM office_reports ORDER BY created_at DESC LIMIT 10`,
+         FROM office_reports ${ownerWhere} ORDER BY created_at DESC LIMIT 10`,
+        ownerParams,
       );
 
       const s = (summary as Array<Record<string, unknown>>)[0] ?? {};

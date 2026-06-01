@@ -302,12 +302,13 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
     <div className={`${h} ${w} bg-gray-100 rounded animate-pulse`} />
   );
 
-  const TABS: { key: OfficeTab; label: string; icon: string; count?: number }[] = [
-    { key: "dashboard",  label: "Tableau de bord",     icon: "📊" },
-    { key: "routes",     label: "Feuille de route (POD)", icon: "🗺️", count: routes.length },
-    { key: "returns",    label: "Retours",              icon: "↩️", count: returns_.length },
-    { key: "discharges", label: "Décharges",            icon: "✅", count: deliveries.length },
+  const ALL_TABS: { key: OfficeTab; label: string; icon: string; count?: number; adminOnly?: boolean }[] = [
+    { key: "dashboard",  label: "Tableau de bord",        icon: "📊" },
+    { key: "routes",     label: "Feuille de route (POD)", icon: "🗺️", count: routes.length,     adminOnly: true },
+    { key: "returns",    label: "Retours",                icon: "↩️", count: returns_.length,   adminOnly: true },
+    { key: "discharges", label: "Décharges",              icon: "✅", count: deliveries.length, adminOnly: true },
   ];
+  const TABS = ALL_TABS.filter(t => !t.adminOnly || isAdmin);
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
