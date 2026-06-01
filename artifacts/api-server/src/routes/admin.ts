@@ -630,11 +630,11 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
              GROUP BY sender_name`,
             officeParam,
           );
-          // route_sheet: sender_name is pipe-separated (multiple merchants).
-          // Fetch individual rows (no GROUP BY) so senders in different route sheets
-          // accumulate different totals when they appear in different subsets.
+          // route_sheet: per_order_senders is a pipe-separated list aligned with tracking numbers
+          // (one entry per parcel), giving the exact order count per sender.
+          // sender_name is only the deduplicated unique-senders string — do NOT use it for counts.
           const [rsRows] = await conn.execute(
-            `SELECT sender_name, total_parcels
+            `SELECT sender_name, total_parcels, per_order_senders
              FROM office_reports
              WHERE report_type = 'route_sheet'
                AND sender_name IS NOT NULL AND sender_name != ''
@@ -661,7 +661,7 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
           );
           return {
             drRows: drRows as Array<{ sender_name: string; cnt: string|number; del: string|number; all_recipients: string|null; all_wilayas: string|null }>,
-            rsRows: rsRows as Array<{ sender_name: string; total_parcels: string|number }>,
+            rsRows: rsRows as Array<{ sender_name: string; total_parcels: string|number; per_order_senders: string|null }>,
             retRows: retRows as Array<{ sender_name: string; cnt: string|number }>,
             allWilayas: ((wilayaRows as Array<{all_wilayas:string|null}>)[0]?.all_wilayas ?? ""),
           };
@@ -687,19 +687,36 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
         senderMap[name] = { name, count: Number(s.cnt), delivered: Number(s.del) };
       }
     }
-    // route_sheet PDF rows — pipe-separated senders, each row is one individual report.
-    // Give each sender full credit for the route sheet they appear in (not divided equally)
-    // so that senders appearing in more/larger route sheets rank higher.
+    // route_sheet PDF rows — use per_order_senders (one entry per parcel, pipe-separated)
+    // to get the true per-sender parcel count. sender_name is only the deduplicated list
+    // and must NOT be used for counting (every unique sender would get the full total).
     for (const s of pdfRaw.rsRows) {
-      const parts = s.sender_name.split("|").map((p: string) => p.trim()).filter(Boolean);
-      if (parts.length === 0) continue;
-      const parcels = Number(s.total_parcels) || 1;
-      for (const name of parts) {
-        if (!name) continue;
-        if (senderMap[name]) {
-          senderMap[name].count += parcels;
-        } else {
-          senderMap[name] = { name, count: parcels, delivered: 0 };
+      if (s.per_order_senders) {
+        // Count each sender's actual parcels from the per-order aligned list
+        const perOrder = s.per_order_senders.split("|").map((p: string) => p.trim()).filter(Boolean);
+        const perSenderCount: Record<string, number> = {};
+        for (const name of perOrder) {
+          perSenderCount[name] = (perSenderCount[name] ?? 0) + 1;
+        }
+        for (const [name, cnt] of Object.entries(perSenderCount)) {
+          if (senderMap[name]) {
+            senderMap[name].count += cnt;
+          } else {
+            senderMap[name] = { name, count: cnt, delivered: 0 };
+          }
+        }
+      } else {
+        // Fallback for older reports without per_order_senders: divide equally across unique senders
+        const parts = s.sender_name.split("|").map((p: string) => p.trim()).filter(Boolean);
+        if (parts.length === 0) continue;
+        const each = Math.round((Number(s.total_parcels) || 1) / parts.length);
+        for (const name of parts) {
+          if (!name) continue;
+          if (senderMap[name]) {
+            senderMap[name].count += each;
+          } else {
+            senderMap[name] = { name, count: each, delivered: 0 };
+          }
         }
       }
     }
