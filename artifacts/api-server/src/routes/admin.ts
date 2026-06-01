@@ -413,6 +413,10 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         destWilayaCode = WILAYA_CODE_BY_NAME[wilayaEntries[0].name] ?? null;
       }
 
+      const createdAt = rpt.report_date
+        ? new Date(rpt.report_date + "T00:00:00").toISOString()
+        : (rpt.created_at instanceof Date ? rpt.created_at.toISOString() : String(rpt.created_at));
+
       for (let idx = 0; idx < nums.length; idx++) {
         pdfOrders.push({
           id: -(rpt.id * 10000 + idx),
@@ -424,9 +428,26 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
           destinationWilaya: destWilayaName,
           originWilayaCode: null,
           originWilaya: rpt.station ?? null,
-          createdAt: rpt.report_date
-            ? new Date(rpt.report_date + "T00:00:00").toISOString()
-            : (rpt.created_at instanceof Date ? rpt.created_at.toISOString() : String(rpt.created_at)),
+          createdAt,
+          source: "pdf",
+        });
+      }
+
+      // If total_parcels > tracking numbers found, add placeholder rows for the missing parcels
+      // so all parcels appear in the orders table, not just those with extracted tracking codes.
+      const totalParcels = rpt.total_parcels > 0 ? rpt.total_parcels : nums.length;
+      for (let idx = nums.length; idx < totalParcels; idx++) {
+        pdfOrders.push({
+          id: -(rpt.id * 10000 + idx),
+          trackingNumber: null,
+          status,
+          senderName: rpt.sender_name ?? null,
+          recipientName: (recipients[idx] && recipients[idx].trim()) ? recipients[idx].trim() : null,
+          destinationWilayaCode: destWilayaCode,
+          destinationWilaya: destWilayaName,
+          originWilayaCode: null,
+          originWilaya: rpt.station ?? null,
+          createdAt,
           source: "pdf",
         });
       }
@@ -536,7 +557,7 @@ router.delete("/admin/orders/:id", adminAuth, async (req, res) => {
 // ── Top Stats ──────────────────────────────────────────────────────────────────
 router.get("/admin/top-stats", adminAuth, async (req, res) => {
   try {
-    const [manualSenders, topWilayas, officeAgents, marketers, pdfSendersRaw] = await Promise.all([
+    const [manualSenders, manualRecipients, officeAgents, marketers, pdfRaw] = await Promise.all([
       db.select({
         name: ordersTable.senderName,
         count: count(),
@@ -544,9 +565,12 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       }).from(ordersTable).where(isNotNull(ordersTable.senderName))
         .groupBy(ordersTable.senderName).orderBy(desc(count())).limit(50),
 
-      db.select({ name: ordersTable.destinationWilaya, count: count() })
-        .from(ordersTable).where(isNotNull(ordersTable.destinationWilaya))
-        .groupBy(ordersTable.destinationWilaya).orderBy(desc(count())).limit(5),
+      // Top recipients from manual orders
+      db.select({
+        name: ordersTable.recipientName,
+        count: count(),
+      }).from(ordersTable).where(isNotNull(ordersTable.recipientName))
+        .groupBy(ordersTable.recipientName).orderBy(desc(count())).limit(200),
 
       db.select({ name: adminsTable.username, createdAt: adminsTable.createdAt })
         .from(adminsTable).where(eq(adminsTable.role, "office"))
@@ -556,44 +580,94 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
         .from(adminsTable).where(eq(adminsTable.role, "commercial"))
         .orderBy(desc(adminsTable.createdAt)).limit(10),
 
-      // Also get senders from PDF office_reports
+      // Get senders + recipient_names + wilayas from PDF office_reports
       pool.getConnection().then(async (conn: any) => {
         try {
           const [rows] = await conn.execute(
-            `SELECT sender_name AS name,
+            `SELECT sender_name,
                SUM(total_parcels) AS cnt,
-               SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels ELSE 0 END) AS del
+               SUM(CASE WHEN report_type = 'delivery_receipt' THEN total_parcels ELSE 0 END) AS del,
+               GROUP_CONCAT(recipient_names SEPARATOR '|') AS all_recipients,
+               GROUP_CONCAT(wilayas ORDER BY created_at SEPARATOR ',') AS all_wilayas
              FROM office_reports
-             WHERE sender_name IS NOT NULL AND sender_name != ''
-             GROUP BY sender_name
-             ORDER BY cnt DESC
-             LIMIT 50`
+             GROUP BY sender_name`
           );
-          return rows as Array<{ name: string; cnt: number | string; del: number | string }>;
+          return rows as Array<{
+            sender_name: string | null;
+            cnt: number | string;
+            del: number | string;
+            all_recipients: string | null;
+            all_wilayas: string | null;
+          }>;
         } finally { conn.release(); }
       }),
     ]);
 
-    // Merge manual + PDF senders; key = sender name
+    // ── Merge senders ────────────────────────────────────────────────────────
     const senderMap: Record<string, { name: string; count: number; delivered: number }> = {};
     for (const s of manualSenders) {
       if (!s.name) continue;
       senderMap[s.name] = { name: s.name, count: Number(s.count), delivered: Number(s.delivered) };
     }
-    for (const s of pdfSendersRaw) {
-      if (!s.name) continue;
-      if (senderMap[s.name]) {
-        senderMap[s.name].count    += Number(s.cnt);
-        senderMap[s.name].delivered += Number(s.del);
+    for (const s of pdfRaw) {
+      if (!s.sender_name) continue;
+      const name = s.sender_name;
+      if (senderMap[name]) {
+        senderMap[name].count    += Number(s.cnt);
+        senderMap[name].delivered += Number(s.del);
       } else {
-        senderMap[s.name] = { name: s.name, count: Number(s.cnt), delivered: Number(s.del) };
+        senderMap[name] = { name, count: Number(s.cnt), delivered: Number(s.del) };
       }
     }
     const topSenders = Object.values(senderMap)
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    res.json({ ok: true, topSenders, topWilayas, officeAgents, marketers });
+    // ── Merge recipients ─────────────────────────────────────────────────────
+    const recipientMap: Record<string, number> = {};
+
+    // From manual orders
+    for (const r of manualRecipients) {
+      if (!r.name) continue;
+      const key = r.name.trim();
+      if (!key) continue;
+      recipientMap[key] = (recipientMap[key] ?? 0) + Number(r.count);
+    }
+
+    // From PDF reports: recipient_names is pipe-separated per-report, rows grouped by sender
+    for (const row of pdfRaw) {
+      if (!row.all_recipients) continue;
+      // all_recipients is GROUP_CONCAT of pipe-separated fields → split by both | and \n
+      const names = row.all_recipients.split(/[|\n]/).map((n: string) => n.trim()).filter(Boolean);
+      for (const name of names) {
+        if (name.length < 2 || name.length > 100) continue;
+        recipientMap[name] = (recipientMap[name] ?? 0) + 1;
+      }
+    }
+
+    const topRecipients = Object.entries(recipientMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // ── Merge top wilayas (manual orders + PDF reports) ──────────────────────
+    const wilayaMap: Record<string, number> = {};
+    for (const row of pdfRaw) {
+      if (!row.all_wilayas) continue;
+      for (const entry of row.all_wilayas.split(",")) {
+        const i = entry.lastIndexOf(":");
+        if (i === -1) continue;
+        const name = entry.slice(0, i).trim();
+        const cnt = parseInt(entry.slice(i + 1), 10);
+        if (name && !isNaN(cnt) && cnt > 0) wilayaMap[name] = (wilayaMap[name] ?? 0) + cnt;
+      }
+    }
+    const topWilayas = Object.entries(wilayaMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    res.json({ ok: true, topSenders, topRecipients, topWilayas, officeAgents, marketers });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch top stats");
     res.status(500).json({ ok: false, error: "db_error" });

@@ -7,8 +7,6 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ─── Ligature normalisation ───────────────────────────────────────────────────
-// pdf-parse renders OpenType ligatures as single Unicode codepoints.
-// Normalise them to their plain ASCII equivalents so all pattern matches work.
 function normaliseLigatures(text: string): string {
   return text
     .replace(/ﬀ/g, "ff")
@@ -44,28 +42,46 @@ function detectReportType(text: string): "delivery_receipt" | "route_sheet" | "r
 // ─── Date ─────────────────────────────────────────────────────────────────────
 
 function extractDate(text: string): string {
-  // "le DD-MM-YYYY" (Ecotrack standard header format)
   const frMatch = text.match(/le\s+(\d{2})-(\d{2})-(\d{4})/);
   if (frMatch) return `${frMatch[3]}-${frMatch[2]}-${frMatch[1]}`;
-  // ISO YYYY-MM-DD embedded anywhere
   const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
   return iso ? iso[1] : new Date().toISOString().split("T")[0];
 }
 
 // ─── Tracking numbers ─────────────────────────────────────────────────────────
+// Returns all unique tracking codes found in the PDF.
+// Primary format: EC + 2-6 uppercase letters + 9-13 digits
+// Fallback: any EC + alphanumeric (10-18 chars)
+// Both sets are merged so no valid code is lost.
 
 function extractTrackingNumbers(text: string): string[] {
   const raw = text.match(/EC[A-Z0-9]{10,18}/g) ?? [];
-  // Keep only standard Ecotrack format: EC + 2-6 uppercase letters + 9-13 digits
-  // This filters out tracking numbers that had a reference number appended (e.g. "ECKOSX250908364946112")
-  const valid = raw.filter((n) => /^EC[A-Z]{2,6}[0-9]{9,13}$/.test(n));
-  return [...new Set(valid.length > 0 ? valid : raw)];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const n of raw) {
+    // Normalise: if a strict-format code is a prefix of a longer raw code, keep the strict one
+    const strict = /^EC[A-Z]{2,6}[0-9]{9,13}$/.test(n);
+    // Accept both strict and non-strict, deduplicate
+    if (!seen.has(n)) {
+      seen.add(n);
+      result.push(n);
+    }
+    // Also try trimming digits from the end to recover the strict prefix
+    if (!strict) {
+      const strictMatch = n.match(/^(EC[A-Z]{2,6}[0-9]{9,13})/);
+      if (strictMatch && !seen.has(strictMatch[1])) {
+        seen.add(strictMatch[1]);
+        result.push(strictMatch[1]);
+      }
+    }
+  }
+  return result;
 }
 
 // ─── Recipient extraction (one entry per tracking code) ───────────────────────
-// For delivery_receipt and returns_list PDFs, the first name-like line after
-// each tracking code is the recipient (Destinataire).
+// Supports Latin, extended Latin, and Arabic scripts.
 // Returns pipe-separated names aligned with the tracking_numbers list.
+
 function extractRecipientNames(text: string, trackingNums: string[]): string {
   if (trackingNums.length === 0) return "";
   const recipients: string[] = [];
@@ -75,11 +91,12 @@ function extractRecipientNames(text: string, trackingNums: string[]): string {
     const after = text.slice(idx + code.length, idx + code.length + 400);
     const lines = after.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
     let found = "";
-    for (const line of lines.slice(0, 5)) {
+    for (const line of lines.slice(0, 6)) {
       if (
-        line.length >= 3 &&
-        line.length <= 80 &&
-        /[A-Za-z\u00C0-\u017E]{2,}/.test(line) &&
+        line.length >= 2 &&
+        line.length <= 100 &&
+        // Accept Latin, extended Latin, OR Arabic script
+        (/[A-Za-z\u00C0-\u017E]{2,}/.test(line) || /[\u0600-\u06FF]{2,}/.test(line)) &&
         !/^\d+[\.,]?\d*$/.test(line) &&
         !/^\d{8,}$/.test(line) &&
         !/^[\d\s\.,]+$/.test(line)
@@ -97,24 +114,21 @@ function extractRecipientNames(text: string, trackingNums: string[]): string {
 
 function extractParcels(text: string, type: string, trackingCount: number): number {
   if (type === "delivery_receipt") {
-    // Header: "#REFDATE\nCOUNT\nNET DA SENDER"
-    // e.g. "#61122026-05-31\n16\n291300 DACP Station Oued Rhiou"
     const m = text.match(/#\d+\d{4}-\d{2}-\d{2}\n(\d+)\n/);
     if (m) return parseInt(m[1], 10);
   }
   if (type === "route_sheet") {
-    // Tracking count is one-to-one with parcels in FDR
-    if (trackingCount > 0) return trackingCount;
-    // Fallback: try both header formats
-    // New: phone\nPARCELS\nTOTAL\nDA\nDATE  → \d{10}\n(\d+)\n\d{4,}\s*\nDA\n
+    // Always try header count FIRST — it is accurate even when some EC codes aren't extracted
+    // New format: 10-digit phone, then nb_colis on its own line, then total, then DA
     const mNew = text.match(/\d{10}\n(\d+)\n\d{4,}\s*\nDA\n/);
     if (mNew) return parseInt(mNew[1], 10);
-    // Old: phone\n{PARCELS}{TOTAL} DA\nDATE  → non-greedy split
+    // Old / same-line format: phone\n nb_colis+total DA\n
     const mOld = text.match(/\d{10}\n(\d{1,3}?)\d{4,}\s*DA\n/);
     if (mOld) return parseInt(mOld[1], 10);
+    // Fallback: total count of tracking codes found
+    if (trackingCount > 0) return trackingCount;
   }
   if (type === "returns_list") {
-    // "DateNombre de ColisStation\n2026-05-31\nCOUNT\n48.1 Agence..."
     const m = text.match(/\d{4}-\d{2}-\d{2}\n(\d+)\n\d+\.\d/);
     if (m) return parseInt(m[1], 10);
     const m2 = text.match(/DateNombre de ColisStation\n[\d-]+\n(\d+)\n/);
@@ -124,25 +138,11 @@ function extractParcels(text: string, type: string, trackingCount: number): numb
 }
 
 // ─── DECHARGE amounts ─────────────────────────────────────────────────────────
-// Each row when concatenated by pdf-parse:
-//   {poids}.{2dp}{MONTANT}{TARIF_LIV}.00{SURCHARGE}.00{COMMISSION}.00{TARIF_POIDS}.00{NET}
-// Examples:
-//   "0.001600600.000.000.000.001000"      → montant=1600, tarif_liv=600, tarif_poids=0
-//   "6.5010650550.000.000.00100.0010000"  → montant=10650, tarif_liv=550, tarif_poids=100
-//   "18.8081250600.000.000.00700.0079950" → montant=81250, tarif_liv=600, tarif_poids=700
-//
-// Pattern: \d+\.\d{2}  = poids
-//          (\d+)        = MONTANT (captured as group 1)
-//          (\d{3})      = TARIF_LIVRAISON — always 3 digits (500–999) (captured as group 2)
-//          \.000\.000\.00 = ".00" suffix of tarif + "0.00" surcharge + "0.00" commission
 
 function extractDeliveryAmounts(text: string): { total: number; net: number; frais: number } {
-  // Net = shown in the reference header row: "\nNET DA SENDER"
-  // e.g. "\n291300 DACP Station Oued Rhiou" or "\n26800 DAspotlight-store"
-  const netM = text.match(/\n(\d+)\s*DA[A-Za-z\u00C0-\u017E]/);
+  const netM = text.match(/\n(\d+)\s*DA[A-Za-z\u00C0-\u017E\u0600-\u06FF]/);
   const net = netM ? parseInt(netM[1], 10) : 0;
 
-  // Gross = sum of Montant column; Frais = sum of Tarif livraison column (NOT tarif poids)
   const rowAmounts: number[] = [];
   let frais = 0;
   for (const m of text.matchAll(/\d+\.\d{2}(\d+)(\d{3})\.000\.000\.00/g)) {
@@ -156,20 +156,14 @@ function extractDeliveryAmounts(text: string): { total: number; net: number; fra
 }
 
 // ─── FDR total amount ─────────────────────────────────────────────────────────
-// Route header: phone\nNB_COLIS\nTOTAL\nDA  (new format — separate lines)
-//               phone\nNB_COLIS TOTAL DA\n   (old format — same line)
-// Falls back to scanning all uppercase-DA values and taking the max.
 
 function extractRouteTotal(text: string): number {
-  // New format: 10-digit phone, then nb_colis, then total, then DA on its own line
   const mNew = text.match(/\d{10}\n(\d+)\n(\d{4,})\s*\nDA\n/);
   if (mNew) return parseInt(mNew[2], 10);
 
-  // Old / same-line format: phone\n nb_colis+total DA\n
   const mOld = text.match(/\d{10}\n\d{1,4}(\d{4,})\s*DA\n/);
   if (mOld) return parseInt(mOld[1], 10);
 
-  // Fallback: all uppercase-DA occurrences → take the maximum (= route total)
   const vals = [...text.matchAll(/(\d{4,})\s*DA(?:\n|\b)/g)]
     .map((m) => parseInt(m[1], 10))
     .filter((n) => n < 100_000_000);
@@ -177,16 +171,12 @@ function extractRouteTotal(text: string): number {
 }
 
 // ─── LISTE-RETOUR amounts ─────────────────────────────────────────────────────
-// Each tracking row ends with: MONTANT + REF_RETOUR (4 digits, same for all rows in this doc).
-// Strategy: extract the return ref from "#NNNN" header, then match (\d{3,5}){ref} in text.
 
 function extractReturnAmounts(text: string): number {
-  // 1. Find the return list reference number
   const refM = text.match(/#(\d{4})\b/);
   if (!refM) return 0;
-  const ref = refM[1]; // e.g. "2322"
+  const ref = refM[1];
 
-  // 2. Sum all amounts that appear just before the ref
   let total = 0;
   const pattern = new RegExp(`(\\d{3,5})${ref}`, "g");
   for (const m of text.matchAll(pattern)) {
@@ -197,16 +187,19 @@ function extractReturnAmounts(text: string): number {
 }
 
 // ─── Sender extraction ────────────────────────────────────────────────────────
+// Supports Latin, extended Latin, and Arabic sender names.
 
 function extractDeliverySender(text: string): string {
   // Header row: "#REFDATE\nCOUNT\nNET DA SENDER\n"
-  const m = text.match(/\n\d+\s*DA([A-Za-z\u00C0-\u017E][^\n]{1,120})/);
+  // Sender can start with Latin or Arabic characters
+  const m = text.match(/\n\d+\s*DA([A-Za-z\u00C0-\u017E\u0600-\u06FF][^\n]{1,120})/);
   if (m) return m[1].trim().slice(0, 255);
   return "";
 }
 
+// FDR: extract ALL unique sender names and store pipe-separated.
+// This avoids the truncated "+N autres" display; the UI splits and renders each individually.
 function extractFDRSenders(text: string): string[] {
-  // Each FDR tracking entry: EC{CODE}\n{SENDER_LINES}\n{PHONE_10DIGITS}\n
   const senders = new Set<string>();
   for (const m of text.matchAll(/EC[A-Z0-9]{10,22}\n((?:[^\n]+\n){1,3}?)\d{10}\n/g)) {
     const raw = m[1]
@@ -219,12 +212,12 @@ function extractFDRSenders(text: string): string[] {
 }
 
 function extractReturnSender(text: string): string {
-  const m = text.match(/(?:Livraison|Echange)\n?([A-Za-z\u00C0-\u017E][^\n\u0600-\u06FF]{1,60})/);
+  const m = text.match(/(?:Livraison|Echange)\n?([A-Za-z\u00C0-\u017E\u0600-\u06FF][^\n]{1,60})/);
   if (m) {
     const parts = m[1].split("\n").slice(0, 2).join(" ").trim();
     return parts.slice(0, 255);
   }
-  const m2 = text.match(/(?:Livraison|Echange)([A-Za-z\u00C0-\u017E][^\u0600-\u06FF\n]{1,60})/);
+  const m2 = text.match(/(?:Livraison|Echange)([A-Za-z\u00C0-\u017E\u0600-\u06FF][^\n]{1,60})/);
   if (m2) return m2[1].trim().slice(0, 255);
   return "";
 }
@@ -242,7 +235,6 @@ function extractStation(text: string): string {
 
 // ─── Wilayas ──────────────────────────────────────────────────────────────────
 
-// Includes both accented and unaccented spellings found in Ecotrack PDFs
 const KNOWN_WILAYAS = [
   "Adrar", "Chlef", "Laghouat", "Oum El Bouaghi", "Batna",
   "Béjaïa", "Biskra", "Béchar", "Blida", "Bouira",
@@ -263,8 +255,6 @@ const KNOWN_WILAYAS = [
   "El M'Ghair", "El Meniaa",
 ];
 
-// Strip Ecotrack footer lines that contain the company's own wilaya (Relizane),
-// so those don't get counted as destination wilayas.
 function stripFooter(text: string): string {
   return text
     .replace(/RS\s*:.*?(?:\n|$)/g, " ")
@@ -272,14 +262,8 @@ function stripFooter(text: string): string {
     .replace(/Tous droits réservés.*?(?:\n|$)/g, " ");
 }
 
-// Returns a per-wilaya parcel count by scanning each parcel's row segment
-// (the text between consecutive EC tracking codes) individually.
-// This avoids counting wilayas that appear only in the document header or footer.
 function extractWilayaCounts(text: string): Record<string, number> {
   const clean = stripFooter(text);
-
-  // Split at every EC tracking code; segments[0] = header (skipped),
-  // segments[1..n] = text following each tracking code (= that parcel's row data)
   const segments = clean.split(/EC[A-Z0-9]{10,22}/);
   const parcelSegments = segments.slice(1);
 
@@ -287,17 +271,15 @@ function extractWilayaCounts(text: string): Record<string, number> {
 
   if (parcelSegments.length > 0) {
     for (const seg of parcelSegments) {
-      // Normalise newlines → spaces so multi-word wilayas spanning lines still match
       const norm = seg.replace(/\n/g, " ");
       for (const w of KNOWN_WILAYAS) {
         if (norm.includes(w)) {
           counts[w] = (counts[w] ?? 0) + 1;
-          break; // one destination wilaya per parcel row
+          break;
         }
       }
     }
   } else {
-    // No EC codes found — scan whole text as fallback
     const norm = clean.replace(/\n/g, " ");
     for (const w of KNOWN_WILAYAS) {
       if (norm.includes(w)) counts[w] = 1;
@@ -307,7 +289,6 @@ function extractWilayaCounts(text: string): Record<string, number> {
   return counts;
 }
 
-// Serialise wilaya counts as "Wilaya:N,Wilaya:N,..." for storage in the wilayas column.
 function serialiseWilayaCounts(counts: Record<string, number>): string {
   return Object.entries(counts)
     .filter(([, n]) => n > 0)
@@ -353,18 +334,15 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
     } else if (reportType === "route_sheet") {
       totalAmount = extractRouteTotal(text);
       const allSenders = extractFDRSenders(text);
-      if (allSenders.length <= 3) {
-        senderName = allSenders.join(", ");
-      } else {
-        senderName = `${allSenders.slice(0, 2).join(", ")} (+${allSenders.length - 2} autres)`;
-      }
+      // Store ALL senders pipe-separated — UI splits and displays each individually
+      senderName = allSenders.join("|").slice(0, 255);
     } else if (reportType === "returns_list") {
       totalAmount = extractReturnAmounts(text);
       senderName  = extractReturnSender(text);
     }
 
     const wilayasStr = serialiseWilayaCounts(wilayaCounts);
-    const wilayas    = Object.keys(wilayaCounts); // names only (for response)
+    const wilayas    = Object.keys(wilayaCounts);
 
     const conn = await pool.getConnection();
     try {
@@ -475,8 +453,6 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
 
       const s = (summary as Array<Record<string, unknown>>)[0] ?? {};
 
-      // fraisLivraison: prefer stored frais_livraison_dzd (tarif livraison only).
-      // Fall back to COD - Net for old records that predate the frais column.
       const totalFrais     = Number(s.total_frais_dzd ?? 0);
       const fraisLivraison = totalFrais > 0
         ? totalFrais

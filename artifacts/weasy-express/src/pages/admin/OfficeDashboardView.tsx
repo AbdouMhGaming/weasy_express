@@ -1,6 +1,25 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
+/** For FDR reports, sender_name stores all senders pipe-separated.
+ *  Render each sender on its own line (inline list). */
+function SenderCell({ name, truncate = false }: { name: string | null; truncate?: boolean }) {
+  if (!name) return <span className="text-gray-400">—</span>;
+  const parts = name.split("|").map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    return truncate
+      ? <span className="text-xs text-gray-700 font-medium truncate block">{name}</span>
+      : <span className="text-xs text-gray-700 font-medium">{name}</span>;
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      {parts.map((s, i) => (
+        <span key={i} className="text-xs text-gray-700 font-medium leading-snug">{s}</span>
+      ))}
+    </div>
+  );
+}
+
 interface OfficeStats {
   totalReports: number;
   totalDelivered: number;
@@ -500,7 +519,12 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                   </div>
                   {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
                   {r.wilayas     && <p className="text-xs text-blue-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
-                  {r.sender_name && <p className="text-xs text-gray-400 truncate mt-0.5">📦 {r.sender_name}</p>}
+                  {r.sender_name && (
+                    <div className="text-xs text-gray-400 mt-0.5 flex items-start gap-1">
+                      <span>📦</span>
+                      <SenderCell name={r.sender_name} />
+                    </div>
+                  )}
                   {r.total_amount_dzd > 0 && <p className="text-xs text-gray-500 mt-0.5">Valeur: {fmtDZ(r.total_amount_dzd)}</p>}
                 </>
               )}
@@ -590,7 +614,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                     <span className="text-xs text-gray-700">{r.station ?? "—"}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs text-gray-700 font-medium">{r.sender_name ?? "—"}</span>
+                    <SenderCell name={r.sender_name} />
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-bold text-gray-900">{r.total_parcels}</span>

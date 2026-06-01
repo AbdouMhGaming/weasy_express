@@ -45,6 +45,7 @@ interface DashboardStats {
 }
 interface TopStats {
   topSenders: Array<{ name: string; count: string | number; delivered: string | number }>;
+  topRecipients: Array<{ name: string; count: number }>;
   topWilayas: Array<{ name: string; count: string | number }>;
   officeAgents: Array<{ name: string; createdAt: string }>;
   marketers: Array<{ name: string; createdAt: string }>;
@@ -454,7 +455,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.dashboard.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.dashboard.subtitle")}</p>
           </div>
-          <button onClick={fetchStats} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
+          <button onClick={() => { fetchStats(); fetchTopStats(); }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
             <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             {t("admin.dashboard.refresh")}
           </button>
@@ -765,25 +766,27 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 </div>
               </div>
 
-              {/* Top wilayas */}
+              {/* Top wilayas — all wilayas with at least 1 parcel */}
               {stats && stats.byWilaya.filter((w) => w.total > 0).length > 0 && (
-                <div className="w-full mt-4 space-y-1.5">
+                <div className="w-full mt-4">
                   <p className="text-xs text-white/40 font-semibold uppercase tracking-widest px-1 mb-2">Top wilayas</p>
-                  {stats.byWilaya.filter((w) => w.total > 0).slice(0, 5).map((w) => {
-                    const maxT = stats.byWilaya.filter((x) => x.total > 0)[0]?.total ?? 1;
-                    return (
-                      <div key={w.code} className="flex items-center gap-2">
-                        <span className="text-xs text-white/60 w-28 truncate shrink-0">{w.name || w.code}</span>
-                        <div className="flex-1 bg-white/10 rounded-full h-1.5">
-                          <div
-                            className="h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.round((w.total / maxT) * 100)}%`, backgroundColor: wilayaHeatColor(w.total, maxT) }}
-                          />
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                    {stats.byWilaya.filter((w) => w.total > 0).map((w) => {
+                      const maxT = stats.byWilaya.filter((x) => x.total > 0)[0]?.total ?? 1;
+                      return (
+                        <div key={w.code} className="flex items-center gap-2">
+                          <span className="text-xs text-white/60 w-28 truncate shrink-0">{w.name || w.code}</span>
+                          <div className="flex-1 bg-white/10 rounded-full h-1.5">
+                            <div
+                              className="h-1.5 rounded-full transition-all"
+                              style={{ width: `${Math.round((w.total / maxT) * 100)}%`, backgroundColor: wilayaHeatColor(w.total, maxT) }}
+                            />
+                          </div>
+                          <span className="text-xs text-white/60 w-6 text-right shrink-0">{w.total}</span>
                         </div>
-                        <span className="text-xs text-white/60 w-6 text-right shrink-0">{w.total}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -823,23 +826,25 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             </div>
           </div>
 
-          {/* Top Clients (by delivered) */}
+          {/* Top Clients — top recipients (destinataires les plus fréquents) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>⭐</span>Top Clients</h3>
             </div>
             <div className="p-4 space-y-3">
-              {topStats.topSenders.length === 0 ? (
+              {(!topStats.topRecipients || topStats.topRecipients.length === 0) ? (
                 <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
-              ) : [...topStats.topSenders].sort((a, b) => Number(b.delivered) - Number(a.delivered)).map((s, i) => {
-                const cnt = Number(s.count); const del = Number(s.delivered);
-                const rate = cnt > 0 ? Math.round((del / cnt) * 100) : 0;
+              ) : topStats.topRecipients.map((r, i) => {
+                const maxR = Number(topStats.topRecipients[0]?.count ?? 1);
+                const pct = Math.round((Number(r.count) / maxR) * 100);
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
-                    <span className={`text-xs font-bold shrink-0 ${rate >= 80 ? "text-emerald-600" : rate >= 60 ? "text-amber-600" : "text-red-600"}`}>{rate}%</span>
-                    <span className="text-xs text-gray-400 shrink-0">{del}</span>
+                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.name}</span>
+                    <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
+                      <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(r.count)}</span>
                   </div>
                 );
               })}
