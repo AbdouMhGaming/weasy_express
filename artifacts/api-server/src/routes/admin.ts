@@ -4,6 +4,7 @@ import { gte, lte } from "drizzle-orm";
 import {
   adminAuth,
   superAdminOnly,
+  financeOrAdminOnly,
   generateToken,
   verifyAdminCredentials,
   verifyPassword,
@@ -776,25 +777,25 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
 });
 
 // ── Charges Summary ────────────────────────────────────────────────────────────
-router.get("/admin/charges-summary", adminAuth, superAdminOnly, async (req, res) => {
+router.get("/admin/charges-summary", adminAuth, financeOrAdminOnly, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     try {
       const [catRows] = await conn.execute(
-        "SELECT category, SUM(amount_dzd) as total FROM charges GROUP BY category"
+        "SELECT category, SUM(amount_dzd) as total FROM charges WHERE type = 'outcome' GROUP BY category"
       ) as [Array<{ category: string; total: string | number }>, unknown];
-      const [payRows] = await conn.execute(
-        "SELECT COALESCE(SUM(amount_dzd), 0) as total_paid FROM payouts"
-      ) as [Array<{ total_paid: string | number }>, unknown];
-      const [chgRows] = await conn.execute(
-        "SELECT COALESCE(SUM(amount_dzd), 0) as total_charges FROM charges"
-      ) as [Array<{ total_charges: string | number }>, unknown];
+      const [outcomeRows] = await conn.execute(
+        "SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges WHERE type = 'outcome'"
+      ) as [Array<{ total: string | number }>, unknown];
+      const [incomeRows] = await conn.execute(
+        "SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges WHERE type = 'income'"
+      ) as [Array<{ total: string | number }>, unknown];
       const byCategory: Record<string, number> = {};
       for (const r of catRows) byCategory[r.category] = Number(r.total);
       res.json({
         ok: true, byCategory,
-        totalCharges: Number(chgRows[0]?.total_charges ?? 0),
-        totalPaid: Number(payRows[0]?.total_paid ?? 0),
+        totalCharges: Number(outcomeRows[0]?.total ?? 0),
+        totalIncome: Number(incomeRows[0]?.total ?? 0),
       });
     } finally { conn.release(); }
   } catch (err) {
@@ -804,7 +805,7 @@ router.get("/admin/charges-summary", adminAuth, superAdminOnly, async (req, res)
 });
 
 // ── Charges ────────────────────────────────────────────────────────────────────
-router.get("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
+router.get("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) => {
   const q = req.query as Record<string, string>;
   try {
     const conn = await pool.getConnection();
@@ -814,8 +815,9 @@ router.get("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
       if (q.from) { where += " AND charge_date >= ?"; params.push(q.from); }
       if (q.to) { where += " AND charge_date <= ?"; params.push(q.to); }
       if (q.category) { where += " AND category = ?"; params.push(q.category); }
+      if (q.type) { where += " AND type = ?"; params.push(q.type); }
       const [rows] = await conn.execute(
-        `SELECT * FROM charges ${where} ORDER BY charge_date DESC, created_at DESC`, params
+        `SELECT id, category, amount_dzd, description, charge_date, type, attachment_name, created_at FROM charges ${where} ORDER BY charge_date DESC, created_at DESC`, params
       );
       res.json({ ok: true, charges: rows });
     } finally { conn.release(); }
@@ -825,22 +827,64 @@ router.get("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
   }
 });
 
-router.post("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
+router.get("/admin/charges/:id/attachment", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT attachment_name, attachment_data FROM charges WHERE id = ?", [id]
+      ) as [Array<{ attachment_name: string | null; attachment_data: Buffer | null }>, unknown];
+      const row = rows[0];
+      if (!row || !row.attachment_data || !row.attachment_name) {
+        res.status(404).json({ ok: false, error: "not_found" }); return;
+      }
+      const ext = row.attachment_name.split(".").pop()?.toLowerCase() ?? "";
+      const mime = ext === "pdf" ? "application/pdf"
+        : ext === "png" ? "image/png"
+        : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+        : "application/octet-stream";
+      res.setHeader("Content-Type", mime);
+      res.setHeader("Content-Disposition", `inline; filename="${row.attachment_name}"`);
+      res.send(row.attachment_data);
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch attachment");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const validCats = ["marketing", "hr", "it", "packaging", "cod", "warehouse", "various"];
   const category = String(b.category ?? "").trim();
   const amount = parseInt(String(b.amount_dzd ?? "0"), 10);
   const description = b.description ? String(b.description).trim().slice(0, 500) : null;
   const chargeDate = String(b.charge_date ?? "").trim() || new Date().toISOString().split("T")[0];
+  const type = b.type === "income" ? "income" : "outcome";
   if (!validCats.includes(category) || isNaN(amount) || amount < 0) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  let attachmentName: string | null = null;
+  let attachmentData: Buffer | null = null;
+  if (b.attachment_data && b.attachment_name) {
+    try {
+      attachmentName = String(b.attachment_name).slice(0, 255);
+      attachmentData = Buffer.from(String(b.attachment_data), "base64");
+      if (attachmentData.length > 10 * 1024 * 1024) {
+        res.status(400).json({ ok: false, error: "attachment_too_large" }); return;
+      }
+    } catch {
+      res.status(400).json({ ok: false, error: "invalid_attachment" }); return;
+    }
   }
   try {
     const conn = await pool.getConnection();
     try {
       await conn.execute(
-        "INSERT INTO charges (category, amount_dzd, description, charge_date) VALUES (?, ?, ?, ?)",
-        [category, amount, description, chargeDate]
+        "INSERT INTO charges (category, amount_dzd, description, charge_date, type, attachment_name, attachment_data) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [category, amount, description, chargeDate, type, attachmentName, attachmentData]
       );
       res.json({ ok: true });
     } finally { conn.release(); }
@@ -850,7 +894,7 @@ router.post("/admin/charges", adminAuth, superAdminOnly, async (req, res) => {
   }
 });
 
-router.delete("/admin/charges/:id", adminAuth, superAdminOnly, async (req, res) => {
+router.delete("/admin/charges/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   try {

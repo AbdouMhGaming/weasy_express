@@ -149,3 +149,16 @@ export function superAdminOnly(
   }
   next();
 }
+
+export function financeOrAdminOnly(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const role = (req as AuthedRequest).adminRole;
+  if (role !== "admin" && role !== "finance") {
+    res.status(403).json({ ok: false, error: "forbidden" });
+    return;
+  }
+  next();
+}

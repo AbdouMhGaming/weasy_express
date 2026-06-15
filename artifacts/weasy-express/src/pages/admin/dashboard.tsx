@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import PerformanceView from "./PerformanceView";
 import ChargesView from "./ChargesView";
+import CommissionsView from "./CommissionsView";
 import OfficeDashboardView from "./OfficeDashboardView";
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
@@ -90,7 +91,7 @@ const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "office-dashboard";
+type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "commissions" | "office-dashboard";
 
 function Sidebar({
   view, setView, role, username, onLogout, onChangePassword,
@@ -151,14 +152,26 @@ function Sidebar({
           {navItem("performance", "Performance", 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
           )}
-          {navItem("charges", "Charges", 0,
+          {navItem("charges", t("admin.charges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {navItem("commissions", t("admin.commissions.title"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
           )}
         </nav>
       ) : role === "office" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItem("office-dashboard", "Mon Tableau de bord", 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+        </nav>
+      ) : role === "finance" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItem("charges", t("admin.charges.title"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {navItem("commissions", t("admin.commissions.title"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
           )}
         </nav>
       ) : (
@@ -1714,11 +1727,11 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
-  const [view, setView] = useState<SidebarView>("dashboard");
-  const [showChangePass, setShowChangePass] = useState(false);
-
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
+  const defaultView: SidebarView = role === "finance" ? "charges" : "dashboard";
+  const [view, setView] = useState<SidebarView>(defaultView);
+  const [showChangePass, setShowChangePass] = useState(false);
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
@@ -1769,6 +1782,8 @@ export default function AdminDashboard() {
       <main className="flex-1 ml-64 min-h-screen overflow-y-auto">
         {role === "office" ? (
           <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
+        ) : role === "finance" ? (
+          view === "commissions" ? <CommissionsView /> : <ChargesView onUnauth={unauth} />
         ) : !isAdmin ? (
           <EmptyRoleView role={role} />
         ) : view === "dashboard" ? (
@@ -1781,6 +1796,8 @@ export default function AdminDashboard() {
           <PerformanceView onUnauth={unauth} />
         ) : view === "charges" ? (
           <ChargesView onUnauth={unauth} />
+        ) : view === "commissions" ? (
+          <CommissionsView />
         ) : view === "office-dashboard" ? (
           <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
         ) : (
