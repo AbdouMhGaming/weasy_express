@@ -2,6 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import { pool } from "@workspace/db";
 import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
+// Import pdf-parse's internal lib to bypass the top-level test-file read in index.js
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse/lib/pdf-parse.js");
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -470,7 +473,6 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
   if (!file) { res.status(400).json({ ok: false, error: "no_file" }); return; }
 
   try {
-    const pdfParse = (await import("pdf-parse")).default;
     const pdfData = await pdfParse(file.buffer);
     const text = normaliseLigatures(pdfData.text);
 

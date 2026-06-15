@@ -3,3 +3,6 @@
 - [MySQL schema push quirk](mysql-schema-push.md) — drizzle-kit push fails; add tables via raw SQL Node script; script must live in lib/db/ and run with `cd lib/db && node add-tables.mjs` so mysql2 resolves correctly.
 - [Admin dashboard views](admin-dashboard-views.md) — PerformanceView, ChargesView, OfficeDashboardView are separate .tsx files in src/pages/admin/; imported into dashboard.tsx. Office role gets OfficeDashboardView directly; admin has Performance/Charges/Tableau Agence in sidebar.
 - [Office PDF parsing quirks](office-pdf-parsing.md) — Ecotrack PDF column merging causes phone/ref contamination; exact tracking pattern; per-type recipient extractors; sender bug.
+- [pdf-parse import quirk](pdf-parse-import.md) — must use require("pdf-parse/lib/pdf-parse.js") not top-level import; index.js reads a test file at load time causing ENOENT crash.
+- [DB migration env vars](db-migration-env.md) — migration scripts use DB_HOST/DB_NAME/DB_USER/DB_PASS (MySQL); DATABASE_URL is a Replit PostgreSQL URL and is unrelated to the app DB.
+- [Drizzle bypass for schema mismatch](drizzle-bypass.md) — when DB column type differs from Drizzle schema (e.g. wilaya_number VARCHAR vs int), use raw pool.getConnection() SQL for INSERT/UPDATE on those columns.

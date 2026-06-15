@@ -39,7 +39,7 @@ export const partnersTable = mysqlTable("partners", {
 
 export const officesTable = mysqlTable("offices", {
   id: int("id").primaryKey().autoincrement(),
-  wilayaNumber: int("wilaya_number").notNull(),
+  wilayaNumber: varchar("wilaya_number", { length: 10 }).notNull().default(""),
   wilaya: varchar("wilaya", { length: 100 }).notNull(),
   commune: varchar("commune", { length: 100 }),
   address: text("address").notNull(),
