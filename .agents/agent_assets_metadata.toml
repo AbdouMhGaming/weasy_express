@@ -36,3 +36,9 @@ id = "zJ62BVv9XDAgBKUUEvbGk"
 uri = "file://weasy-express-hostinger.zip"
 type = "unspecified"
 title = "weasy-express-hostinger.zip — Hostinger Node.js build (6.8 MB)"
+
+[[outputs]]
+id = "4eYePTh0a00woYZrvC1p8"
+uri = "file://weasy-express-migration.zip"
+type = "unspecified"
+title = "weasy-express-migration.zip — SQL export (7 tables, 25 rows)"
