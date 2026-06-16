@@ -632,18 +632,16 @@ export default function CommissionsView() {
                             {returnAgg?.entries.length}
                           </button>
                         )}
-                        {/* Add Return button */}
-                        {hasData && (
-                          <button
-                            onClick={() => openReturnModal(name)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasReturns ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                            </svg>
-                            {t("admin.commissions.office.return")}
-                          </button>
-                        )}
+                        {/* Add Return button — always visible */}
+                        <button
+                          onClick={() => openReturnModal(name)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasReturns ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                          </svg>
+                          {t("admin.commissions.office.return")}
+                        </button>
                         <button
                           onClick={() => openAdd(name)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-lg transition-colors shadow-sm"
