@@ -256,8 +256,17 @@ export default function CommissionsView() {
       const d = await res.json();
       if (d.ok) {
         setShowReturnModal(false);
+        const [savedYear, savedMonth] = returnDate.split("-").map(Number);
         setReturnCount("");
-        await fetchReturns();
+        setReturnDate(new Date().toISOString().split("T")[0]);
+        // Auto-switch filter period to match the saved entry's date
+        if (!showAllTime && (savedYear !== filterYear || savedMonth !== filterMonth)) {
+          setFilterYear(savedYear);
+          setFilterMonth(savedMonth);
+          // useEffect on filterYear/filterMonth will trigger fetchReturns automatically
+        } else {
+          await fetchReturns();
+        }
       }
     } catch {} finally { setReturnSaving(false); }
   }
@@ -582,7 +591,7 @@ export default function CommissionsView() {
                           <>
                             <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
                             {returnAgg && returnAgg.totalDeduction > 0 && (
-                              <p className="text-xs text-orange-500 font-semibold">
+                              <p className="text-xs text-red-700 font-semibold">
                                 {fmtDZ(grossTotal)} − {fmtDZ(returnAgg.totalDeduction)}
                               </p>
                             )}
@@ -592,7 +601,7 @@ export default function CommissionsView() {
                                 return s + breakdown.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
                               }, 0))} {t("admin.commissions.office.parcels")}
                               {returnAgg && returnAgg.totalCount > 0 && (
-                                <span className="text-orange-400 ml-1">· {returnAgg.totalCount} {t("admin.commissions.office.returned")}</span>
+                                <span className="text-red-400 ml-1">· {returnAgg.totalCount} {t("admin.commissions.office.returned")}</span>
                               )}
                             </p>
                           </>
@@ -615,7 +624,7 @@ export default function CommissionsView() {
                         {hasReturns && !isExpanded && (
                           <button
                             onClick={() => setExpandedReturnOffice(isReturnExpanded ? null : name)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${isReturnExpanded ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${isReturnExpanded ? "bg-red-100 text-red-800 border-red-200" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"}`}
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -627,7 +636,7 @@ export default function CommissionsView() {
                         {hasData && (
                           <button
                             onClick={() => openReturnModal(name)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasReturns ? "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasReturns ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -649,27 +658,27 @@ export default function CommissionsView() {
 
                     {/* Return entries list (standalone, when not in upload expanded view) */}
                     {isReturnExpanded && !isExpanded && hasReturns && (
-                      <div className="border-t border-orange-100 bg-orange-50/40">
+                      <div className="border-t border-red-100 bg-red-50/40">
                         <div className="px-5 py-2.5 flex items-center justify-between">
-                          <p className="text-xs font-bold text-orange-700">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
+                          <p className="text-xs font-bold text-red-800">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
                         </div>
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b border-orange-100">
-                              <th className="text-left text-xs font-semibold text-orange-400 px-5 py-2">{t("admin.commissions.returnModal.date")}</th>
-                              <th className="text-right text-xs font-semibold text-orange-400 px-4 py-2">{t("admin.commissions.returnModal.count")}</th>
-                              <th className="text-right text-xs font-semibold text-orange-400 px-4 py-2">{t("admin.commissions.returnModal.deduction")}</th>
+                            <tr className="border-b border-red-100">
+                              <th className="text-left text-xs font-semibold text-red-400 px-5 py-2">{t("admin.commissions.returnModal.date")}</th>
+                              <th className="text-right text-xs font-semibold text-red-400 px-4 py-2">{t("admin.commissions.returnModal.count")}</th>
+                              <th className="text-right text-xs font-semibold text-red-400 px-4 py-2">{t("admin.commissions.returnModal.deduction")}</th>
                               {role === "admin" && <th className="px-4 py-2 w-10" />}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-orange-50">
+                          <tbody className="divide-y divide-red-100">
                             {returnAgg.entries.map(entry => (
-                              <tr key={entry.id} className="hover:bg-orange-50 transition-colors">
+                              <tr key={entry.id} className="hover:bg-red-50 transition-colors">
                                 <td className="px-5 py-2.5 text-gray-700 font-medium whitespace-nowrap">
                                   {new Date(entry.return_date).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
                                 </td>
-                                <td className="px-4 py-2.5 text-right text-orange-600 font-bold">{fmtN(Number(entry.return_count))}</td>
-                                <td className="px-4 py-2.5 text-right font-bold text-orange-700">{fmtDZ(Number(entry.deduction_dzd))}</td>
+                                <td className="px-4 py-2.5 text-right text-red-700 font-bold">{fmtN(Number(entry.return_count))}</td>
+                                <td className="px-4 py-2.5 text-right font-bold text-red-800">{fmtDZ(Number(entry.deduction_dzd))}</td>
                                 {role === "admin" && (
                                   <td className="px-4 py-2.5 text-right">
                                     <button
@@ -687,10 +696,10 @@ export default function CommissionsView() {
                             ))}
                           </tbody>
                           <tfoot>
-                            <tr className="bg-orange-100/60 border-t-2 border-orange-200/50">
-                              <td className="px-5 py-2 text-xs font-bold text-orange-700">Total</td>
-                              <td className="px-4 py-2 text-right font-black text-orange-700">{fmtN(returnAgg.totalCount)}</td>
-                              <td className="px-4 py-2 text-right font-black text-orange-700">{fmtDZ(returnAgg.totalDeduction)}</td>
+                            <tr className="bg-red-100/70 border-t-2 border-red-200/60">
+                              <td className="px-5 py-2 text-xs font-bold text-red-800">Total</td>
+                              <td className="px-4 py-2 text-right font-black text-red-800">{fmtN(returnAgg.totalCount)}</td>
+                              <td className="px-4 py-2 text-right font-black text-red-800">{fmtDZ(returnAgg.totalDeduction)}</td>
                               {role === "admin" && <td />}
                             </tr>
                           </tfoot>
@@ -823,20 +832,20 @@ export default function CommissionsView() {
 
                         {/* Return entries inline (when expanded) */}
                         {hasReturns && (
-                          <div className="border-t border-orange-100 bg-orange-50/40">
+                          <div className="border-t border-red-100 bg-red-50/40">
                             <div className="px-5 py-2.5 flex items-center justify-between">
-                              <p className="text-xs font-bold text-orange-700">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
-                              <p className="text-xs text-orange-500 font-semibold">− {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
+                              <p className="text-xs font-bold text-red-800">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
+                              <p className="text-xs text-red-700 font-semibold">− {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
                             </div>
                             <table className="w-full text-sm">
-                              <tbody className="divide-y divide-orange-50">
+                              <tbody className="divide-y divide-red-100">
                                 {returnAgg?.entries.map(entry => (
-                                  <tr key={entry.id} className="hover:bg-orange-50 transition-colors">
+                                  <tr key={entry.id} className="hover:bg-red-50 transition-colors">
                                     <td className="px-5 py-2.5 text-gray-700 font-medium whitespace-nowrap">
                                       {new Date(entry.return_date).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
                                     </td>
-                                    <td className="px-4 py-2.5 text-orange-600 font-bold">{fmtN(Number(entry.return_count))} colis</td>
-                                    <td className="px-4 py-2.5 text-right font-bold text-orange-700">{fmtDZ(Number(entry.deduction_dzd))}</td>
+                                    <td className="px-4 py-2.5 text-red-700 font-bold">{fmtN(Number(entry.return_count))} colis</td>
+                                    <td className="px-4 py-2.5 text-right font-bold text-red-800">{fmtDZ(Number(entry.deduction_dzd))}</td>
                                     <td className="px-4 py-2.5 w-10 text-right">
                                       {role === "admin" && (
                                         <button
@@ -853,9 +862,9 @@ export default function CommissionsView() {
                                 ))}
                               </tbody>
                               <tfoot>
-                                <tr className="bg-orange-100/60 border-t border-orange-200/50">
-                                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-orange-700">Net {office.wilaya}</td>
-                                  <td className="px-4 py-2 text-right font-black text-orange-700">{fmtDZ(netTotal)}</td>
+                                <tr className="bg-red-100/70 border-t border-red-200/60">
+                                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-red-800">Net {office.wilaya}</td>
+                                  <td className="px-4 py-2 text-right font-black text-red-800">{fmtDZ(netTotal)}</td>
                                   <td />
                                 </tr>
                               </tfoot>
@@ -1019,8 +1028,8 @@ export default function CommissionsView() {
         <div className="space-y-4 max-w-xl">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                 </svg>
               </div>
@@ -1041,13 +1050,13 @@ export default function CommissionsView() {
                     value={returnRateInput}
                     onChange={e => setReturnRateInput(e.target.value)}
                     placeholder="0"
-                    className="w-40 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                    className="w-40 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
                   />
                   <span className="text-sm text-gray-400 font-medium">DZD / {t("admin.commissions.returnRate.perParcel")}</span>
                 </div>
               </div>
 
-              <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-xs text-orange-700 leading-relaxed">
+              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-800 leading-relaxed">
                 {t("admin.commissions.returnRate.explanation")}
               </div>
 
@@ -1055,7 +1064,7 @@ export default function CommissionsView() {
                 <button
                   onClick={saveReturnRate}
                   disabled={returnRateSaving}
-                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm transition-colors disabled:opacity-60"
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-red-500 hover:bg-red-900 text-white rounded-xl shadow-sm transition-colors disabled:opacity-60"
                 >
                   {returnRateSaving ? <Spinner /> : (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
@@ -1164,8 +1173,8 @@ export default function CommissionsView() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowReturnModal(false)} />
           <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                 </svg>
               </div>
@@ -1189,7 +1198,7 @@ export default function CommissionsView() {
                   type="date"
                   value={returnDate}
                   onChange={e => setReturnDate(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
                 />
               </div>
               <div>
@@ -1200,7 +1209,7 @@ export default function CommissionsView() {
                   value={returnCount}
                   onChange={e => setReturnCount(e.target.value)}
                   placeholder="0"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
                 />
               </div>
 
@@ -1211,7 +1220,7 @@ export default function CommissionsView() {
                 </div>
                 <div className="flex items-center justify-between text-sm border-t border-gray-200 pt-2">
                   <span className="font-semibold text-gray-700">{t("admin.commissions.returnModal.deduction")}</span>
-                  <span className="font-black text-orange-600">{fmtDZ(Math.round((parseInt(returnCount) || 0) * returnRate))}</span>
+                  <span className="font-black text-red-700">{fmtDZ(Math.round((parseInt(returnCount) || 0) * returnRate))}</span>
                 </div>
               </div>
             </div>
@@ -1223,7 +1232,7 @@ export default function CommissionsView() {
               <button
                 onClick={saveReturn}
                 disabled={returnRate === 0 || returnSaving || !returnCount || parseInt(returnCount) <= 0}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-red-500 hover:bg-red-900 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
               >
                 {returnSaving ? <Spinner /> : t("admin.commissions.returnModal.save")}
               </button>
