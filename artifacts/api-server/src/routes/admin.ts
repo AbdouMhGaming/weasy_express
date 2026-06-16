@@ -849,7 +849,15 @@ router.get("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) => 
   }
 });
 
-router.get("/admin/charges/:id/attachment", adminAuth, financeOrAdminOnly, async (req, res) => {
+router.get("/admin/charges/:id/attachment", async (req, res) => {
+  const auth = (req.headers["authorization"] as string) ?? "";
+  const tokenFromHeader = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const tokenFromQuery = typeof (req.query as Record<string, string>).token === "string"
+    ? (req.query as Record<string, string>).token : "";
+  const token = tokenFromHeader || tokenFromQuery;
+  const result = verifyToken(token);
+  if (!result.valid) { res.status(401).json({ ok: false, error: "unauthorized" }); return; }
+
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   try {

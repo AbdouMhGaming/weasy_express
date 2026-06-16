@@ -4,7 +4,7 @@ import { API_BASE, adminHeaders } from "@/lib/api";
 
 type ChargeType = "outcome" | "income";
 
-interface Category { id: number; cat_key: string; name: string; icon: string; }
+interface Category { id: number; cat_key: string; name: string; icon: string; parent_id: number | null; }
 interface Charge {
   id: number; category: string; amount_dzd: number;
   description: string | null; charge_date: string; type: ChargeType;
@@ -18,7 +18,6 @@ const fmtD = (s: string) => {
 };
 const MAX_FILE_MB = 10;
 
-// ── Shared field helpers — defined OUTSIDE component to keep stable identity ──
 function Spinner() {
   return (
     <svg className="animate-spin w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24">
@@ -50,6 +49,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   // ── Outcome modal state ──
   const [showCharge, setShowCharge] = useState(false);
   const [chgCat, setChgCat] = useState("");
+  const [chgSubCat, setChgSubCat] = useState("");
   const [chgAmt, setChgAmt] = useState("");
   const [chgDesc, setChgDesc] = useState("");
   const [chgDate, setChgDate] = useState(new Date().toISOString().split("T")[0]);
@@ -61,6 +61,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   // ── Income modal state ──
   const [showIncome, setShowIncome] = useState(false);
   const [incCat, setIncCat] = useState("");
+  const [incSubCat, setIncSubCat] = useState("");
   const [incAmt, setIncAmt] = useState("");
   const [incDesc, setIncDesc] = useState("");
   const [incDate, setIncDate] = useState(new Date().toISOString().split("T")[0]);
@@ -69,6 +70,13 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const [incSaving, setIncSaving] = useState(false);
   const incFileRef = useRef<HTMLInputElement>(null);
 
+  const parentCats = useMemo(() => cats.filter(c => !c.parent_id), [cats]);
+  const childrenOf = useCallback((parentKey: string) => {
+    const parent = cats.find(c => c.cat_key === parentKey);
+    if (!parent) return [];
+    return cats.filter(c => c.parent_id === parent.id);
+  }, [cats]);
+
   const fetchCategories = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/categories`, { headers: adminHeaders() });
@@ -76,7 +84,8 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
       const d = await res.json();
       if (d.ok) {
         setCats(d.categories ?? []);
-        const firstKey = d.categories?.[0]?.cat_key ?? "";
+        const parentCatList = (d.categories ?? []).filter((c: Category) => !c.parent_id);
+        const firstKey = parentCatList[0]?.cat_key ?? "";
         setChgCat((prev) => prev || firstKey);
         setIncCat((prev) => prev || firstKey);
       }
@@ -104,15 +113,15 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   useEffect(() => { fetchCategories(); fetchAll(); }, [fetchCategories, fetchAll]);
 
   function resetChgModal() {
-    setChgAmt(""); setChgDesc(""); setChgFile(null); setChgFileErr("");
+    setChgAmt(""); setChgDesc(""); setChgFile(null); setChgFileErr(""); setChgSubCat("");
     setChgDate(new Date().toISOString().split("T")[0]);
-    setChgCat(cats[0]?.cat_key ?? "");
+    setChgCat(parentCats[0]?.cat_key ?? "");
     if (chgFileRef.current) chgFileRef.current.value = "";
   }
   function resetIncModal() {
-    setIncAmt(""); setIncDesc(""); setIncFile(null); setIncFileErr("");
+    setIncAmt(""); setIncDesc(""); setIncFile(null); setIncFileErr(""); setIncSubCat("");
     setIncDate(new Date().toISOString().split("T")[0]);
-    setIncCat(cats[0]?.cat_key ?? "");
+    setIncCat(parentCats[0]?.cat_key ?? "");
     if (incFileRef.current) incFileRef.current.value = "";
   }
 
@@ -140,7 +149,8 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
     if (!chgAmt || isNaN(parseInt(chgAmt))) return;
     setChgSaving(true);
     try {
-      const body: Record<string, unknown> = { category: chgCat, amount_dzd: parseInt(chgAmt), description: chgDesc || null, charge_date: chgDate, type: "outcome" };
+      const effectiveCat = chgSubCat || chgCat;
+      const body: Record<string, unknown> = { category: effectiveCat, amount_dzd: parseInt(chgAmt), description: chgDesc || null, charge_date: chgDate, type: "outcome" };
       if (chgFile) { body.attachment_name = chgFile.name; body.attachment_data = chgFile.b64; }
       const res = await fetch(`${API_BASE}/api/admin/charges`, { method: "POST", headers: adminHeaders(), body: JSON.stringify(body) });
       if (res.status === 401) { onUnauth(); return; }
@@ -153,7 +163,8 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
     if (!incAmt || isNaN(parseInt(incAmt))) return;
     setIncSaving(true);
     try {
-      const body: Record<string, unknown> = { category: incCat, amount_dzd: parseInt(incAmt), description: incDesc || null, charge_date: incDate, type: "income" };
+      const effectiveCat = incSubCat || incCat;
+      const body: Record<string, unknown> = { category: effectiveCat, amount_dzd: parseInt(incAmt), description: incDesc || null, charge_date: incDate, type: "income" };
       if (incFile) { body.attachment_name = incFile.name; body.attachment_data = incFile.b64; }
       const res = await fetch(`${API_BASE}/api/admin/charges`, { method: "POST", headers: adminHeaders(), body: JSON.stringify(body) });
       if (res.status === 401) { onUnauth(); return; }
@@ -176,6 +187,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const balance = totalIncome - totalOutcome;
 
   const getCat = (key: string) => cats.find(c => c.cat_key === key);
+
+  // Token for attachment links (avoid 401 in new tab)
+  const adminToken = localStorage.getItem("admin_token") ?? "";
 
   const ATTACHMENT_SECTION = (
     fileRef: React.RefObject<HTMLInputElement | null>,
@@ -205,6 +219,45 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
       <p className="text-xs text-gray-400 mt-1">{t("admin.charges.chargeModal.attachmentHint", { max: MAX_FILE_MB })}</p>
     </div>
   );
+
+  // Sub-category selector component
+  const SubCatPicker = ({
+    parentKey, value, onChange, accent
+  }: { parentKey: string; value: string; onChange: (v: string) => void; accent: string; }) => {
+    const children = childrenOf(parentKey);
+    if (children.length === 0) return null;
+    return (
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.charges.chargeModal.subCategory")}</label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+              value === "" ? `border-current ${accent} bg-current/5` : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+            }`}
+          >
+            — Général
+          </button>
+          {children.map(child => (
+            <button
+              key={child.cat_key}
+              type="button"
+              onClick={() => onChange(child.cat_key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+                value === child.cat_key
+                  ? `border-current ${accent} bg-current/5 font-bold`
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              <span>{child.icon}</span>
+              {child.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-6 lg:p-8">
@@ -264,11 +317,11 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
         ))}
       </div>
 
-      {/* Category Cards (outcome only) */}
+      {/* Category Cards (parent cats only) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3 mb-8">
-        {cats.map((cat) => {
+        {parentCats.map((cat) => {
           const catTotal = summary?.byCategory[cat.cat_key] ?? 0;
-          const maxTotal = Math.max(...cats.map(c => summary?.byCategory[c.cat_key] ?? 0), 1);
+          const maxTotal = Math.max(...parentCats.map(c => summary?.byCategory[c.cat_key] ?? 0), 1);
           const pct = Math.round((catTotal / maxTotal) * 100);
           return (
             <div key={cat.cat_key} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col items-center text-center gap-2">
@@ -312,7 +365,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-gray-400">{fmtD(c.charge_date)}</p>
                         {c.attachment_name && (
-                          <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment`} target="_blank" rel="noopener noreferrer"
+                          <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment?token=${encodeURIComponent(adminToken)}`} target="_blank" rel="noopener noreferrer"
                             className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 font-medium">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                             {c.attachment_name.length > 16 ? c.attachment_name.slice(0, 14) + "…" : c.attachment_name}
@@ -357,7 +410,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-gray-400">{fmtD(c.charge_date)}</p>
                         {c.attachment_name && (
-                          <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment`} target="_blank" rel="noopener noreferrer"
+                          <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment?token=${encodeURIComponent(adminToken)}`} target="_blank" rel="noopener noreferrer"
                             className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 font-medium">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                             {c.attachment_name.length > 16 ? c.attachment_name.slice(0, 14) + "…" : c.attachment_name}
@@ -393,11 +446,17 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.charges.chargeModal.category")}</label>
-                <select value={chgCat} onChange={(e) => setChgCat(e.target.value)}
+                <select value={chgCat} onChange={(e) => { setChgCat(e.target.value); setChgSubCat(""); }}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
-                  {cats.map(c => <option key={c.cat_key} value={c.cat_key}>{c.icon} {c.name}</option>)}
+                  {parentCats.map(c => <option key={c.cat_key} value={c.cat_key}>{c.icon} {c.name}</option>)}
                 </select>
               </div>
+              <SubCatPicker
+                parentKey={chgCat}
+                value={chgSubCat}
+                onChange={setChgSubCat}
+                accent="text-[#E10600]"
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.charges.chargeModal.amount")}</label>
@@ -453,11 +512,17 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.charges.chargeModal.category")}</label>
-                <select value={incCat} onChange={(e) => setIncCat(e.target.value)}
+                <select value={incCat} onChange={(e) => { setIncCat(e.target.value); setIncSubCat(""); }}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white">
-                  {cats.map(c => <option key={c.cat_key} value={c.cat_key}>{c.icon} {c.name}</option>)}
+                  {parentCats.map(c => <option key={c.cat_key} value={c.cat_key}>{c.icon} {c.name}</option>)}
                 </select>
               </div>
+              <SubCatPicker
+                parentKey={incCat}
+                value={incSubCat}
+                onChange={setIncSubCat}
+                accent="text-emerald-600"
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.charges.chargeModal.amount")}</label>

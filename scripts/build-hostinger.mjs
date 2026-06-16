@@ -17,8 +17,10 @@
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
-import { createWriteStream } from "fs";
-import { pipeline } from "stream/promises";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const AdmZip = require("adm-zip");
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const DEPLOY_DIR = path.join(ROOT, "deploy");
@@ -148,25 +150,31 @@ node migrate-to-new-db.mjs
 `;
 fs.writeFileSync(path.join(BUILD_DIR, "README.md"), readme);
 
-// ── 4. Create archive ─────────────────────────────────────────────────────
-console.log("\n📦  Creating archive…");
+// ── 4. Create zip archive with adm-zip ────────────────────────────────────
+console.log("\n📦  Creating zip archive (adm-zip)…");
 const dateStr = new Date().toISOString().slice(0, 10);
+const archiveName = `weasy-express-${dateStr}.zip`;
+const archivePath = path.join(DEPLOY_DIR, archiveName);
 
-// Try zip first, fall back to tar.gz
-let archiveName, archivePath;
-const hasZip = (() => { try { execSync("which zip", { stdio: "pipe" }); return true; } catch { return false; } })();
+if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
 
-if (hasZip) {
-  archiveName = `weasy-express-${dateStr}.zip`;
-  archivePath = path.join(DEPLOY_DIR, archiveName);
-  if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
-  run(`cd "${BUILD_DIR}" && zip -r "${archivePath}" .`);
-} else {
-  archiveName = `weasy-express-${dateStr}.tar.gz`;
-  archivePath = path.join(DEPLOY_DIR, archiveName);
-  if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
-  run(`tar -czf "${archivePath}" -C "${BUILD_DIR}" .`);
+const zip = new AdmZip();
+
+function addDirToZip(zip, srcDir, zipPrefix = "") {
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath = path.join(srcDir, entry.name);
+    const entryZipDir = zipPrefix;
+    if (entry.isDirectory()) {
+      const subPrefix = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name;
+      addDirToZip(zip, srcPath, subPrefix);
+    } else {
+      zip.addLocalFile(srcPath, entryZipDir);
+    }
+  }
 }
+
+addDirToZip(zip, BUILD_DIR);
+zip.writeZip(archivePath);
 
 const stats = fs.statSync(archivePath);
 const sizeMb = (stats.size / 1024 / 1024).toFixed(1);
