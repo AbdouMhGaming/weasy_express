@@ -646,6 +646,7 @@ const ar: Translations = {
       tabs: {
         offices: "المكاتب",
         rates: "التسعيرة",
+        returns: "الإرجاعات",
       },
       period: "الفترة",
       showAll: "عرض الكل",
@@ -669,6 +670,8 @@ const ar: Translations = {
         loadingData: "جارٍ تحميل البيانات…",
         totalLabel: "الإجمالي",
         parcels: "طرد",
+        return: "إرجاع",
+        returned: "مُعادة",
       },
       add: {
         title: "إضافة عمولة",
@@ -736,6 +739,28 @@ const ar: Translations = {
         commission: "العمولة",
         noWilaya: "ولاية غير معروفة",
         parseError: "خطأ في قراءة الملف",
+      },
+      returnRate: {
+        title: "معدل الإرجاع",
+        subtitle: "المعدل العام المطبّق على جميع المكاتب لخصم الطرود المُعادة",
+        rate: "المعدل (د.ج/طرد مُعاد)",
+        perParcel: "طرد",
+        save: "حفظ",
+        saved: "تم الحفظ!",
+        explanation: "سيُطبَّق هذا المعدل على جميع المكاتب. لكل مكتب، اضغط على «إرجاع» وأدخل عدد الطرود المُعادة — سيُحسب الخصم تلقائيًا.",
+        currentRate: "المعدل الحالي",
+      },
+      returnModal: {
+        title: "تسجيل إرجاع",
+        count: "الطرود المُعادة",
+        rate: "المعدل المطبّق",
+        deduction: "الخصم",
+        save: "حفظ",
+        cancel: "إلغاء",
+        noRate: "لم يُحدَّد معدل إرجاع. انتقل إلى تبويب «الإرجاعات» لضبطه.",
+      },
+      details: {
+        rateCategory: "فئة التسعيرة",
       },
     },
     settings: {

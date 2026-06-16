@@ -21,6 +21,11 @@ interface ParsedResult {
   commission: number;
 }
 
+interface ParsedUpload {
+  breakdown: ParsedResult[];
+  rateType?: string;
+}
+
 interface Office {
   id: number;
   wilaya: string;
@@ -37,6 +42,13 @@ const MONTHS = [
 ];
 const THIS_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 4 }, (_, i) => THIS_YEAR - i);
+
+const RATE_TYPE_LABELS: Record<string, string> = {
+  classic_stop_desk: "Classique — Stop Desk",
+  classic_domicile: "Classique — À Domicile",
+  ecommerce_stop_desk: "E-commerce — Stop Desk",
+  ecommerce_domicile: "E-commerce — À Domicile",
+};
 
 const ALL_WILAYAS: { num: string; name: string }[] = [
   { num: "01", name: "Adrar" }, { num: "02", name: "Chlef" }, { num: "03", name: "Laghouat" },
@@ -61,6 +73,17 @@ const ALL_WILAYAS: { num: string; name: string }[] = [
   { num: "58", name: "El Menia" },
 ];
 
+function parseUpload(u: CommissionUpload): ParsedUpload {
+  try {
+    const raw = JSON.parse(u.results_json ?? "[]");
+    if (Array.isArray(raw)) return { breakdown: raw };
+    if (raw && typeof raw === "object" && Array.isArray(raw.breakdown)) {
+      return { breakdown: raw.breakdown as ParsedResult[], rateType: raw.rateType as string | undefined };
+    }
+    return { breakdown: [] };
+  } catch { return { breakdown: [] }; }
+}
+
 function Spinner({ size = "sm" }: { size?: "sm" | "md" }) {
   const cls = size === "md" ? "w-6 h-6" : "w-4 h-4";
   return (
@@ -71,7 +94,7 @@ function Spinner({ size = "sm" }: { size?: "sm" | "md" }) {
   );
 }
 
-type Tab = "offices" | "rates";
+type Tab = "offices" | "rates" | "returns";
 
 function fullOfficeName(o: Office): string {
   return `${o.wilaya}${o.commune ? " \u2014 " + o.commune : ""}`;
@@ -81,6 +104,9 @@ function wilayaBadge(wilayaNumber: string | number): string {
   const s = String(wilayaNumber);
   return s.includes(".") ? s : s.padStart(2, "0");
 }
+
+const LS_RETURN_RATE = "commission_return_rate";
+const LS_RETURNS_PREFIX = "commission_office_returns_";
 
 export default function CommissionsView() {
   const { t } = useTranslation();
@@ -107,7 +133,6 @@ export default function CommissionsView() {
   const [addUploading, setAddUploading] = useState(false);
   const [addError, setAddError] = useState("");
   const addFileRef = useRef<HTMLInputElement>(null);
-
   const [addRateType, setAddRateType] = useState("classic_stop_desk");
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -120,6 +145,61 @@ export default function CommissionsView() {
   const [officeRateSaving, setOfficeRateSaving] = useState(false);
   const [officeRateSaved, setOfficeRateSaved] = useState(false);
   const [officeRateError, setOfficeRateError] = useState("");
+
+  // Return Rate state
+  const [returnRateInput, setReturnRateInput] = useState("");
+  const [returnRate, setReturnRate] = useState(0);
+  const [returnRateSaved, setReturnRateSaved] = useState(false);
+
+  // Per-office return modal state
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnModalOffice, setReturnModalOffice] = useState("");
+  const [returnCount, setReturnCount] = useState("");
+
+  // Per-office returns: officeName → { count, deduction }
+  const [officeReturns, setOfficeReturns] = useState<Record<string, { count: number; deduction: number }>>({});
+
+  // Load return rate from localStorage
+  useEffect(() => {
+    const stored = parseFloat(localStorage.getItem(LS_RETURN_RATE) ?? "0") || 0;
+    setReturnRate(stored);
+    setReturnRateInput(stored > 0 ? String(stored) : "");
+  }, []);
+
+  // Period key for localStorage
+  const periodKey = showAllTime ? "all" : `${filterYear}-${String(filterMonth).padStart(2, "0")}`;
+
+  // Load per-office returns for current period
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(`${LS_RETURNS_PREFIX}${periodKey}`) ?? "{}");
+      setOfficeReturns(stored as Record<string, { count: number; deduction: number }>);
+    } catch { setOfficeReturns({}); }
+  }, [periodKey]);
+
+  function saveReturnRate() {
+    const r = parseFloat(returnRateInput) || 0;
+    setReturnRate(r);
+    localStorage.setItem(LS_RETURN_RATE, String(r));
+    setReturnRateSaved(true);
+    setTimeout(() => setReturnRateSaved(false), 2500);
+  }
+
+  function openReturnModal(officeName: string) {
+    setReturnModalOffice(officeName);
+    setReturnCount(String(officeReturns[officeName]?.count ?? ""));
+    setShowReturnModal(true);
+  }
+
+  function saveReturn() {
+    const count = parseInt(returnCount) || 0;
+    const deduction = count * returnRate;
+    const updated = { ...officeReturns, [returnModalOffice]: { count, deduction } };
+    setOfficeReturns(updated);
+    localStorage.setItem(`${LS_RETURNS_PREFIX}${periodKey}`, JSON.stringify(updated));
+    setShowReturnModal(false);
+    setReturnCount("");
+  }
 
   const fetchOffices = useCallback(async () => {
     setOfficesLoading(true);
@@ -156,10 +236,8 @@ export default function CommissionsView() {
   const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0);
   const activeOfficeCount = new Set(history.map(h => h.period_label)).size;
   const totalDelivered = history.reduce((s, h) => {
-    try {
-      const rows: ParsedResult[] = JSON.parse(h.results_json ?? "[]");
-      return s + rows.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
-    } catch { return s; }
+    const { breakdown } = parseUpload(h);
+    return s + breakdown.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
   }, 0);
 
   const periodLabel = showAllTime
@@ -284,8 +362,8 @@ export default function CommissionsView() {
       t("admin.commissions.office.parcels"), `${t("admin.commissions.kpi.total")} (DZD)`
     ]];
     for (const h of history) {
-      let delivered = 0;
-      try { delivered = (JSON.parse(h.results_json ?? "[]") as ParsedResult[]).reduce((s, r) => s + (r.delivered ?? 0), 0); } catch {}
+      const { breakdown } = parseUpload(h);
+      const delivered = breakdown.reduce((s, r) => s + (r.delivered ?? 0), 0);
       rows.push([h.period_label, new Date(h.created_at).toLocaleDateString("fr-DZ"), String(delivered), String(Math.round(Number(h.total_commissions)))]);
     }
     const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -295,6 +373,15 @@ export default function CommissionsView() {
     a.href = url; a.download = `commissions_${showAllTime ? "all" : `${filterYear}-${String(filterMonth).padStart(2,"0")}`}.csv`;
     a.click(); URL.revokeObjectURL(url);
   }
+
+  const tabBtn = (value: Tab, label: string) => (
+    <button
+      onClick={() => setTab(value)}
+      className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${tab === value ? "bg-[#E10600] text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
@@ -306,18 +393,9 @@ export default function CommissionsView() {
           <p className="text-sm text-gray-500 mt-0.5">{t("admin.commissions.subtitle")} · {periodLabel}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setTab("offices")}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${tab === "offices" ? "bg-[#E10600] text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
-          >
-            {t("admin.commissions.tabs.offices")}
-          </button>
-          <button
-            onClick={() => setTab("rates")}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${tab === "rates" ? "bg-[#E10600] text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
-          >
-            {t("admin.commissions.tabs.rates")}
-          </button>
+          {tabBtn("offices", t("admin.commissions.tabs.offices"))}
+          {tabBtn("rates", t("admin.commissions.tabs.rates"))}
+          {tabBtn("returns", t("admin.commissions.tabs.returns"))}
         </div>
       </div>
 
@@ -331,40 +409,28 @@ export default function CommissionsView() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span className="text-sm font-semibold text-gray-700 shrink-0">{t("admin.commissions.period")} :</span>
-
             <button
               onClick={() => setShowAllTime(v => !v)}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${showAllTime ? "bg-[#E10600] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               {t("admin.commissions.showAll")}
             </button>
-
             {!showAllTime && (
               <>
-                <select
-                  value={filterMonth}
-                  onChange={e => setFilterMonth(Number(e.target.value))}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
-                >
+                <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
-                <select
-                  value={filterYear}
-                  onChange={e => setFilterYear(Number(e.target.value))}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
-                >
+                <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white">
                   {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </>
             )}
-
             <div className="flex-1" />
-
             {history.length > 0 && (
-              <button
-                onClick={downloadCSV}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-[#E10600] border border-[#E10600]/30 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-              >
+              <button onClick={downloadCSV}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-[#E10600] border border-[#E10600]/30 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
@@ -373,7 +439,7 @@ export default function CommissionsView() {
             )}
           </div>
 
-          {/* KPI Summary */}
+          {/* KPI */}
           {!historyLoading && (
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
@@ -409,13 +475,14 @@ export default function CommissionsView() {
                 const name = fullOfficeName(office);
                 const uploads = officeUploads(name);
                 const total = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
+                const returnData = officeReturns[name];
+                const netTotal = total - (returnData?.deduction ?? 0);
                 const isExpanded = expandedOffice === name;
                 const hasData = uploads.length > 0;
                 const badge = wilayaBadge(office.wilayaNumber);
 
                 return (
                   <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    {/* Office row */}
                     <div className="flex items-center gap-4 px-5 py-4">
                       <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0"
@@ -423,7 +490,6 @@ export default function CommissionsView() {
                       >
                         {badge}
                       </div>
-
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-gray-900 leading-tight">
                           {office.wilaya}
@@ -440,12 +506,20 @@ export default function CommissionsView() {
                       <div className="text-right shrink-0 mr-2">
                         {hasData ? (
                           <>
-                            <p className="text-lg font-black text-[#E10600]">{fmtDZ(total)}</p>
+                            <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
+                            {returnData && returnData.deduction > 0 && (
+                              <p className="text-xs text-orange-500 font-semibold">
+                                {fmtDZ(total)} − {fmtDZ(returnData.deduction)}
+                              </p>
+                            )}
                             <p className="text-xs text-gray-400">
                               {fmtN(uploads.reduce((s, h) => {
-                                try { return s + (JSON.parse(h.results_json ?? "[]") as ParsedResult[]).reduce((rs, r) => rs + (r.delivered ?? 0), 0); }
-                                catch { return s; }
+                                const { breakdown } = parseUpload(h);
+                                return s + breakdown.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
                               }, 0))} {t("admin.commissions.office.parcels")}
+                              {returnData && returnData.count > 0 && (
+                                <span className="text-orange-400 ml-1">· {returnData.count} {t("admin.commissions.office.returned")}</span>
+                              )}
                             </p>
                           </>
                         ) : (
@@ -463,6 +537,18 @@ export default function CommissionsView() {
                             {isExpanded ? t("admin.commissions.office.hide") : t("admin.commissions.office.details")}
                           </button>
                         )}
+                        {/* Return button */}
+                        {hasData && (
+                          <button
+                            onClick={() => openReturnModal(name)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${returnData && returnData.count > 0 ? "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                            {t("admin.commissions.office.return")}
+                          </button>
+                        )}
                         <button
                           onClick={() => openAdd(name)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-lg transition-colors shadow-sm"
@@ -475,7 +561,7 @@ export default function CommissionsView() {
                       </div>
                     </div>
 
-                    {/* Expanded: upload history for this office */}
+                    {/* Expanded: upload history */}
                     {isExpanded && uploads.length > 0 && (
                       <div className="border-t border-gray-100 bg-gray-50/60">
                         <table className="w-full text-sm">
@@ -483,6 +569,7 @@ export default function CommissionsView() {
                             <tr className="border-b border-gray-100">
                               <th className="text-left text-xs font-semibold text-gray-400 px-5 py-2.5">Date</th>
                               <th className="text-left text-xs font-semibold text-gray-400 px-4 py-2.5 hidden sm:table-cell">Fichier</th>
+                              <th className="text-left text-xs font-semibold text-gray-400 px-4 py-2.5 hidden md:table-cell">{t("admin.commissions.details.rateCategory")}</th>
                               <th className="text-right text-xs font-semibold text-gray-400 px-4 py-2.5">{t("admin.commissions.kpi.delivered")}</th>
                               <th className="text-right text-xs font-semibold text-gray-400 px-4 py-2.5">Commission</th>
                               <th className="px-4 py-2.5 w-28"></th>
@@ -490,9 +577,8 @@ export default function CommissionsView() {
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {uploads.map(u => {
-                              let delivered = 0;
-                              let breakdown: ParsedResult[] = [];
-                              try { breakdown = JSON.parse(u.results_json ?? "[]"); delivered = breakdown.reduce((s, r) => s + (r.delivered ?? 0), 0); } catch {}
+                              const { breakdown, rateType } = parseUpload(u);
+                              const delivered = breakdown.reduce((s, r) => s + (r.delivered ?? 0), 0);
                               const isBreakExpanded = expandedBreakId === u.id;
 
                               return (
@@ -503,6 +589,15 @@ export default function CommissionsView() {
                                     </td>
                                     <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate hidden sm:table-cell" title={u.file_name}>
                                       {u.file_name}
+                                    </td>
+                                    <td className="px-4 py-3 hidden md:table-cell">
+                                      {rateType ? (
+                                        <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                                          {RATE_TYPE_LABELS[rateType] ?? rateType}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-gray-300">—</span>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 text-right text-gray-700 font-semibold">{fmtN(delivered)}</td>
                                     <td className="px-4 py-3 text-right font-bold text-[#E10600]">{fmtDZ(Number(u.total_commissions))}</td>
@@ -548,7 +643,7 @@ export default function CommissionsView() {
                                   {/* Per-wilaya breakdown */}
                                   {isBreakExpanded && breakdown.length > 0 && (
                                     <tr key={`break-${u.id}`}>
-                                      <td colSpan={5} className="px-5 py-3 bg-white">
+                                      <td colSpan={6} className="px-5 py-3 bg-white">
                                         <div className="rounded-xl border border-gray-100 overflow-hidden">
                                           <table className="w-full text-xs">
                                             <thead>
@@ -582,7 +677,7 @@ export default function CommissionsView() {
                           {/* Office total row */}
                           <tfoot>
                             <tr className="bg-red-50 border-t-2 border-[#E10600]/20">
-                              <td colSpan={3} className="px-5 py-2.5 font-bold text-gray-900 text-xs uppercase tracking-wide">{t("admin.commissions.office.totalLabel")} {office.wilaya}</td>
+                              <td colSpan={4} className="px-5 py-2.5 font-bold text-gray-900 text-xs uppercase tracking-wide">{t("admin.commissions.office.totalLabel")} {office.wilaya}</td>
                               <td className="px-4 py-2.5 text-right font-black text-[#E10600]">{fmtDZ(total)}</td>
                               <td className="px-4" />
                             </tr>
@@ -740,6 +835,69 @@ export default function CommissionsView() {
         </div>
       )}
 
+      {/* ── Return Rate Tab ── */}
+      {tab === "returns" && (
+        <div className="space-y-4 max-w-xl">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900">{t("admin.commissions.returnRate.title")}</h2>
+                <p className="text-xs text-gray-400">{t("admin.commissions.returnRate.subtitle")}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.returnRate.rate")}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={returnRateInput}
+                    onChange={e => setReturnRateInput(e.target.value)}
+                    placeholder="0"
+                    className="w-40 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                  />
+                  <span className="text-sm text-gray-400 font-medium">DZD / {t("admin.commissions.returnRate.perParcel")}</span>
+                </div>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 text-xs text-orange-700 leading-relaxed">
+                {t("admin.commissions.returnRate.explanation")}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={saveReturnRate}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                  {t("admin.commissions.returnRate.save")}
+                </button>
+                {returnRateSaved && (
+                  <span className="text-sm text-green-600 font-semibold flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                    {t("admin.commissions.returnRate.saved")}
+                  </span>
+                )}
+              </div>
+
+              {returnRate > 0 && (
+                <p className="text-xs text-gray-500">
+                  {t("admin.commissions.returnRate.currentRate")} : <span className="font-bold text-gray-800">{fmtDZ(returnRate)}</span> / {t("admin.commissions.returnRate.perParcel")}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Add Commission Modal ── */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -752,16 +910,16 @@ export default function CommissionsView() {
 
             <form onSubmit={handleAddSubmit} className="p-6 space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Catégorie de tarif</label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.details.rateCategory")}</label>
                 <select
                   value={addRateType}
                   onChange={e => setAddRateType(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
                 >
-                  <option value="classic_stop_desk">Classique — Stop Desk</option>
-                  <option value="classic_domicile">Classique — À Domicile</option>
-                  <option value="ecommerce_stop_desk">E-commerce — Stop Desk</option>
-                  <option value="ecommerce_domicile">E-commerce — À Domicile</option>
+                  <option value="classic_stop_desk">{RATE_TYPE_LABELS.classic_stop_desk}</option>
+                  <option value="classic_domicile">{RATE_TYPE_LABELS.classic_domicile}</option>
+                  <option value="ecommerce_stop_desk">{RATE_TYPE_LABELS.ecommerce_stop_desk}</option>
+                  <option value="ecommerce_domicile">{RATE_TYPE_LABELS.ecommerce_domicile}</option>
                 </select>
               </div>
 
@@ -814,6 +972,71 @@ export default function CommissionsView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Return Modal ── */}
+      {showReturnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowReturnModal(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900">{t("admin.commissions.returnModal.title")}</h3>
+                <p className="text-xs text-gray-400 truncate">{returnModalOffice}</p>
+              </div>
+              <button onClick={() => setShowReturnModal(false)} className="text-gray-400 hover:text-gray-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-xl shrink-0">×</button>
+            </div>
+
+            {returnRate === 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 mb-4">
+                {t("admin.commissions.returnModal.noRate")}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.returnModal.count")}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={returnCount}
+                  onChange={e => setReturnCount(e.target.value)}
+                  placeholder="0"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">{t("admin.commissions.returnModal.rate")}</span>
+                  <span className="font-semibold text-gray-700">{fmtDZ(returnRate)} / {t("admin.commissions.returnRate.perParcel")}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm border-t border-gray-200 pt-2">
+                  <span className="font-semibold text-gray-700">{t("admin.commissions.returnModal.deduction")}</span>
+                  <span className="font-black text-orange-600">{fmtDZ((parseInt(returnCount) || 0) * returnRate)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowReturnModal(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">
+                {t("admin.commissions.returnModal.cancel")}
+              </button>
+              <button
+                onClick={saveReturn}
+                disabled={returnRate === 0}
+                className="flex-1 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
+              >
+                {t("admin.commissions.returnModal.save")}
+              </button>
+            </div>
           </div>
         </div>
       )}

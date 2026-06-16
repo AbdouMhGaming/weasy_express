@@ -13,6 +13,7 @@ import {
   superAdminOnly,
   financeOrAdminOnly,
   generateToken,
+  verifyToken,
   verifyAdminCredentials,
   verifyPassword,
   hashPassword,
@@ -1309,7 +1310,7 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
       const authReq = req as AuthedRequest;
       await conn.execute(
         "INSERT INTO commission_uploads (uploaded_by, file_name, period_label, results_json, total_commissions, xlsx_file) VALUES (?, ?, ?, ?, ?, ?)",
-        [authReq.adminUsername ?? "", file.originalname, officeName, JSON.stringify(results), totalCommissions, xlsxFilename]
+        [authReq.adminUsername ?? "", file.originalname, officeName, JSON.stringify({ breakdown: results, rateType: rateTypeRaw }), totalCommissions, xlsxFilename]
       );
 
       res.json({ ok: true, results, totalCommissions, officeName, detectedDeliveredCol: deliveredCol, detectedWilayaCol: wilayaCol });

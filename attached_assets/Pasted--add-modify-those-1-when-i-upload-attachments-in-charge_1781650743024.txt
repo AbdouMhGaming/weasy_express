@@ -1,0 +1,19 @@
+
+add / modify those :
+1- when i upload attachments in charges when i click income / charge and open them it open in new winodw but it says "ReferenceError: verifyToken is not defined
+    at <anonymous> (/home/runner/workspace/artifacts/api-server/src/routes/admin.ts:858:18)
+    at Layer.handleRequest (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/lib/layer.js:152:17)
+    at next (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/lib/route.js:117:3)
+    at handle (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/lib/layer.js:152:17)
+    at <anonymous> (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/index.js:295:15)
+    at param (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/index.js:600:14)
+    at param (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/index.js:610:14)
+    at processParams (/home/runner/workspace/node_modules/.pnpm/router@2.2.0/node_modules/router/index.js:664:3)" fix this so it open properly 
+2- in Commissions section beside offices and rates create new one for reteurn rate this one is fixed for all wilayas and all offices so ill just type manualy one rate and then in offices beside add button create button for reteun so when i click on it it will show popup and i type how many order returned and then it will calculate auto using return rate i have put and it remove from tht office total Commissions
+3- in Commissions section when i click on details to see offices Commissions details beside ( Date - Fichier - Parcels delivered	 - Commission ) add also Catégorie de tarif and also 
+4- make sure everything in all administration is in all three lang scan everything 
+5- when i uplaod the last hostinger file u gave me it en open site says "503
+Service Unavailable
+The server is temporarily busy, try again later!" give me new file to uplaod but like this one i just mentioned attached_assets/weasy-express-hostinger_(2)_1781623511447.zip

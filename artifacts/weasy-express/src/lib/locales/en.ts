@@ -646,6 +646,7 @@ const en: Translations = {
       tabs: {
         offices: "Offices",
         rates: "Rates",
+        returns: "Returns",
       },
       period: "Period",
       showAll: "Show all",
@@ -669,6 +670,8 @@ const en: Translations = {
         loadingData: "Loading data…",
         totalLabel: "Total",
         parcels: "parcels",
+        return: "Return",
+        returned: "returns",
       },
       add: {
         title: "Add commission",
@@ -736,6 +739,28 @@ const en: Translations = {
         commission: "Commission",
         noWilaya: "unknown wilaya",
         parseError: "Error parsing the file",
+      },
+      returnRate: {
+        title: "Return Rate",
+        subtitle: "Global rate applied to all offices for return deductions",
+        rate: "Rate (DZD/returned parcel)",
+        perParcel: "parcel",
+        save: "Save",
+        saved: "Saved!",
+        explanation: "This rate will be applied to all offices. For each office, click \"Return\" and enter the number of returned parcels — the deduction will be calculated automatically.",
+        currentRate: "Current rate",
+      },
+      returnModal: {
+        title: "Record a return",
+        count: "Returned parcels",
+        rate: "Applied rate",
+        deduction: "Deduction",
+        save: "Save",
+        cancel: "Cancel",
+        noRate: "No return rate defined. Go to the \"Returns\" tab to configure it.",
+      },
+      details: {
+        rateCategory: "Rate category",
       },
     },
     settings: {

@@ -644,6 +644,7 @@ const fr = {
       tabs: {
         offices: "Bureaux",
         rates: "Taux",
+        returns: "Retours",
       },
       period: "Période",
       showAll: "Tout afficher",
@@ -667,6 +668,8 @@ const fr = {
         loadingData: "Chargement des données…",
         totalLabel: "Total",
         parcels: "colis",
+        return: "Retour",
+        returned: "retours",
       },
       add: {
         title: "Ajouter une commission",
@@ -734,6 +737,28 @@ const fr = {
         commission: "Commission",
         noWilaya: "wilaya inconnue",
         parseError: "Erreur lors de l'analyse du fichier",
+      },
+      returnRate: {
+        title: "Taux de retour",
+        subtitle: "Taux global appliqué à tous les bureaux pour déduire les retours",
+        rate: "Taux (DZD/colis retourné)",
+        perParcel: "colis",
+        save: "Enregistrer",
+        saved: "Enregistré !",
+        explanation: "Ce taux sera appliqué à tous les bureaux. Pour chaque bureau, cliquez sur « Retour » et entrez le nombre de colis retournés — la déduction sera calculée automatiquement.",
+        currentRate: "Taux actuel",
+      },
+      returnModal: {
+        title: "Enregistrer un retour",
+        count: "Nombre de colis retournés",
+        rate: "Taux appliqué",
+        deduction: "Déduction",
+        save: "Enregistrer",
+        cancel: "Annuler",
+        noRate: "Aucun taux de retour défini. Allez dans l'onglet « Retours » pour le configurer.",
+      },
+      details: {
+        rateCategory: "Catégorie de tarif",
       },
     },
     settings: {
