@@ -205,7 +205,7 @@ const ar: Translations = {
     phone: "رقم الهاتف",
     address: "العنوان",
     city: "المدينة",
-    parcelsPerMonth: "عدد الطرود شهرياً",
+    parcelsPerMonth: "عدد الطرود يومياً",
     parcelsPh: "اختر العدد التقريبي",
     submit: "S'inscrire",
     submitting: "جارٍ الإرسال...",

@@ -64,6 +64,8 @@ export default function CommissionsView() {
   const [addUploading, setAddUploading] = useState(false);
   const [addError, setAddError] = useState("");
 
+  const [addFileName, setAddFileName] = useState("");
+
   const [results, setResults] = useState<CommissionResult[]>([]);
   const [totalCommissions, setTotalCommissions] = useState(0);
   const [resultOffice, setResultOffice] = useState("");
@@ -131,6 +133,7 @@ export default function CommissionsView() {
     setShowAddModal(true);
     setSelectedOffice("");
     setAddError("");
+    setAddFileName("");
     if (addFileRef.current) addFileRef.current.value = "";
     fetchOffices();
   }
@@ -138,6 +141,7 @@ export default function CommissionsView() {
   function closeAddModal() {
     setShowAddModal(false);
     setAddError("");
+    setAddFileName("");
     if (addFileRef.current) addFileRef.current.value = "";
   }
 
@@ -395,9 +399,24 @@ export default function CommissionsView() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     Choisir le fichier
-                    <input ref={addFileRef} type="file" accept=".xlsx,.xls" className="sr-only" />
+                    <input
+                      ref={addFileRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="sr-only"
+                      onChange={e => setAddFileName(e.target.files?.[0]?.name ?? "")}
+                    />
                   </label>
-                  <p className="text-xs text-gray-400 mt-2">Format accepté : .xlsx, .xls</p>
+                  {addFileName ? (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <svg className="w-4 h-4 shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="font-medium truncate">{addFileName}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-2">Format accepté : .xlsx, .xls</p>
+                  )}
                 </div>
               </div>
 

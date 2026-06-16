@@ -1127,9 +1127,36 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
     const XLSX = await import("xlsx");
     const wb = XLSX.read(file.buffer, { type: "buffer" });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+
+    // Read all rows as raw arrays to handle Ecotrack files that have merged title rows
+    // (e.g. "Statistiques | ECOTRACK" spanning the first row before the real headers)
+    const allArrayRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
+
+    // Find the actual header row: first row (within the first 10) that contains a
+    // "livr" or "wilaya"/"destination" keyword in any cell
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(allArrayRows.length, 10); i++) {
+      const rowStr = (allArrayRows[i] as unknown[]).map(c => String(c).toLowerCase()).join("|");
+      if (rowStr.includes("livr") || rowStr.includes("wilaya") || rowStr.includes("destination")) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    const headerRow = (allArrayRows[headerRowIdx] as unknown[]).map(h => String(h).trim());
+
+    // Build keyed data rows from the rows below the header row
+    const rawRows: Record<string, unknown>[] = allArrayRows
+      .slice(headerRowIdx + 1)
+      .filter(row => (row as unknown[]).some(c => c !== "" && c !== null && c !== undefined))
+      .map(row => {
+        const obj: Record<string, unknown> = {};
+        headerRow.forEach((h, idx) => { obj[h] = (row as unknown[])[idx] ?? ""; });
+        return obj;
+      });
+
     if (!rawRows.length) { res.status(400).json({ ok: false, error: "empty_file" }); return; }
-    const headers = Object.keys(rawRows[0]);
+    const headers = headerRow;
 
     const deliveredCol = headers.find(h => {
       const hl = h.toLowerCase();

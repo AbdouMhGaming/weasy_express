@@ -205,7 +205,7 @@ const en: Translations = {
     phone: "Phone number",
     address: "Address",
     city: "City",
-    parcelsPerMonth: "Number of parcels per month",
+    parcelsPerMonth: "Number of parcels per day",
     parcelsPh: "Choose a volume",
     submit: "Register",
     submitting: "Sending...",
