@@ -150,7 +150,7 @@ function Sidebar({
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
-          {navItem("performance", "Performance", 0,
+          {navItem("performance", t("admin.sidebar.performance"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
           )}
           {navItem("charges", t("admin.charges.title"), 0,
@@ -166,7 +166,7 @@ function Sidebar({
         </nav>
       ) : role === "office" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItem("office-dashboard", "Mon Tableau de bord", 0,
+          {navItem("office-dashboard", t("admin.sidebar.officeDashboard"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
         </nav>
@@ -279,13 +279,7 @@ const EMPTY_FORM: OrderForm = {
   originWilayaCode: "", destinationWilayaCode: "", status: "pending",
 };
 
-const TIME_PRESET_LABELS: { value: TimePreset; label: string }[] = [
-  { value: "all", label: "Tout" },
-  { value: "today", label: "Aujourd'hui" },
-  { value: "yesterday", label: "Hier" },
-  { value: "7d", label: "7 jours" },
-  { value: "30d", label: "30 jours" },
-];
+// TIME_PRESET_LABELS built dynamically inside DashboardView using t()
 
 function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onRefreshBadge: () => void }) {
   const { t } = useTranslation();
@@ -299,6 +293,14 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [hoveredWilaya, setHoveredWilaya] = useState<{ name: string; total: number; delivered: number } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const mapRef = useRef<HTMLDivElement>(null);
+
+  const timePresetLabels = useMemo(() => [
+    { value: "all" as TimePreset,       label: t("admin.timePresets.all") },
+    { value: "today" as TimePreset,     label: t("admin.timePresets.today") },
+    { value: "yesterday" as TimePreset, label: t("admin.timePresets.yesterday") },
+    { value: "7d" as TimePreset,        label: t("admin.timePresets.d7") },
+    { value: "30d" as TimePreset,       label: t("admin.timePresets.d30") },
+  ], [t]);
 
   const [timePreset, setTimePreset] = useState<TimePreset>("all");
   const [filterWilaya, setFilterWilaya] = useState("");
@@ -510,7 +512,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
         <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-gray-400 shrink-0">Période :</span>
-            {TIME_PRESET_LABELS.map((p) => (
+            {timePresetLabels.map((p) => (
               <button
                 key={p.value}
                 onClick={() => selectPreset(p.value)}
@@ -602,7 +604,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {timePreset !== "all" && (
                 <span className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-[#E10600] font-semibold px-2.5 py-1 rounded-full">
-                  {TIME_PRESET_LABELS.find((p) => p.value === timePreset)?.label ?? "Période personnalisée"}
+                  {timePresetLabels.find((p) => p.value === timePreset)?.label ?? "Période personnalisée"}
                   {filterFrom && filterTo ? ` · ${filterFrom} → ${filterTo}` : filterFrom ? `· à partir du ${filterFrom}` : ""}
                   <button onClick={() => selectPreset("all")} className="ml-0.5 hover:text-red-800">×</button>
                 </span>

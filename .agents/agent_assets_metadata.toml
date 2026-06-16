@@ -42,3 +42,9 @@ id = "4eYePTh0a00woYZrvC1p8"
 uri = "file://weasy-express-migration.zip"
 type = "unspecified"
 title = "weasy-express-migration.zip — SQL export (7 tables, 25 rows)"
+
+[[outputs]]
+id = "_s2L25s-iYnTMwH5-5ip3"
+uri = "file://deploy/weasy-express-2026-06-16.tar.gz"
+type = "unspecified"
+title = "Weasy Express — Hostinger Deployment Package"

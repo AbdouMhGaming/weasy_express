@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
 interface CommissionUpload {
@@ -8,6 +9,7 @@ interface CommissionUpload {
   period_label: string;
   results_json: string | null;
   total_commissions: number;
+  xlsx_file: string | null;
   created_at: string;
 }
 
@@ -24,13 +26,6 @@ interface Office {
   wilaya: string;
   wilayaNumber: string | number;
   commune: string | null;
-}
-
-interface CommissionRate {
-  id: number;
-  wilaya_name: string;
-  wilaya_number: string | null;
-  rate_dzd: number;
 }
 
 const fmtN = (n: number) => Math.round(n).toLocaleString("fr-DZ");
@@ -78,7 +73,19 @@ function Spinner({ size = "sm" }: { size?: "sm" | "md" }) {
 
 type Tab = "offices" | "rates";
 
+function fullOfficeName(o: Office): string {
+  return `${o.wilaya}${o.commune ? " \u2014 " + o.commune : ""}`;
+}
+
+function wilayaBadge(wilayaNumber: string | number): string {
+  const s = String(wilayaNumber);
+  return s.includes(".") ? s : s.padStart(2, "0");
+}
+
 export default function CommissionsView() {
+  const { t } = useTranslation();
+  const role = useMemo(() => localStorage.getItem("admin_role") ?? "", []);
+
   const [tab, setTab] = useState<Tab>("offices");
 
   const [offices, setOffices] = useState<Office[]>([]);
@@ -104,12 +111,13 @@ export default function CommissionsView() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const [dbRates, setDbRates] = useState<CommissionRate[]>([]);
-  const [ratesLoading, setRatesLoading] = useState(false);
-  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
-  const [bulkSaving, setBulkSaving] = useState(false);
-  const [bulkSaved, setBulkSaved] = useState(false);
-  const [rateError, setRateError] = useState("");
+  // Per-office rates tab state
+  const [expandedRateOffice, setExpandedRateOffice] = useState<string | null>(null);
+  const [officeRateInputs, setOfficeRateInputs] = useState<Record<string, string>>({});
+  const [officeRateLoading, setOfficeRateLoading] = useState(false);
+  const [officeRateSaving, setOfficeRateSaving] = useState(false);
+  const [officeRateSaved, setOfficeRateSaved] = useState(false);
+  const [officeRateError, setOfficeRateError] = useState("");
 
   const fetchOffices = useCallback(async () => {
     setOfficesLoading(true);
@@ -135,38 +143,14 @@ export default function CommissionsView() {
     } catch {} finally { setHistoryLoading(false); }
   }, [showAllTime, filterYear, filterMonth]);
 
-  const fetchRates = useCallback(async () => {
-    if (tab !== "rates") return;
-    setRatesLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/api/admin/commission-rates`, { headers: adminHeaders() });
-      const d = await r.json();
-      if (d.ok) setDbRates(d.rates ?? []);
-    } catch {} finally { setRatesLoading(false); }
-  }, [tab]);
-
   useEffect(() => { fetchOffices(); }, [fetchOffices]);
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
-  useEffect(() => { fetchRates(); }, [fetchRates]);
 
-  useEffect(() => {
-    if (dbRates.length > 0) {
-      const map: Record<string, string> = {};
-      for (const r of dbRates) map[r.wilaya_name] = String(r.rate_dzd);
-      setRateInputs(prev => {
-        const merged: Record<string, string> = {};
-        for (const w of ALL_WILAYAS) merged[w.name] = prev[w.name] !== undefined ? prev[w.name] : (map[w.name] ?? "0");
-        return merged;
-      });
-    } else if (!ratesLoading) {
-      const map: Record<string, string> = {};
-      for (const w of ALL_WILAYAS) map[w.name] = "0";
-      setRateInputs(map);
-    }
-  }, [dbRates, ratesLoading]);
+  const officeUploads = useCallback(
+    (name: string) => history.filter(h => h.period_label === name),
+    [history]
+  );
 
-  const officeUploads = (name: string) => history.filter(h => h.period_label === name);
-  const officeTotal = (name: string) => officeUploads(name).reduce((s, h) => s + Number(h.total_commissions), 0);
   const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0);
   const activeOfficeCount = new Set(history.map(h => h.period_label)).size;
   const totalDelivered = history.reduce((s, h) => {
@@ -175,6 +159,10 @@ export default function CommissionsView() {
       return s + rows.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
     } catch { return s; }
   }, 0);
+
+  const periodLabel = showAllTime
+    ? t("admin.commissions.showAll")
+    : `${MONTHS[filterMonth - 1]} ${filterYear}`;
 
   function openAdd(officeName: string) {
     setAddOffice(officeName);
@@ -187,7 +175,7 @@ export default function CommissionsView() {
   async function handleAddSubmit(e: React.FormEvent) {
     e.preventDefault();
     const file = addFileRef.current?.files?.[0];
-    if (!file) { setAddError("Veuillez choisir un fichier."); return; }
+    if (!file) { setAddError(t("admin.commissions.add.noFile")); return; }
     setAddUploading(true); setAddError("");
     try {
       const fd = new FormData();
@@ -206,7 +194,7 @@ export default function CommissionsView() {
       } else {
         setAddError(d.detail ?? d.error ?? "Erreur lors du traitement.");
       }
-    } catch { setAddError("Erreur de connexion."); } finally { setAddUploading(false); }
+    } catch { setAddError(t("admin.commissions.add.connError")); } finally { setAddUploading(false); }
   }
 
   async function handleDelete() {
@@ -221,25 +209,67 @@ export default function CommissionsView() {
     } catch {} finally { setDeleting(false); }
   }
 
-  async function saveAllRates() {
-    setBulkSaving(true); setRateError(""); setBulkSaved(false);
+  async function downloadFile(id: number, fileName: string) {
     try {
-      const rates = ALL_WILAYAS.map(w => ({ wilaya_name: w.name, wilaya_number: w.num, rate_dzd: parseFloat(rateInputs[w.name] ?? "0") || 0 }));
-      const r = await fetch(`${API_BASE}/api/admin/commission-rates/bulk`, {
-        method: "PUT", headers: adminHeaders(), body: JSON.stringify({ rates }),
+      const res = await fetch(`${API_BASE}/api/admin/commissions/${id}/file`, { headers: adminHeaders() });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = fileName; a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+  }
+
+  async function loadOfficeRates(officeName: string) {
+    setOfficeRateLoading(true); setOfficeRateError("");
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/office-commission-rates?office=${encodeURIComponent(officeName)}`, { headers: adminHeaders() });
+      const d = await r.json();
+      const fetched: Record<string, number> = {};
+      if (d.ok && Array.isArray(d.rates)) {
+        for (const row of d.rates) fetched[row.wilaya_name] = Number(row.rate_dzd);
+      }
+      const inputs: Record<string, string> = {};
+      for (const w of ALL_WILAYAS) inputs[w.name] = String(fetched[w.name] ?? 0);
+      setOfficeRateInputs(inputs);
+    } catch {} finally { setOfficeRateLoading(false); }
+  }
+
+  async function saveOfficeRates(officeName: string) {
+    setOfficeRateSaving(true); setOfficeRateError(""); setOfficeRateSaved(false);
+    try {
+      const rates = ALL_WILAYAS.map(w => ({
+        wilaya_name: w.name, wilaya_number: w.num,
+        rate_dzd: parseFloat(officeRateInputs[w.name] ?? "0") || 0,
+      }));
+      const r = await fetch(`${API_BASE}/api/admin/office-commission-rates/bulk`, {
+        method: "PUT", headers: adminHeaders(), body: JSON.stringify({ office_name: officeName, rates }),
       });
       const d = await r.json();
-      if (d.ok) { setBulkSaved(true); setTimeout(() => setBulkSaved(false), 2500); }
-      else setRateError(d.error ?? "error");
-    } catch { setRateError("connection error"); } finally { setBulkSaving(false); }
+      if (d.ok) { setOfficeRateSaved(true); setTimeout(() => setOfficeRateSaved(false), 2500); }
+      else setOfficeRateError(d.error ?? "error");
+    } catch { setOfficeRateError("connection error"); } finally { setOfficeRateSaving(false); }
+  }
+
+  function toggleRateOffice(officeName: string) {
+    if (expandedRateOffice === officeName) {
+      setExpandedRateOffice(null);
+    } else {
+      setExpandedRateOffice(officeName);
+      setOfficeRateSaved(false);
+      loadOfficeRates(officeName);
+    }
   }
 
   function downloadCSV() {
-    const rows = [["Bureau", "Date", "Fichier", "Colis livrés", "Commission (DZD)"]];
+    const rows = [[
+      t("admin.commissions.add.bureau"), "Date",
+      t("admin.commissions.office.parcels"), `${t("admin.commissions.kpi.total")} (DZD)`
+    ]];
     for (const h of history) {
       let delivered = 0;
       try { delivered = (JSON.parse(h.results_json ?? "[]") as ParsedResult[]).reduce((s, r) => s + (r.delivered ?? 0), 0); } catch {}
-      rows.push([h.period_label, new Date(h.created_at).toLocaleDateString("fr-DZ"), h.file_name, String(delivered), String(Math.round(Number(h.total_commissions)))]);
+      rows.push([h.period_label, new Date(h.created_at).toLocaleDateString("fr-DZ"), String(delivered), String(Math.round(Number(h.total_commissions)))]);
     }
     const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
@@ -249,29 +279,27 @@ export default function CommissionsView() {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  const periodLabel = showAllTime ? "Toutes les périodes" : `${MONTHS[filterMonth - 1]} ${filterYear}`;
-
   return (
     <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Commissions</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Suivi des commissions par bureau · {periodLabel}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("admin.commissions.title")}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{t("admin.commissions.subtitle")} · {periodLabel}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => { setTab("offices"); }}
+            onClick={() => setTab("offices")}
             className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${tab === "offices" ? "bg-[#E10600] text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
           >
-            Bureaux
+            {t("admin.commissions.tabs.offices")}
           </button>
           <button
             onClick={() => setTab("rates")}
             className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${tab === "rates" ? "bg-[#E10600] text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
           >
-            Taux
+            {t("admin.commissions.tabs.rates")}
           </button>
         </div>
       </div>
@@ -285,13 +313,13 @@ export default function CommissionsView() {
             <svg className="w-4 h-4 text-[#E10600] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <span className="text-sm font-semibold text-gray-700 shrink-0">Période :</span>
+            <span className="text-sm font-semibold text-gray-700 shrink-0">{t("admin.commissions.period")} :</span>
 
             <button
-              onClick={() => setShowAllTime(t => !t)}
+              onClick={() => setShowAllTime(v => !v)}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${showAllTime ? "bg-[#E10600] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
-              Tout afficher
+              {t("admin.commissions.showAll")}
             </button>
 
             {!showAllTime && (
@@ -323,7 +351,7 @@ export default function CommissionsView() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Exporter CSV
+                {t("admin.commissions.exportCsv")}
               </button>
             )}
           </div>
@@ -332,19 +360,19 @@ export default function CommissionsView() {
           {!historyLoading && (
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Total commissions</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("admin.commissions.kpi.total")}</p>
                 <p className="text-2xl font-black text-[#E10600]">{fmtDZ(periodTotal)}</p>
                 <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Bureaux actifs</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("admin.commissions.kpi.activeOffices")}</p>
                 <p className="text-2xl font-black text-gray-800">{activeOfficeCount}</p>
-                <p className="text-xs text-gray-400 mt-1">sur {offices.length} bureaux</p>
+                <p className="text-xs text-gray-400 mt-1">{t("admin.commissions.kpi.of")} {offices.length} {t("admin.commissions.kpi.bureaux")}</p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Colis livrés</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("admin.commissions.kpi.delivered")}</p>
                 <p className="text-2xl font-black text-gray-800">{fmtN(totalDelivered)}</p>
-                <p className="text-xs text-gray-400 mt-1">{history.length} importation{history.length !== 1 ? "s" : ""}</p>
+                <p className="text-xs text-gray-400 mt-1">{history.length} {history.length !== 1 ? t("admin.commissions.kpi.uploadsPlural") : t("admin.commissions.kpi.uploads")}</p>
               </div>
             </div>
           )}
@@ -352,41 +380,42 @@ export default function CommissionsView() {
           {/* Offices Grid */}
           {officesLoading ? (
             <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
-              <Spinner size="md" /><span className="text-sm">Chargement des bureaux…</span>
+              <Spinner size="md" /><span className="text-sm">{t("admin.commissions.office.loadingOffices")}</span>
             </div>
           ) : offices.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
-              <p className="text-gray-400">Aucun bureau configuré.</p>
+              <p className="text-gray-400">{t("admin.commissions.office.noOffices")}</p>
             </div>
           ) : (
             <div className="space-y-3">
               {offices.map(office => {
-                const uploads = officeUploads(office.wilaya);
+                const name = fullOfficeName(office);
+                const uploads = officeUploads(name);
                 const total = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
-                const isExpanded = expandedOffice === office.wilaya;
+                const isExpanded = expandedOffice === name;
                 const hasData = uploads.length > 0;
+                const badge = wilayaBadge(office.wilayaNumber);
 
                 return (
                   <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     {/* Office row */}
                     <div className="flex items-center gap-4 px-5 py-4">
-                      {/* Office identity */}
                       <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0"
                         style={{ background: hasData ? "#E10600" : "#f3f4f6", color: hasData ? "#fff" : "#9ca3af" }}
                       >
-                        {String(office.wilayaNumber).padStart(2, "0")}
+                        {badge}
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-gray-900 leading-tight">
                           {office.wilaya}
-                          {office.commune && <span className="font-normal text-gray-400 text-sm"> — {office.commune}</span>}
+                          {office.commune && <span className="font-normal text-gray-400 text-sm"> &mdash; {office.commune}</span>}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {uploads.length > 0
-                            ? `${uploads.length} importation${uploads.length !== 1 ? "s" : ""} · ${periodLabel}`
-                            : `Aucune importation · ${periodLabel}`}
+                            ? `${uploads.length} ${uploads.length !== 1 ? t("admin.commissions.kpi.uploadsPlural") : t("admin.commissions.kpi.uploads")} · ${periodLabel}`
+                            : `${t("admin.commissions.office.noData")} · ${periodLabel}`}
                         </p>
                       </div>
 
@@ -399,7 +428,7 @@ export default function CommissionsView() {
                               {fmtN(uploads.reduce((s, h) => {
                                 try { return s + (JSON.parse(h.results_json ?? "[]") as ParsedResult[]).reduce((rs, r) => rs + (r.delivered ?? 0), 0); }
                                 catch { return s; }
-                              }, 0))} colis
+                              }, 0))} {t("admin.commissions.office.parcels")}
                             </p>
                           </>
                         ) : (
@@ -411,20 +440,20 @@ export default function CommissionsView() {
                       <div className="flex items-center gap-2 shrink-0">
                         {hasData && (
                           <button
-                            onClick={() => setExpandedOffice(isExpanded ? null : office.wilaya)}
+                            onClick={() => setExpandedOffice(isExpanded ? null : name)}
                             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${isExpanded ? "bg-gray-100 text-gray-700 border-gray-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
                           >
-                            {isExpanded ? "Masquer" : "Détails"}
+                            {isExpanded ? t("admin.commissions.office.hide") : t("admin.commissions.office.details")}
                           </button>
                         )}
                         <button
-                          onClick={() => openAdd(office.wilaya)}
+                          onClick={() => openAdd(name)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-lg transition-colors shadow-sm"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                           </svg>
-                          Ajouter
+                          {t("admin.commissions.office.add")}
                         </button>
                       </div>
                     </div>
@@ -437,9 +466,9 @@ export default function CommissionsView() {
                             <tr className="border-b border-gray-100">
                               <th className="text-left text-xs font-semibold text-gray-400 px-5 py-2.5">Date</th>
                               <th className="text-left text-xs font-semibold text-gray-400 px-4 py-2.5 hidden sm:table-cell">Fichier</th>
-                              <th className="text-right text-xs font-semibold text-gray-400 px-4 py-2.5">Colis livrés</th>
+                              <th className="text-right text-xs font-semibold text-gray-400 px-4 py-2.5">{t("admin.commissions.kpi.delivered")}</th>
                               <th className="text-right text-xs font-semibold text-gray-400 px-4 py-2.5">Commission</th>
-                              <th className="px-4 py-2.5 w-24"></th>
+                              <th className="px-4 py-2.5 w-28"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
@@ -466,10 +495,21 @@ export default function CommissionsView() {
                                           <button
                                             onClick={() => setExpandedBreakId(isBreakExpanded ? null : u.id)}
                                             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-white transition-colors"
-                                            title="Voir le détail par wilaya"
+                                            title="Détail par wilaya"
                                           >
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isBreakExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                            </svg>
+                                          </button>
+                                        )}
+                                        {role === "admin" && u.xlsx_file && (
+                                          <button
+                                            onClick={() => downloadFile(u.id, u.file_name)}
+                                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                            title={t("admin.commissions.download")}
+                                          >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                             </svg>
                                           </button>
                                         )}
@@ -494,8 +534,8 @@ export default function CommissionsView() {
                                           <table className="w-full text-xs">
                                             <thead>
                                               <tr className="bg-gray-50 border-b border-gray-100">
-                                                <th className="text-left font-semibold text-gray-500 px-4 py-2">Wilaya</th>
-                                                <th className="text-right font-semibold text-gray-500 px-3 py-2">Livrés</th>
+                                                <th className="text-left font-semibold text-gray-500 px-4 py-2">{t("admin.commissions.ratesPerOffice.wilaya")}</th>
+                                                <th className="text-right font-semibold text-gray-500 px-3 py-2">{t("admin.commissions.ratesPerOffice.delivered")}</th>
                                                 <th className="text-right font-semibold text-gray-500 px-3 py-2">Taux</th>
                                                 <th className="text-right font-semibold text-gray-500 px-4 py-2">Commission</th>
                                               </tr>
@@ -523,7 +563,7 @@ export default function CommissionsView() {
                           {/* Office total row */}
                           <tfoot>
                             <tr className="bg-red-50 border-t-2 border-[#E10600]/20">
-                              <td colSpan={3} className="px-5 py-2.5 font-bold text-gray-900 text-xs uppercase tracking-wide">Total {office.wilaya}</td>
+                              <td colSpan={3} className="px-5 py-2.5 font-bold text-gray-900 text-xs uppercase tracking-wide">{t("admin.commissions.office.totalLabel")} {office.wilaya}</td>
                               <td className="px-4 py-2.5 text-right font-black text-[#E10600]">{fmtDZ(total)}</td>
                               <td className="px-4" />
                             </tr>
@@ -540,72 +580,127 @@ export default function CommissionsView() {
           {/* Loading overlay */}
           {historyLoading && (
             <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
-              <Spinner /><span>Chargement des données…</span>
+              <Spinner /><span>{t("admin.commissions.office.loadingData")}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Rates Tab ── */}
+      {/* ── Rates Tab (per-office) ── */}
       {tab === "rates" && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-900">Taux de commission par wilaya</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Définissez le taux (DZD) par colis livré pour chaque wilaya.</p>
-            </div>
-            <button
-              onClick={saveAllRates}
-              disabled={bulkSaving}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors shrink-0"
-            >
-              {bulkSaving ? <Spinner /> : bulkSaved ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-              )}
-              {bulkSaved ? "Enregistré !" : "Enregistrer tout"}
-            </button>
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-4">
+            <h2 className="font-bold text-gray-900">{t("admin.commissions.ratesPerOffice.title")}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{t("admin.commissions.ratesPerOffice.subtitle")}</p>
           </div>
-          {rateError && <p className="px-6 py-2 text-xs text-red-500 bg-red-50 border-b border-red-100">{rateError}</p>}
-          {ratesLoading ? (
-            <div className="py-16 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />Chargement…</div>
+
+          {officesLoading ? (
+            <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+              <Spinner size="md" /><span className="text-sm">{t("admin.commissions.ratesPerOffice.loading")}</span>
+            </div>
+          ) : offices.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-16 text-center">
+              <p className="text-gray-400">{t("admin.commissions.ratesPerOffice.noOffices")}</p>
+            </div>
           ) : (
-            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white z-10">
-                  <tr className="border-b border-gray-100 bg-gray-50/80">
-                    <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3 w-14">#</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Wilaya</th>
-                    <th className="text-right text-xs font-semibold text-gray-500 px-5 py-3 w-44">Taux (DZD / colis livré)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {ALL_WILAYAS.map(w => {
-                    const currentDb = dbRates.find(r => r.wilaya_name === w.name);
-                    const val = rateInputs[w.name] ?? "0";
-                    const numVal = parseFloat(val) || 0;
-                    const isDirty = currentDb ? numVal !== currentDb.rate_dzd : numVal !== 0;
-                    return (
-                      <tr key={w.num} className="hover:bg-gray-50/60 transition-colors">
-                        <td className="px-5 py-2.5 text-xs font-bold text-gray-400">{w.num}</td>
-                        <td className="px-4 py-2.5 font-semibold text-gray-800">{w.name}</td>
-                        <td className="px-4 py-2 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-[#E10600]/60 shrink-0" />}
-                            <input
-                              type="number" min="0" step="0.5" value={val}
-                              onChange={e => setRateInputs(prev => ({ ...prev, [w.name]: e.target.value }))}
-                              className="w-28 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
-                            />
-                            <span className="text-xs text-gray-400 shrink-0">DZD</span>
+            <div className="space-y-3">
+              {offices.map(office => {
+                const name = fullOfficeName(office);
+                const badge = wilayaBadge(office.wilayaNumber);
+                const isExpanded = expandedRateOffice === name;
+
+                return (
+                  <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-4 px-5 py-4">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 bg-gray-100 text-gray-500">
+                        {badge}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-900 leading-tight">
+                          {office.wilaya}
+                          {office.commune && <span className="font-normal text-gray-400 text-sm"> &mdash; {office.commune}</span>}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{t("admin.commissions.ratesPerOffice.rate")}</p>
+                      </div>
+                      <button
+                        onClick={() => toggleRateOffice(name)}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl border transition-colors ${isExpanded ? "bg-gray-100 text-gray-700 border-gray-200" : "bg-gray-50 text-[#E10600] border-[#E10600]/30 hover:bg-red-50"}`}
+                      >
+                        {isExpanded ? t("admin.commissions.ratesPerOffice.collapse") : t("admin.commissions.ratesPerOffice.expand")}
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-100">
+                        {officeRateLoading ? (
+                          <div className="py-10 flex items-center justify-center gap-2 text-gray-400 text-sm">
+                            <Spinner />{t("admin.commissions.ratesPerOffice.loading")}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        ) : (
+                          <>
+                            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+                              <table className="w-full text-sm">
+                                <thead className="sticky top-0 bg-white z-10">
+                                  <tr className="border-b border-gray-100 bg-gray-50/80">
+                                    <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3 w-14">#</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{t("admin.commissions.ratesPerOffice.wilaya")}</th>
+                                    <th className="text-right text-xs font-semibold text-gray-500 px-5 py-3 w-48">{t("admin.commissions.ratesPerOffice.rate")}</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                  {ALL_WILAYAS.map(w => {
+                                    const val = officeRateInputs[w.name] ?? "0";
+                                    const numVal = parseFloat(val) || 0;
+                                    const isDirty = numVal !== 0;
+                                    return (
+                                      <tr key={w.num} className="hover:bg-gray-50/60 transition-colors">
+                                        <td className="px-5 py-2.5 text-xs font-bold text-gray-400">{w.num}</td>
+                                        <td className="px-4 py-2.5 font-semibold text-gray-800">{w.name}</td>
+                                        <td className="px-4 py-2 text-right">
+                                          <div className="flex items-center justify-end gap-2">
+                                            {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-[#E10600]/60 shrink-0" />}
+                                            <input
+                                              type="number" min="0" step="0.5" value={val}
+                                              onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: e.target.value }))}
+                                              className="w-28 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
+                                            />
+                                            <span className="text-xs text-gray-400 shrink-0">DZD</span>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                            {officeRateError && (
+                              <p className="px-6 py-2 text-xs text-red-500 bg-red-50 border-t border-red-100">{officeRateError}</p>
+                            )}
+                            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                              {officeRateSaved && (
+                                <span className="text-sm text-green-600 font-semibold flex items-center gap-1.5">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                  {t("admin.commissions.ratesPerOffice.saved")}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => saveOfficeRates(name)}
+                                disabled={officeRateSaving}
+                                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
+                              >
+                                {officeRateSaving ? <Spinner /> : (
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                                )}
+                                {officeRateSaving ? t("admin.commissions.ratesPerOffice.saving") : t("admin.commissions.ratesPerOffice.save")}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -616,22 +711,19 @@ export default function CommissionsView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
           <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-            {/* Modal header with red stripe */}
             <div className="bg-[#E10600] px-6 py-5 text-white">
-              <h3 className="font-bold text-lg">Ajouter une commission</h3>
-              <p className="text-sm text-white/80 mt-0.5">Bureau : <span className="font-bold">{addOffice}</span></p>
+              <h3 className="font-bold text-lg">{t("admin.commissions.add.title")}</h3>
+              <p className="text-sm text-white/80 mt-0.5">{t("admin.commissions.add.bureau")} : <span className="font-bold">{addOffice}</span></p>
             </div>
 
             <form onSubmit={handleAddSubmit} className="p-6 space-y-5">
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Importez le fichier XLSX Ecotrack pour ce bureau. Le fichier doit contenir les colonnes <span className="font-semibold text-gray-700">Wilaya</span> et <span className="font-semibold text-gray-700">Livrés</span>.
-                </p>
+                <p className="text-xs text-gray-500 leading-relaxed">{t("admin.commissions.add.hint")}</p>
                 <label className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-gray-900 hover:bg-gray-700 text-white rounded-xl cursor-pointer transition-colors w-fit">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  Choisir le fichier
+                  {t("admin.commissions.add.chooseFile")}
                   <input
                     ref={addFileRef}
                     type="file"
@@ -648,7 +740,7 @@ export default function CommissionsView() {
                     <span className="font-medium truncate">{addFileName}</span>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Formats acceptés : .xlsx, .xls</p>
+                  <p className="text-xs text-gray-400">{t("admin.commissions.add.formats")}</p>
                 )}
               </div>
 
@@ -663,14 +755,14 @@ export default function CommissionsView() {
 
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">
-                  Annuler
+                  {t("admin.commissions.add.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={addUploading || !addFileName}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl shadow-sm disabled:opacity-50 transition-colors"
                 >
-                  {addUploading ? <><Spinner />Calcul…</> : "Calculer & Enregistrer"}
+                  {addUploading ? <><Spinner />{t("admin.commissions.add.computing")}</> : t("admin.commissions.add.submit")}
                 </button>
               </div>
             </form>
@@ -683,24 +775,23 @@ export default function CommissionsView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
           <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
-            <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-6 h-6 text-[#E10600]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
-            <h3 className="font-bold text-gray-900 mb-1">Supprimer cette importation ?</h3>
-            <p className="text-sm text-gray-500 mb-5">Cette action est irréversible. Les données seront définitivement supprimées.</p>
+            <h3 className="font-bold text-gray-900 mb-2">{t("admin.commissions.delete.title")}</h3>
+            <p className="text-sm text-gray-500 mb-6">{t("admin.commissions.delete.body")}</p>
             <div className="flex gap-2">
-              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50">
-                Annuler
+              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600">
+                {t("admin.commissions.delete.cancel")}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl disabled:opacity-60"
+                className="flex-1 py-2.5 text-sm font-bold bg-[#E10600] text-white rounded-xl hover:bg-[#B80500] disabled:opacity-60 transition-colors"
               >
-                {deleting ? <Spinner /> : null}
-                Supprimer
+                {deleting ? <Spinner /> : t("admin.commissions.delete.confirm")}
               </button>
             </div>
           </div>

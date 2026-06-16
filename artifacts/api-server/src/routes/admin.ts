@@ -1,5 +1,11 @@
 import { Router, type IRouter } from "express";
 import multer2 from "multer";
+import { mkdirSync, writeFileSync, existsSync, createReadStream } from "fs";
+import { join } from "path";
+import { randomUUID } from "crypto";
+
+const UPLOADS_DIR = join(process.cwd(), "uploads", "commissions");
+mkdirSync(UPLOADS_DIR, { recursive: true });
 import { db, pool, partnersTable, officesTable, adminsTable, ordersTable, chargesTable, payoutsTable, eq, desc, asc, count, isNotNull, sql, and } from "@workspace/db";
 import { gte, lte } from "drizzle-orm";
 import {
@@ -1040,6 +1046,55 @@ router.delete("/admin/categories/:id", adminAuth, superAdminOnly, async (req, re
 });
 
 // ── Commission Rates ────────────────────────────────────────────────────────────
+// ── Office-specific commission rates ───────────────────────────────────────────
+
+router.get("/admin/office-commission-rates", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, unknown>;
+  const officeName = typeof q.office === "string" ? q.office.trim() : "";
+  if (!officeName) { res.status(400).json({ ok: false, error: "missing_office" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT id, office_name, wilaya_name, wilaya_number, rate_dzd FROM office_commission_rates WHERE office_name = ? ORDER BY wilaya_name ASC",
+        [officeName]
+      ) as [Array<Record<string, unknown>>, unknown];
+      res.json({ ok: true, rates: rows.map(r => ({ ...r, rate_dzd: Number(r.rate_dzd) })) });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch office commission rates");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.put("/admin/office-commission-rates/bulk", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const officeName = String(b.office_name ?? "").trim();
+  const rates = b.rates as Array<{ wilaya_name: string; wilaya_number: string; rate_dzd: number }>;
+  if (!officeName || !Array.isArray(rates)) { res.status(400).json({ ok: false, error: "invalid" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      for (const r of rates) {
+        const wName = String(r.wilaya_name ?? "").trim();
+        const wNum  = String(r.wilaya_number ?? "").trim();
+        const rate  = parseFloat(String(r.rate_dzd ?? "0")) || 0;
+        if (!wName) continue;
+        await conn.execute(
+          "INSERT INTO office_commission_rates (office_name, wilaya_name, wilaya_number, rate_dzd) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE rate_dzd = VALUES(rate_dzd), wilaya_number = VALUES(wilaya_number)",
+          [officeName, wName, wNum, rate]
+        );
+      }
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to bulk save office commission rates");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Global commission rates ─────────────────────────────────────────────────────
+
 router.get("/admin/commission-rates", adminAuth, financeOrAdminOnly, async (req, res) => {
   try {
     const conn = await pool.getConnection();
@@ -1177,13 +1232,26 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
 
     const conn = await pool.getConnection();
     try {
-      const [rateRows] = await conn.execute(
-        "SELECT wilaya_name, wilaya_number, rate_dzd FROM wilaya_commission_rates"
+      // Try office-specific rates first, fall back to global wilaya rates
+      const [officeRateRows] = await conn.execute(
+        "SELECT wilaya_name, wilaya_number, rate_dzd FROM office_commission_rates WHERE office_name = ?",
+        [officeName]
       ) as [Array<{ wilaya_name: string; wilaya_number: string | null; rate_dzd: string }>, unknown];
-      const rateMap: Record<string, number> = {};
-      for (const r of rateRows) {
-        rateMap[r.wilaya_name.toLowerCase()] = Number(r.rate_dzd);
-        if (r.wilaya_number) rateMap[r.wilaya_number.toLowerCase()] = Number(r.rate_dzd);
+
+      let rateMap: Record<string, number> = {};
+      if (officeRateRows.length > 0) {
+        for (const r of officeRateRows) {
+          rateMap[r.wilaya_name.toLowerCase()] = Number(r.rate_dzd);
+          if (r.wilaya_number) rateMap[r.wilaya_number.toLowerCase()] = Number(r.rate_dzd);
+        }
+      } else {
+        const [globalRateRows] = await conn.execute(
+          "SELECT wilaya_name, wilaya_number, rate_dzd FROM wilaya_commission_rates"
+        ) as [Array<{ wilaya_name: string; wilaya_number: string | null; rate_dzd: string }>, unknown];
+        for (const r of globalRateRows) {
+          rateMap[r.wilaya_name.toLowerCase()] = Number(r.rate_dzd);
+          if (r.wilaya_number) rateMap[r.wilaya_number.toLowerCase()] = Number(r.rate_dzd);
+        }
       }
 
       const wilayaMap: Record<string, { delivered: number; rate: number }> = {};
@@ -1205,10 +1273,15 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
 
       const totalCommissions = results.reduce((s, r) => s + r.commission, 0);
 
+      // Save xlsx file to disk
+      const xlsxFilename = `${randomUUID()}_${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const xlsxPath = join(UPLOADS_DIR, xlsxFilename);
+      writeFileSync(xlsxPath, file.buffer);
+
       const authReq = req as AuthedRequest;
       await conn.execute(
-        "INSERT INTO commission_uploads (uploaded_by, file_name, period_label, results_json, total_commissions) VALUES (?, ?, ?, ?, ?)",
-        [authReq.adminUsername ?? "", file.originalname, officeName, JSON.stringify(results), totalCommissions]
+        "INSERT INTO commission_uploads (uploaded_by, file_name, period_label, results_json, total_commissions, xlsx_file) VALUES (?, ?, ?, ?, ?, ?)",
+        [authReq.adminUsername ?? "", file.originalname, officeName, JSON.stringify(results), totalCommissions, xlsxFilename]
       );
 
       res.json({ ok: true, results, totalCommissions, officeName, detectedDeliveredCol: deliveredCol, detectedWilayaCol: wilayaCol });
@@ -1335,6 +1408,29 @@ router.get("/admin/commissions/history", adminAuth, financeOrAdminOnly, async (r
     } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch commission history");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.get("/admin/commissions/:id/file", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT file_name, xlsx_file FROM commission_uploads WHERE id = ?", [id]
+      ) as [Array<{ file_name: string; xlsx_file: string | null }>, unknown];
+      if (!rows.length || !rows[0].xlsx_file) { res.status(404).json({ ok: false, error: "not_found" }); return; }
+      const { file_name, xlsx_file } = rows[0];
+      const filePath = join(UPLOADS_DIR, xlsx_file);
+      if (!existsSync(filePath)) { res.status(404).json({ ok: false, error: "file_missing" }); return; }
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file_name)}"`);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      createReadStream(filePath).pipe(res);
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to stream commission file");
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });
