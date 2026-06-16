@@ -108,12 +108,14 @@ export default function CommissionsView() {
   const [addError, setAddError] = useState("");
   const addFileRef = useRef<HTMLInputElement>(null);
 
+  const [addRateType, setAddRateType] = useState("classic_stop_desk");
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   // Per-office rates tab state
   const [expandedRateOffice, setExpandedRateOffice] = useState<string | null>(null);
-  const [officeRateInputs, setOfficeRateInputs] = useState<Record<string, string>>({});
+  const [officeRateInputs, setOfficeRateInputs] = useState<Record<string, { csd: string; cd: string; esd: string; ed: string }>>({});
   const [officeRateLoading, setOfficeRateLoading] = useState(false);
   const [officeRateSaving, setOfficeRateSaving] = useState(false);
   const [officeRateSaved, setOfficeRateSaved] = useState(false);
@@ -168,6 +170,7 @@ export default function CommissionsView() {
     setAddOffice(officeName);
     setAddFileName("");
     setAddError("");
+    setAddRateType("classic_stop_desk");
     if (addFileRef.current) addFileRef.current.value = "";
     setShowAddModal(true);
   }
@@ -180,6 +183,7 @@ export default function CommissionsView() {
     try {
       const fd = new FormData();
       fd.append("officeName", addOffice);
+      fd.append("rateType", addRateType);
       fd.append("xlsx", file);
       const r = await fetch(`${API_BASE}/api/admin/commissions/add`, {
         method: "POST",
@@ -225,12 +229,22 @@ export default function CommissionsView() {
     try {
       const r = await fetch(`${API_BASE}/api/admin/office-commission-rates?office=${encodeURIComponent(officeName)}`, { headers: adminHeaders() });
       const d = await r.json();
-      const fetched: Record<string, number> = {};
+      const fetched: Record<string, { csd: number; cd: number; esd: number; ed: number }> = {};
       if (d.ok && Array.isArray(d.rates)) {
-        for (const row of d.rates) fetched[row.wilaya_name] = Number(row.rate_dzd);
+        for (const row of d.rates) {
+          fetched[row.wilaya_name] = {
+            csd: Number(row.classic_stop_desk_dzd ?? 0),
+            cd:  Number(row.classic_domicile_dzd ?? 0),
+            esd: Number(row.ecommerce_stop_desk_dzd ?? 0),
+            ed:  Number(row.ecommerce_domicile_dzd ?? 0),
+          };
+        }
       }
-      const inputs: Record<string, string> = {};
-      for (const w of ALL_WILAYAS) inputs[w.name] = String(fetched[w.name] ?? 0);
+      const inputs: Record<string, { csd: string; cd: string; esd: string; ed: string }> = {};
+      for (const w of ALL_WILAYAS) {
+        const f = fetched[w.name];
+        inputs[w.name] = { csd: String(f?.csd ?? 0), cd: String(f?.cd ?? 0), esd: String(f?.esd ?? 0), ed: String(f?.ed ?? 0) };
+      }
       setOfficeRateInputs(inputs);
     } catch {} finally { setOfficeRateLoading(false); }
   }
@@ -240,7 +254,10 @@ export default function CommissionsView() {
     try {
       const rates = ALL_WILAYAS.map(w => ({
         wilaya_name: w.name, wilaya_number: w.num,
-        rate_dzd: parseFloat(officeRateInputs[w.name] ?? "0") || 0,
+        classic_stop_desk_dzd:   parseFloat(officeRateInputs[w.name]?.csd ?? "0") || 0,
+        classic_domicile_dzd:    parseFloat(officeRateInputs[w.name]?.cd ?? "0") || 0,
+        ecommerce_stop_desk_dzd: parseFloat(officeRateInputs[w.name]?.esd ?? "0") || 0,
+        ecommerce_domicile_dzd:  parseFloat(officeRateInputs[w.name]?.ed ?? "0") || 0,
       }));
       const r = await fetch(`${API_BASE}/api/admin/office-commission-rates/bulk`, {
         method: "PUT", headers: adminHeaders(), body: JSON.stringify({ office_name: officeName, rates }),
@@ -513,15 +530,17 @@ export default function CommissionsView() {
                                             </svg>
                                           </button>
                                         )}
-                                        <button
-                                          onClick={() => setConfirmDeleteId(u.id)}
-                                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                          title="Supprimer"
-                                        >
-                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                        </button>
+                                        {role === "admin" && (
+                                          <button
+                                            onClick={() => setConfirmDeleteId(u.id)}
+                                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Supprimer"
+                                          >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -642,30 +661,45 @@ export default function CommissionsView() {
                               <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-white z-10">
                                   <tr className="border-b border-gray-100 bg-gray-50/80">
-                                    <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3 w-14">#</th>
-                                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{t("admin.commissions.ratesPerOffice.wilaya")}</th>
-                                    <th className="text-right text-xs font-semibold text-gray-500 px-5 py-3 w-48">{t("admin.commissions.ratesPerOffice.rate")}</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3 w-12">#</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Wilaya</th>
+                                    <th className="text-center text-xs font-semibold text-gray-500 px-2 py-3 w-28">Classic SD</th>
+                                    <th className="text-center text-xs font-semibold text-gray-500 px-2 py-3 w-28">Classic Dom</th>
+                                    <th className="text-center text-xs font-semibold text-gray-500 px-2 py-3 w-28">Ecom SD</th>
+                                    <th className="text-center text-xs font-semibold text-gray-500 px-2 py-3 w-28">Ecom Dom</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                   {ALL_WILAYAS.map(w => {
-                                    const val = officeRateInputs[w.name] ?? "0";
-                                    const numVal = parseFloat(val) || 0;
-                                    const isDirty = numVal !== 0;
+                                    const vals = officeRateInputs[w.name] ?? { csd: "0", cd: "0", esd: "0", ed: "0" };
+                                    const isDirty = [vals.csd, vals.cd, vals.esd, vals.ed].some(v => parseFloat(v) !== 0);
+                                    const inputCls = "w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white";
                                     return (
                                       <tr key={w.num} className="hover:bg-gray-50/60 transition-colors">
-                                        <td className="px-5 py-2.5 text-xs font-bold text-gray-400">{w.num}</td>
-                                        <td className="px-4 py-2.5 font-semibold text-gray-800">{w.name}</td>
-                                        <td className="px-4 py-2 text-right">
-                                          <div className="flex items-center justify-end gap-2">
-                                            {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-[#E10600]/60 shrink-0" />}
-                                            <input
-                                              type="number" min="0" step="0.5" value={val}
-                                              onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: e.target.value }))}
-                                              className="w-28 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
-                                            />
-                                            <span className="text-xs text-gray-400 shrink-0">DZD</span>
-                                          </div>
+                                        <td className="px-5 py-2 text-xs font-bold text-gray-400">{w.num}</td>
+                                        <td className="px-4 py-2 font-semibold text-gray-800 text-sm">
+                                          {isDirty && <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#E10600]/60 mr-1.5 align-middle" />}
+                                          {w.name}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <input type="number" min="0" step="0.5" value={vals.csd}
+                                            onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: { ...prev[w.name] ?? { csd:"0", cd:"0", esd:"0", ed:"0" }, csd: e.target.value } }))}
+                                            className={inputCls} />
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <input type="number" min="0" step="0.5" value={vals.cd}
+                                            onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: { ...prev[w.name] ?? { csd:"0", cd:"0", esd:"0", ed:"0" }, cd: e.target.value } }))}
+                                            className={inputCls} />
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <input type="number" min="0" step="0.5" value={vals.esd}
+                                            onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: { ...prev[w.name] ?? { csd:"0", cd:"0", esd:"0", ed:"0" }, esd: e.target.value } }))}
+                                            className={inputCls} />
+                                        </td>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <input type="number" min="0" step="0.5" value={vals.ed}
+                                            onChange={e => setOfficeRateInputs(prev => ({ ...prev, [w.name]: { ...prev[w.name] ?? { csd:"0", cd:"0", esd:"0", ed:"0" }, ed: e.target.value } }))}
+                                            className={inputCls} />
                                         </td>
                                       </tr>
                                     );
@@ -717,6 +751,20 @@ export default function CommissionsView() {
             </div>
 
             <form onSubmit={handleAddSubmit} className="p-6 space-y-5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Catégorie de tarif</label>
+                <select
+                  value={addRateType}
+                  onChange={e => setAddRateType(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
+                >
+                  <option value="classic_stop_desk">Classique — Stop Desk</option>
+                  <option value="classic_domicile">Classique — À Domicile</option>
+                  <option value="ecommerce_stop_desk">E-commerce — Stop Desk</option>
+                  <option value="ecommerce_domicile">E-commerce — À Domicile</option>
+                </select>
+              </div>
+
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                 <p className="text-xs text-gray-500 leading-relaxed">{t("admin.commissions.add.hint")}</p>
                 <label className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-gray-900 hover:bg-gray-700 text-white rounded-xl cursor-pointer transition-colors w-fit">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
@@ -38,6 +38,7 @@ function TrashIcon() {
 
 export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
+  const role = useMemo(() => localStorage.getItem("admin_role") ?? "", []);
 
   const [cats, setCats] = useState<Category[]>([]);
   const [summary, setSummary] = useState<{ byCategory: Record<string, number>; totalCharges: number; totalIncome: number } | null>(null);
@@ -90,7 +91,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
       if (filterTo) qs.set("to", filterTo);
       const q = qs.toString() ? `?${qs.toString()}` : "";
       const [s, c] = await Promise.all([
-        fetch(`${API_BASE}/api/admin/charges-summary`, { headers: adminHeaders() }),
+        fetch(`${API_BASE}/api/admin/charges-summary${q}`, { headers: adminHeaders() }),
         fetch(`${API_BASE}/api/admin/charges${q}`, { headers: adminHeaders() }),
       ]);
       if (s.status === 401) { onUnauth(); return; }
@@ -320,7 +321,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                       </div>
                     </div>
                     <p className="text-sm font-bold text-[#E10600] shrink-0">-{fmtN(c.amount_dzd)} DZD</p>
-                    <button onClick={() => delCharge(c.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"><TrashIcon /></button>
+                    {role === "admin" && (
+                      <button onClick={() => delCharge(c.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"><TrashIcon /></button>
+                    )}
                   </div>
                 );
               })}
@@ -363,7 +366,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                       </div>
                     </div>
                     <p className="text-sm font-bold text-emerald-600 shrink-0">+{fmtN(c.amount_dzd)} DZD</p>
-                    <button onClick={() => delCharge(c.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"><TrashIcon /></button>
+                    {role === "admin" && (
+                      <button onClick={() => delCharge(c.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"><TrashIcon /></button>
+                    )}
                   </div>
                 );
               })}

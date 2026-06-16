@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
-interface Category { id: number; cat_key: string; name: string; icon: string; sort_order: number; }
+interface Category { id: number; cat_key: string; name: string; icon: string; sort_order: number; parent_id: number | null; }
 
 const EMOJI_PRESETS = ["📣","👥","💻","📦","💰","🏭","📋","🚗","✈️","🏠","🔧","📊","🎯","💡","🛒","🤝","📱","🖨️","⚡","🌐"];
 
@@ -12,6 +12,7 @@ export default function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [newIcon, setNewIcon] = useState("📋");
+  const [newParentId, setNewParentId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -33,10 +34,10 @@ export default function SettingsView() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/categories`, {
         method: "POST", headers: adminHeaders(),
-        body: JSON.stringify({ name: newName.trim(), icon: newIcon }),
+        body: JSON.stringify({ name: newName.trim(), icon: newIcon, parent_id: newParentId }),
       });
       const d = await res.json();
-      if (d.ok) { setNewName(""); setNewIcon("📋"); fetchCats(); }
+      if (d.ok) { setNewName(""); setNewIcon("📋"); setNewParentId(null); fetchCats(); }
       else setError(d.error ?? "error");
     } catch { setError("connection error"); } finally { setSaving(false); }
   }
@@ -65,7 +66,20 @@ export default function SettingsView() {
 
         {/* Add Category Form */}
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="w-full sm:w-auto">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Sous-catégorie de</label>
+              <select
+                value={newParentId ?? ""}
+                onChange={e => setNewParentId(e.target.value ? parseInt(e.target.value, 10) : null)}
+                className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white"
+              >
+                <option value="">— Catégorie principale —</option>
+                {cats.filter(c => !c.parent_id).map(c => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.settings.categories.icon")}</label>
               <div className="relative">
@@ -124,23 +138,55 @@ export default function SettingsView() {
           <div className="py-12 text-center text-gray-400 text-sm">{t("admin.settings.categories.empty")}</div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {cats.map((cat) => (
-              <div key={cat.id} className="px-6 py-3 flex items-center gap-4 hover:bg-gray-50/40 transition-colors">
-                <span className="text-2xl w-8 text-center shrink-0">{cat.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{cat.name}</p>
-                  <p className="text-xs text-gray-400 font-mono">{cat.cat_key}</p>
+            {cats.filter(c => !c.parent_id).map((parent) => {
+              const children = cats.filter(c => c.parent_id === parent.id);
+              return (
+                <div key={parent.id}>
+                  <div className="px-6 py-3 flex items-center gap-4 hover:bg-gray-50/40 transition-colors">
+                    <span className="text-2xl w-8 text-center shrink-0">{parent.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">{parent.name}</p>
+                      <p className="text-xs text-gray-400 font-mono">{parent.cat_key}</p>
+                    </div>
+                    {children.length > 0 && (
+                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                        {children.length} sous-cat.
+                      </span>
+                    )}
+                    <button
+                      onClick={() => deleteCategory(parent.id, parent.name)}
+                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  {children.map(child => (
+                    <div key={child.id} className="px-6 py-2.5 flex items-center gap-4 hover:bg-gray-50/30 transition-colors bg-gray-50/20 border-t border-gray-50">
+                      <div className="w-5 shrink-0 flex justify-end text-gray-300">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                      <span className="text-lg w-6 text-center shrink-0">{child.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700">{child.name}</p>
+                        <p className="text-xs text-gray-400 font-mono">{child.cat_key}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteCategory(child.id, child.name)}
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <button
-                  onClick={() => deleteCategory(cat.id, cat.name)}
-                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

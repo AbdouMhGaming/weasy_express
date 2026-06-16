@@ -795,17 +795,22 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
 
 // ── Charges Summary ────────────────────────────────────────────────────────────
 router.get("/admin/charges-summary", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, string>;
   try {
     const conn = await pool.getConnection();
     try {
+      const params: string[] = [];
+      let where = "WHERE TRUE";
+      if (q.from) { where += " AND charge_date >= ?"; params.push(q.from); }
+      if (q.to) { where += " AND charge_date <= ?"; params.push(q.to); }
       const [catRows] = await conn.execute(
-        "SELECT category, SUM(amount_dzd) as total FROM charges WHERE type = 'outcome' GROUP BY category"
+        `SELECT category, SUM(amount_dzd) as total FROM charges ${where} AND type = 'outcome' GROUP BY category`, params
       ) as [Array<{ category: string; total: string | number }>, unknown];
       const [outcomeRows] = await conn.execute(
-        "SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges WHERE type = 'outcome'"
+        `SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges ${where} AND type = 'outcome'`, params
       ) as [Array<{ total: string | number }>, unknown];
       const [incomeRows] = await conn.execute(
-        "SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges WHERE type = 'income'"
+        `SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges ${where} AND type = 'income'`, params
       ) as [Array<{ total: string | number }>, unknown];
       const byCategory: Record<string, number> = {};
       for (const r of catRows) byCategory[r.category] = Number(r.total);
@@ -916,7 +921,7 @@ router.post("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) =>
   }
 });
 
-router.delete("/admin/charges/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+router.delete("/admin/charges/:id", adminAuth, superAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   try {
@@ -999,8 +1004,8 @@ router.get("/admin/categories", adminAuth, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.execute(
-        "SELECT id, cat_key, name, icon, sort_order FROM charge_categories ORDER BY sort_order ASC, id ASC"
-      ) as [Array<{ id: number; cat_key: string; name: string; icon: string; sort_order: number }>, unknown];
+        "SELECT id, cat_key, name, icon, sort_order, parent_id FROM charge_categories ORDER BY sort_order ASC, id ASC"
+      ) as [Array<{ id: number; cat_key: string; name: string; icon: string; sort_order: number; parent_id: number | null }>, unknown];
       res.json({ ok: true, categories: rows });
     } finally { conn.release(); }
   } catch (err) {
@@ -1013,14 +1018,15 @@ router.post("/admin/categories", adminAuth, superAdminOnly, async (req, res) => 
   const b = (req.body ?? {}) as Record<string, unknown>;
   const name = String(b.name ?? "").trim().slice(0, 100);
   const icon = String(b.icon ?? "📋").trim().slice(0, 20);
+  const parentId = b.parent_id ? parseInt(String(b.parent_id), 10) : null;
   if (!name) { res.status(400).json({ ok: false, error: "invalid_fields" }); return; }
   const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 50) + "_" + Date.now();
   try {
     const conn = await pool.getConnection();
     try {
       const [r] = await conn.execute(
-        "INSERT INTO charge_categories (cat_key, name, icon, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM charge_categories c2))",
-        [key, name, icon]
+        "INSERT INTO charge_categories (cat_key, name, icon, sort_order, parent_id) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM charge_categories c2), ?)",
+        [key, name, icon, parentId]
       ) as [{ insertId: number }, unknown];
       res.json({ ok: true, id: r.insertId, cat_key: key });
     } finally { conn.release(); }
@@ -1056,10 +1062,16 @@ router.get("/admin/office-commission-rates", adminAuth, financeOrAdminOnly, asyn
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.execute(
-        "SELECT id, office_name, wilaya_name, wilaya_number, rate_dzd FROM office_commission_rates WHERE office_name = ? ORDER BY wilaya_name ASC",
+        "SELECT id, office_name, wilaya_name, wilaya_number, classic_stop_desk_dzd, classic_domicile_dzd, ecommerce_stop_desk_dzd, ecommerce_domicile_dzd FROM office_commission_rates WHERE office_name = ? ORDER BY wilaya_name ASC",
         [officeName]
       ) as [Array<Record<string, unknown>>, unknown];
-      res.json({ ok: true, rates: rows.map(r => ({ ...r, rate_dzd: Number(r.rate_dzd) })) });
+      res.json({ ok: true, rates: rows.map(r => ({
+        ...r,
+        classic_stop_desk_dzd: Number(r.classic_stop_desk_dzd ?? 0),
+        classic_domicile_dzd: Number(r.classic_domicile_dzd ?? 0),
+        ecommerce_stop_desk_dzd: Number(r.ecommerce_stop_desk_dzd ?? 0),
+        ecommerce_domicile_dzd: Number(r.ecommerce_domicile_dzd ?? 0),
+      })) });
     } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch office commission rates");
@@ -1070,7 +1082,7 @@ router.get("/admin/office-commission-rates", adminAuth, financeOrAdminOnly, asyn
 router.put("/admin/office-commission-rates/bulk", adminAuth, financeOrAdminOnly, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const officeName = String(b.office_name ?? "").trim();
-  const rates = b.rates as Array<{ wilaya_name: string; wilaya_number: string; rate_dzd: number }>;
+  const rates = b.rates as Array<{ wilaya_name: string; wilaya_number: string; classic_stop_desk_dzd: number; classic_domicile_dzd: number; ecommerce_stop_desk_dzd: number; ecommerce_domicile_dzd: number }>;
   if (!officeName || !Array.isArray(rates)) { res.status(400).json({ ok: false, error: "invalid" }); return; }
   try {
     const conn = await pool.getConnection();
@@ -1078,11 +1090,16 @@ router.put("/admin/office-commission-rates/bulk", adminAuth, financeOrAdminOnly,
       for (const r of rates) {
         const wName = String(r.wilaya_name ?? "").trim();
         const wNum  = String(r.wilaya_number ?? "").trim();
-        const rate  = parseFloat(String(r.rate_dzd ?? "0")) || 0;
+        const csd   = parseFloat(String(r.classic_stop_desk_dzd ?? "0")) || 0;
+        const cd    = parseFloat(String(r.classic_domicile_dzd ?? "0")) || 0;
+        const esd   = parseFloat(String(r.ecommerce_stop_desk_dzd ?? "0")) || 0;
+        const ed    = parseFloat(String(r.ecommerce_domicile_dzd ?? "0")) || 0;
         if (!wName) continue;
         await conn.execute(
-          "INSERT INTO office_commission_rates (office_name, wilaya_name, wilaya_number, rate_dzd) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE rate_dzd = VALUES(rate_dzd), wilaya_number = VALUES(wilaya_number)",
-          [officeName, wName, wNum, rate]
+          `INSERT INTO office_commission_rates (office_name, wilaya_name, wilaya_number, classic_stop_desk_dzd, classic_domicile_dzd, ecommerce_stop_desk_dzd, ecommerce_domicile_dzd)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE classic_stop_desk_dzd=VALUES(classic_stop_desk_dzd), classic_domicile_dzd=VALUES(classic_domicile_dzd), ecommerce_stop_desk_dzd=VALUES(ecommerce_stop_desk_dzd), ecommerce_domicile_dzd=VALUES(ecommerce_domicile_dzd), wilaya_number=VALUES(wilaya_number)`,
+          [officeName, wName, wNum, csd, cd, esd, ed]
         );
       }
       res.json({ ok: true });
@@ -1177,6 +1194,9 @@ const xlsxUpload = multer2({ storage: multer2.memoryStorage(), limits: { fileSiz
 router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.single("xlsx"), async (req, res) => {
   const file = req.file;
   const officeName = String((req.body as Record<string, unknown>)?.officeName ?? "").trim();
+  const rateTypeRaw = String((req.body as Record<string, unknown>)?.rateType ?? "classic_stop_desk").trim();
+  const validRateTypes = ["classic_stop_desk", "classic_domicile", "ecommerce_stop_desk", "ecommerce_domicile"];
+  const rateCol = validRateTypes.includes(rateTypeRaw) ? `${rateTypeRaw}_dzd` : "classic_stop_desk_dzd";
   if (!file || !officeName) { res.status(400).json({ ok: false, error: "missing_fields" }); return; }
   try {
     const XLSX = await import("xlsx");
@@ -1234,7 +1254,7 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
     try {
       // Try office-specific rates first, fall back to global wilaya rates
       const [officeRateRows] = await conn.execute(
-        "SELECT wilaya_name, wilaya_number, rate_dzd FROM office_commission_rates WHERE office_name = ?",
+        `SELECT wilaya_name, wilaya_number, ${rateCol} AS rate_dzd FROM office_commission_rates WHERE office_name = ?`,
         [officeName]
       ) as [Array<{ wilaya_name: string; wilaya_number: string | null; rate_dzd: string }>, unknown];
 
@@ -1246,7 +1266,7 @@ router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.
         }
       } else {
         const [globalRateRows] = await conn.execute(
-          "SELECT wilaya_name, wilaya_number, rate_dzd FROM wilaya_commission_rates"
+          `SELECT wilaya_name, wilaya_number, ${rateCol} AS rate_dzd FROM wilaya_commission_rates`
         ) as [Array<{ wilaya_name: string; wilaya_number: string | null; rate_dzd: string }>, unknown];
         for (const r of globalRateRows) {
           rateMap[r.wilaya_name.toLowerCase()] = Number(r.rate_dzd);
@@ -1435,7 +1455,7 @@ router.get("/admin/commissions/:id/file", adminAuth, financeOrAdminOnly, async (
   }
 });
 
-router.delete("/admin/commissions/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+router.delete("/admin/commissions/:id", adminAuth, superAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   try {
