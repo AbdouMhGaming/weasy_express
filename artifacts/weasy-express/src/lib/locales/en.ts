@@ -753,11 +753,14 @@ const en: Translations = {
       returnModal: {
         title: "Record a return",
         count: "Returned parcels",
+        date: "Date",
         rate: "Applied rate",
         deduction: "Deduction",
         save: "Save",
         cancel: "Cancel",
         noRate: "No return rate defined. Go to the \"Returns\" tab to configure it.",
+        historyTitle: "Recorded returns",
+        noHistory: "No returns recorded for this period.",
       },
       details: {
         rateCategory: "Rate category",

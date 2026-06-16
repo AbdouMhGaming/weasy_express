@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
@@ -31,6 +31,16 @@ interface Office {
   wilaya: string;
   wilayaNumber: string | number;
   commune: string | null;
+}
+
+interface ReturnEntry {
+  id: number;
+  office_name: string;
+  return_count: number;
+  deduction_dzd: number;
+  return_date: string;
+  uploaded_by: string;
+  created_at: string;
 }
 
 const fmtN = (n: number) => Math.round(n).toLocaleString("fr-DZ");
@@ -105,9 +115,6 @@ function wilayaBadge(wilayaNumber: string | number): string {
   return s.includes(".") ? s : s.padStart(2, "0");
 }
 
-const LS_RETURN_RATE = "commission_return_rate";
-const LS_RETURNS_PREFIX = "commission_office_returns_";
-
 export default function CommissionsView() {
   const { t } = useTranslation();
   const role = useMemo(() => localStorage.getItem("admin_role") ?? "", []);
@@ -119,6 +126,10 @@ export default function CommissionsView() {
   const [history, setHistory] = useState<CommissionUpload[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  // Returns (DB-backed)
+  const [returns, setReturns] = useState<ReturnEntry[]>([]);
+  const [returnsLoading, setReturnsLoading] = useState(false);
+
   const now = new Date();
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
@@ -126,6 +137,7 @@ export default function CommissionsView() {
 
   const [expandedOffice, setExpandedOffice] = useState<string | null>(null);
   const [expandedBreakId, setExpandedBreakId] = useState<number | null>(null);
+  const [expandedReturnOffice, setExpandedReturnOffice] = useState<string | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [addOffice, setAddOffice] = useState("");
@@ -146,59 +158,117 @@ export default function CommissionsView() {
   const [officeRateSaved, setOfficeRateSaved] = useState(false);
   const [officeRateError, setOfficeRateError] = useState("");
 
-  // Return Rate state
+  // Return Rate state (DB-backed)
   const [returnRateInput, setReturnRateInput] = useState("");
   const [returnRate, setReturnRate] = useState(0);
   const [returnRateSaved, setReturnRateSaved] = useState(false);
+  const [returnRateSaving, setReturnRateSaving] = useState(false);
 
-  // Per-office return modal state
+  // Return modal state
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnModalOffice, setReturnModalOffice] = useState("");
   const [returnCount, setReturnCount] = useState("");
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().split("T")[0]);
+  const [returnSaving, setReturnSaving] = useState(false);
 
-  // Per-office returns: officeName → { count, deduction }
-  const [officeReturns, setOfficeReturns] = useState<Record<string, { count: number; deduction: number }>>({});
+  // Aggregate returns per office
+  const returnsByOffice = useMemo(() => {
+    const map: Record<string, { totalCount: number; totalDeduction: number; entries: ReturnEntry[] }> = {};
+    for (const r of returns) {
+      if (!map[r.office_name]) map[r.office_name] = { totalCount: 0, totalDeduction: 0, entries: [] };
+      map[r.office_name].totalCount += Number(r.return_count);
+      map[r.office_name].totalDeduction += Number(r.deduction_dzd);
+      map[r.office_name].entries.push(r);
+    }
+    return map;
+  }, [returns]);
 
-  // Load return rate from localStorage
-  useEffect(() => {
-    const stored = parseFloat(localStorage.getItem(LS_RETURN_RATE) ?? "0") || 0;
-    setReturnRate(stored);
-    setReturnRateInput(stored > 0 ? String(stored) : "");
+  // ── Fetch return rate from DB ──────────────────────────────────────────────
+  const fetchReturnRate = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/settings/commission_return_rate`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok && d.value != null) {
+        const rate = parseFloat(d.value) || 0;
+        setReturnRate(rate);
+        setReturnRateInput(rate > 0 ? String(rate) : "");
+      }
+    } catch {}
   }, []);
 
-  // Period key for localStorage
-  const periodKey = showAllTime ? "all" : `${filterYear}-${String(filterMonth).padStart(2, "0")}`;
-
-  // Load per-office returns for current period
-  useEffect(() => {
+  // ── Fetch returns from DB ──────────────────────────────────────────────────
+  const fetchReturns = useCallback(async () => {
+    setReturnsLoading(true);
     try {
-      const stored = JSON.parse(localStorage.getItem(`${LS_RETURNS_PREFIX}${periodKey}`) ?? "{}");
-      setOfficeReturns(stored as Record<string, { count: number; deduction: number }>);
-    } catch { setOfficeReturns({}); }
-  }, [periodKey]);
+      const params = new URLSearchParams();
+      if (!showAllTime) {
+        const y = filterYear, m = filterMonth;
+        params.set("from", `${y}-${String(m).padStart(2,"0")}-01`);
+        params.set("to", `${y}-${String(m).padStart(2,"0")}-${new Date(y, m, 0).getDate()}`);
+      }
+      const r = await fetch(`${API_BASE}/api/admin/commission-returns?${params}`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok) setReturns(d.returns ?? []);
+    } catch {} finally { setReturnsLoading(false); }
+  }, [showAllTime, filterYear, filterMonth]);
 
-  function saveReturnRate() {
-    const r = parseFloat(returnRateInput) || 0;
-    setReturnRate(r);
-    localStorage.setItem(LS_RETURN_RATE, String(r));
-    setReturnRateSaved(true);
-    setTimeout(() => setReturnRateSaved(false), 2500);
+  async function saveReturnRate() {
+    setReturnRateSaving(true);
+    try {
+      const rate = parseFloat(returnRateInput) || 0;
+      const res = await fetch(`${API_BASE}/api/admin/settings/commission_return_rate`, {
+        method: "PUT",
+        headers: adminHeaders(),
+        body: JSON.stringify({ value: String(rate) }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setReturnRate(rate);
+        setReturnRateSaved(true);
+        setTimeout(() => setReturnRateSaved(false), 2500);
+      }
+    } catch {} finally { setReturnRateSaving(false); }
   }
 
   function openReturnModal(officeName: string) {
     setReturnModalOffice(officeName);
-    setReturnCount(String(officeReturns[officeName]?.count ?? ""));
+    setReturnCount("");
+    setReturnDate(new Date().toISOString().split("T")[0]);
     setShowReturnModal(true);
   }
 
-  function saveReturn() {
+  async function saveReturn() {
     const count = parseInt(returnCount) || 0;
-    const deduction = count * returnRate;
-    const updated = { ...officeReturns, [returnModalOffice]: { count, deduction } };
-    setOfficeReturns(updated);
-    localStorage.setItem(`${LS_RETURNS_PREFIX}${periodKey}`, JSON.stringify(updated));
-    setShowReturnModal(false);
-    setReturnCount("");
+    if (count <= 0) return;
+    const deduction = Math.round(count * returnRate);
+    setReturnSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/commission-returns`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          office_name: returnModalOffice,
+          return_count: count,
+          deduction_dzd: deduction,
+          return_date: returnDate,
+        }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setShowReturnModal(false);
+        setReturnCount("");
+        await fetchReturns();
+      }
+    } catch {} finally { setReturnSaving(false); }
+  }
+
+  async function deleteReturn(id: number) {
+    try {
+      await fetch(`${API_BASE}/api/admin/commission-returns/${id}`, {
+        method: "DELETE", headers: adminHeaders(),
+      });
+      await fetchReturns();
+    } catch {}
   }
 
   const fetchOffices = useCallback(async () => {
@@ -227,6 +297,8 @@ export default function CommissionsView() {
 
   useEffect(() => { fetchOffices(); }, [fetchOffices]);
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => { fetchReturns(); }, [fetchReturns]);
+  useEffect(() => { fetchReturnRate(); }, [fetchReturnRate]);
 
   const officeUploads = useCallback(
     (name: string) => history.filter(h => h.period_label === name),
@@ -474,12 +546,14 @@ export default function CommissionsView() {
               {offices.map(office => {
                 const name = fullOfficeName(office);
                 const uploads = officeUploads(name);
-                const total = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
-                const returnData = officeReturns[name];
-                const netTotal = total - (returnData?.deduction ?? 0);
+                const grossTotal = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
+                const returnAgg = returnsByOffice[name];
+                const netTotal = grossTotal - (returnAgg?.totalDeduction ?? 0);
                 const isExpanded = expandedOffice === name;
+                const isReturnExpanded = expandedReturnOffice === name;
                 const hasData = uploads.length > 0;
                 const badge = wilayaBadge(office.wilayaNumber);
+                const hasReturns = (returnAgg?.entries.length ?? 0) > 0;
 
                 return (
                   <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -507,9 +581,9 @@ export default function CommissionsView() {
                         {hasData ? (
                           <>
                             <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
-                            {returnData && returnData.deduction > 0 && (
+                            {returnAgg && returnAgg.totalDeduction > 0 && (
                               <p className="text-xs text-orange-500 font-semibold">
-                                {fmtDZ(total)} − {fmtDZ(returnData.deduction)}
+                                {fmtDZ(grossTotal)} − {fmtDZ(returnAgg.totalDeduction)}
                               </p>
                             )}
                             <p className="text-xs text-gray-400">
@@ -517,8 +591,8 @@ export default function CommissionsView() {
                                 const { breakdown } = parseUpload(h);
                                 return s + breakdown.reduce((rs, r) => rs + (r.delivered ?? 0), 0);
                               }, 0))} {t("admin.commissions.office.parcels")}
-                              {returnData && returnData.count > 0 && (
-                                <span className="text-orange-400 ml-1">· {returnData.count} {t("admin.commissions.office.returned")}</span>
+                              {returnAgg && returnAgg.totalCount > 0 && (
+                                <span className="text-orange-400 ml-1">· {returnAgg.totalCount} {t("admin.commissions.office.returned")}</span>
                               )}
                             </p>
                           </>
@@ -537,11 +611,23 @@ export default function CommissionsView() {
                             {isExpanded ? t("admin.commissions.office.hide") : t("admin.commissions.office.details")}
                           </button>
                         )}
-                        {/* Return button */}
+                        {/* Return history toggle */}
+                        {hasReturns && !isExpanded && (
+                          <button
+                            onClick={() => setExpandedReturnOffice(isReturnExpanded ? null : name)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${isReturnExpanded ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                            {returnAgg?.entries.length}
+                          </button>
+                        )}
+                        {/* Add Return button */}
                         {hasData && (
                           <button
                             onClick={() => openReturnModal(name)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${returnData && returnData.count > 0 ? "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasReturns ? "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -560,6 +646,57 @@ export default function CommissionsView() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Return entries list (standalone, when not in upload expanded view) */}
+                    {isReturnExpanded && !isExpanded && hasReturns && (
+                      <div className="border-t border-orange-100 bg-orange-50/40">
+                        <div className="px-5 py-2.5 flex items-center justify-between">
+                          <p className="text-xs font-bold text-orange-700">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-orange-100">
+                              <th className="text-left text-xs font-semibold text-orange-400 px-5 py-2">{t("admin.commissions.returnModal.date")}</th>
+                              <th className="text-right text-xs font-semibold text-orange-400 px-4 py-2">{t("admin.commissions.returnModal.count")}</th>
+                              <th className="text-right text-xs font-semibold text-orange-400 px-4 py-2">{t("admin.commissions.returnModal.deduction")}</th>
+                              {role === "admin" && <th className="px-4 py-2 w-10" />}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-orange-50">
+                            {returnAgg.entries.map(entry => (
+                              <tr key={entry.id} className="hover:bg-orange-50 transition-colors">
+                                <td className="px-5 py-2.5 text-gray-700 font-medium whitespace-nowrap">
+                                  {new Date(entry.return_date).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-orange-600 font-bold">{fmtN(Number(entry.return_count))}</td>
+                                <td className="px-4 py-2.5 text-right font-bold text-orange-700">{fmtDZ(Number(entry.deduction_dzd))}</td>
+                                {role === "admin" && (
+                                  <td className="px-4 py-2.5 text-right">
+                                    <button
+                                      onClick={() => deleteReturn(entry.id)}
+                                      className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                      title="Supprimer"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-orange-100/60 border-t-2 border-orange-200/50">
+                              <td className="px-5 py-2 text-xs font-bold text-orange-700">Total</td>
+                              <td className="px-4 py-2 text-right font-black text-orange-700">{fmtN(returnAgg.totalCount)}</td>
+                              <td className="px-4 py-2 text-right font-black text-orange-700">{fmtDZ(returnAgg.totalDeduction)}</td>
+                              {role === "admin" && <td />}
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
 
                     {/* Expanded: upload history */}
                     {isExpanded && uploads.length > 0 && (
@@ -582,8 +719,8 @@ export default function CommissionsView() {
                               const isBreakExpanded = expandedBreakId === u.id;
 
                               return (
-                                <>
-                                  <tr key={u.id} className="hover:bg-white/70 transition-colors">
+                                <React.Fragment key={u.id}>
+                                  <tr className="hover:bg-white/70 transition-colors">
                                     <td className="px-5 py-3 text-gray-700 font-medium whitespace-nowrap">
                                       {new Date(u.created_at).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
                                     </td>
@@ -669,7 +806,7 @@ export default function CommissionsView() {
                                       </td>
                                     </tr>
                                   )}
-                                </>
+                                </React.Fragment>
                               );
                             })}
                           </tbody>
@@ -678,11 +815,53 @@ export default function CommissionsView() {
                           <tfoot>
                             <tr className="bg-red-50 border-t-2 border-[#E10600]/20">
                               <td colSpan={4} className="px-5 py-2.5 font-bold text-gray-900 text-xs uppercase tracking-wide">{t("admin.commissions.office.totalLabel")} {office.wilaya}</td>
-                              <td className="px-4 py-2.5 text-right font-black text-[#E10600]">{fmtDZ(total)}</td>
+                              <td className="px-4 py-2.5 text-right font-black text-[#E10600]">{fmtDZ(grossTotal)}</td>
                               <td className="px-4" />
                             </tr>
                           </tfoot>
                         </table>
+
+                        {/* Return entries inline (when expanded) */}
+                        {hasReturns && (
+                          <div className="border-t border-orange-100 bg-orange-50/40">
+                            <div className="px-5 py-2.5 flex items-center justify-between">
+                              <p className="text-xs font-bold text-orange-700">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
+                              <p className="text-xs text-orange-500 font-semibold">− {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody className="divide-y divide-orange-50">
+                                {returnAgg?.entries.map(entry => (
+                                  <tr key={entry.id} className="hover:bg-orange-50 transition-colors">
+                                    <td className="px-5 py-2.5 text-gray-700 font-medium whitespace-nowrap">
+                                      {new Date(entry.return_date).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-orange-600 font-bold">{fmtN(Number(entry.return_count))} colis</td>
+                                    <td className="px-4 py-2.5 text-right font-bold text-orange-700">{fmtDZ(Number(entry.deduction_dzd))}</td>
+                                    <td className="px-4 py-2.5 w-10 text-right">
+                                      {role === "admin" && (
+                                        <button
+                                          onClick={() => deleteReturn(entry.id)}
+                                          className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-orange-100/60 border-t border-orange-200/50">
+                                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-orange-700">Net {office.wilaya}</td>
+                                  <td className="px-4 py-2 text-right font-black text-orange-700">{fmtDZ(netTotal)}</td>
+                                  <td />
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -875,9 +1054,12 @@ export default function CommissionsView() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={saveReturnRate}
-                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm transition-colors"
+                  disabled={returnRateSaving}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm transition-colors disabled:opacity-60"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                  {returnRateSaving ? <Spinner /> : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                  )}
                   {t("admin.commissions.returnRate.save")}
                 </button>
                 {returnRateSaved && (
@@ -1002,6 +1184,15 @@ export default function CommissionsView() {
 
             <div className="space-y-4">
               <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.returnModal.date")}</label>
+                <input
+                  type="date"
+                  value={returnDate}
+                  onChange={e => setReturnDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.returnModal.count")}</label>
                 <input
                   type="number"
@@ -1020,7 +1211,7 @@ export default function CommissionsView() {
                 </div>
                 <div className="flex items-center justify-between text-sm border-t border-gray-200 pt-2">
                   <span className="font-semibold text-gray-700">{t("admin.commissions.returnModal.deduction")}</span>
-                  <span className="font-black text-orange-600">{fmtDZ((parseInt(returnCount) || 0) * returnRate)}</span>
+                  <span className="font-black text-orange-600">{fmtDZ(Math.round((parseInt(returnCount) || 0) * returnRate))}</span>
                 </div>
               </div>
             </div>
@@ -1031,10 +1222,10 @@ export default function CommissionsView() {
               </button>
               <button
                 onClick={saveReturn}
-                disabled={returnRate === 0}
-                className="flex-1 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
+                disabled={returnRate === 0 || returnSaving || !returnCount || parseInt(returnCount) <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
               >
-                {t("admin.commissions.returnModal.save")}
+                {returnSaving ? <Spinner /> : t("admin.commissions.returnModal.save")}
               </button>
             </div>
           </div>

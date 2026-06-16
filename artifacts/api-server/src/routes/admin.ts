@@ -1479,4 +1479,104 @@ router.delete("/admin/commissions/:id", adminAuth, superAdminOnly, async (req, r
   }
 });
 
+// ── App Settings (key-value store) ────────────────────────────────────────────
+router.get("/admin/settings/:key", adminAuth, async (req, res) => {
+  const key = (req.params as { key: string }).key;
+  if (!key || key.length > 100) { res.status(400).json({ ok: false, error: "invalid_key" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT setting_value FROM app_settings WHERE setting_key = ?", [key]
+      ) as [Array<{ setting_value: string }>, unknown];
+      res.json({ ok: true, value: rows[0]?.setting_value ?? null });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to get setting");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.put("/admin/settings/:key", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const key = (req.params as { key: string }).key;
+  const value = String((req.body as Record<string, unknown>)?.value ?? "");
+  if (!key || key.length > 100) { res.status(400).json({ ok: false, error: "invalid_key" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+        [key, value]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to set setting");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Commission Returns ─────────────────────────────────────────────────────────
+router.get("/admin/commission-returns", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, string>;
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const params: string[] = [];
+      let where = "WHERE 1=1";
+      if (q.from)   { where += " AND return_date >= ?"; params.push(q.from); }
+      if (q.to)     { where += " AND return_date <= ?"; params.push(q.to); }
+      if (q.office) { where += " AND office_name = ?"; params.push(q.office); }
+      const [rows] = await conn.execute(
+        `SELECT id, office_name, return_count, deduction_dzd, return_date, uploaded_by, created_at FROM commission_returns ${where} ORDER BY return_date DESC, created_at DESC LIMIT 1000`,
+        params
+      ) as [Array<Record<string, unknown>>, unknown];
+      res.json({ ok: true, returns: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch commission returns");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/commission-returns", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const officeName = String(b.office_name ?? "").trim();
+  const returnCount = parseInt(String(b.return_count ?? "0"), 10);
+  const deductionDzd = parseInt(String(b.deduction_dzd ?? "0"), 10);
+  const returnDate = String(b.return_date ?? "").trim() || new Date().toISOString().split("T")[0];
+  if (!officeName || isNaN(returnCount) || returnCount < 0) {
+    res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const authReq = req as AuthedRequest;
+      await conn.execute(
+        "INSERT INTO commission_returns (office_name, return_count, deduction_dzd, return_date, uploaded_by) VALUES (?, ?, ?, ?, ?)",
+        [officeName, returnCount, deductionDzd, returnDate, authReq.adminUsername ?? ""]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to add commission return");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/commission-returns/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM commission_returns WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete commission return");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 export default router;

@@ -753,11 +753,14 @@ const ar: Translations = {
       returnModal: {
         title: "تسجيل إرجاع",
         count: "الطرود المُعادة",
+        date: "التاريخ",
         rate: "المعدل المطبّق",
         deduction: "الخصم",
         save: "حفظ",
         cancel: "إلغاء",
         noRate: "لم يُحدَّد معدل إرجاع. انتقل إلى تبويب «الإرجاعات» لضبطه.",
+        historyTitle: "الإرجاعات المسجّلة",
+        noHistory: "لا توجد إرجاعات مسجّلة لهذه الفترة.",
       },
       details: {
         rateCategory: "فئة التسعيرة",

@@ -751,11 +751,14 @@ const fr = {
       returnModal: {
         title: "Enregistrer un retour",
         count: "Nombre de colis retournés",
+        date: "Date",
         rate: "Taux appliqué",
         deduction: "Déduction",
         save: "Enregistrer",
         cancel: "Annuler",
         noRate: "Aucun taux de retour défini. Allez dans l'onglet « Retours » pour le configurer.",
+        historyTitle: "Retours enregistrés",
+        noHistory: "Aucun retour enregistré pour cette période.",
       },
       details: {
         rateCategory: "Catégorie de tarif",
