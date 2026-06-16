@@ -868,13 +868,12 @@ router.get("/admin/charges/:id/attachment", adminAuth, financeOrAdminOnly, async
 
 router.post("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
-  const validCats = ["marketing", "hr", "it", "packaging", "cod", "warehouse", "various"];
   const category = String(b.category ?? "").trim();
   const amount = parseInt(String(b.amount_dzd ?? "0"), 10);
   const description = b.description ? String(b.description).trim().slice(0, 500) : null;
   const chargeDate = String(b.charge_date ?? "").trim() || new Date().toISOString().split("T")[0];
   const type = b.type === "income" ? "income" : "outcome";
-  if (!validCats.includes(category) || isNaN(amount) || amount < 0) {
+  if (!category || isNaN(amount) || amount < 0) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
   let attachmentName: string | null = null;
@@ -893,6 +892,12 @@ router.post("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) =>
   try {
     const conn = await pool.getConnection();
     try {
+      const [catRows] = await conn.execute(
+        "SELECT cat_key FROM charge_categories WHERE cat_key = ? LIMIT 1", [category]
+      ) as [Array<{ cat_key: string }>, unknown];
+      if (catRows.length === 0) {
+        res.status(400).json({ ok: false, error: "invalid_category" }); return;
+      }
       await conn.execute(
         "INSERT INTO charges (category, amount_dzd, description, charge_date, type, attachment_name, attachment_data) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [category, amount, description, chargeDate, type, attachmentName, attachmentData]
@@ -1086,8 +1091,106 @@ router.delete("/admin/commission-rates/:id", adminAuth, financeOrAdminOnly, asyn
   }
 });
 
+router.put("/admin/commission-rates/bulk", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const rates = b.rates as Array<{ wilaya_name: string; wilaya_number: string; rate_dzd: number }>;
+  if (!Array.isArray(rates)) { res.status(400).json({ ok: false, error: "invalid" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      for (const r of rates) {
+        const wilayaName = String(r.wilaya_name ?? "").trim();
+        const wilayaNumber = String(r.wilaya_number ?? "").trim();
+        const rateDzd = parseFloat(String(r.rate_dzd ?? "0")) || 0;
+        if (!wilayaName) continue;
+        await conn.execute(
+          "INSERT INTO wilaya_commission_rates (wilaya_name, wilaya_number, rate_dzd) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rate_dzd = VALUES(rate_dzd), wilaya_number = VALUES(wilaya_number)",
+          [wilayaName, wilayaNumber, rateDzd]
+        );
+      }
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to bulk save commission rates");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 // ── Commission Calculation (from xlsx upload) ──────────────────────────────────
 const xlsxUpload = multer2({ storage: multer2.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+router.post("/admin/commissions/add", adminAuth, financeOrAdminOnly, xlsxUpload.single("xlsx"), async (req, res) => {
+  const file = req.file;
+  const officeName = String((req.body as Record<string, unknown>)?.officeName ?? "").trim();
+  if (!file || !officeName) { res.status(400).json({ ok: false, error: "missing_fields" }); return; }
+  try {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(file.buffer, { type: "buffer" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+    if (!rawRows.length) { res.status(400).json({ ok: false, error: "empty_file" }); return; }
+    const headers = Object.keys(rawRows[0]);
+
+    const deliveredCol = headers.find(h => {
+      const hl = h.toLowerCase();
+      return hl.includes("livr") && hl.includes("date");
+    }) ?? headers.find(h => h.toLowerCase().includes("livr")) ?? "";
+
+    const wilayaCol = headers.find(h => {
+      const hl = h.toLowerCase();
+      return hl.includes("wilaya") || hl.includes("wilaya dest") || hl.includes("destination");
+    }) ?? "";
+
+    if (!deliveredCol) {
+      res.status(400).json({ ok: false, error: "column_not_found", detail: `No livraison column found. Available: ${headers.join(", ")}` }); return;
+    }
+    if (!wilayaCol) {
+      res.status(400).json({ ok: false, error: "column_not_found", detail: `No wilaya column found. Available: ${headers.join(", ")}` }); return;
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      const [rateRows] = await conn.execute(
+        "SELECT wilaya_name, wilaya_number, rate_dzd FROM wilaya_commission_rates"
+      ) as [Array<{ wilaya_name: string; wilaya_number: string | null; rate_dzd: string }>, unknown];
+      const rateMap: Record<string, number> = {};
+      for (const r of rateRows) {
+        rateMap[r.wilaya_name.toLowerCase()] = Number(r.rate_dzd);
+        if (r.wilaya_number) rateMap[r.wilaya_number.toLowerCase()] = Number(r.rate_dzd);
+      }
+
+      const wilayaMap: Record<string, { delivered: number; rate: number }> = {};
+      for (const row of rawRows) {
+        const wilayaRaw = String(row[wilayaCol] ?? "").trim();
+        if (!wilayaRaw) continue;
+        const delivered = parseInt(String(row[deliveredCol] ?? "0").replace(/[\s,]/g, ""), 10) || 0;
+        if (delivered === 0) continue;
+        if (!wilayaMap[wilayaRaw]) {
+          const rate = rateMap[wilayaRaw.toLowerCase()] ?? 0;
+          wilayaMap[wilayaRaw] = { delivered: 0, rate };
+        }
+        wilayaMap[wilayaRaw].delivered += delivered;
+      }
+
+      const results = Object.entries(wilayaMap)
+        .map(([wilaya, d]) => ({ office: officeName, wilaya, delivered: d.delivered, rate: d.rate, commission: d.delivered * d.rate }))
+        .sort((a, b) => b.commission - a.commission);
+
+      const totalCommissions = results.reduce((s, r) => s + r.commission, 0);
+
+      const authReq = req as AuthedRequest;
+      await conn.execute(
+        "INSERT INTO commission_uploads (uploaded_by, file_name, period_label, results_json, total_commissions) VALUES (?, ?, ?, ?, ?)",
+        [authReq.adminUsername ?? "", file.originalname, officeName, JSON.stringify(results), totalCommissions]
+      );
+
+      res.json({ ok: true, results, totalCommissions, officeName, detectedDeliveredCol: deliveredCol, detectedWilayaCol: wilayaCol });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to add commission");
+    res.status(500).json({ ok: false, error: "parse_error", detail: String(err) });
+  }
+});
 
 router.post("/admin/commissions/calculate", adminAuth, financeOrAdminOnly, xlsxUpload.single("xlsx"), async (req, res) => {
   const file = req.file;
