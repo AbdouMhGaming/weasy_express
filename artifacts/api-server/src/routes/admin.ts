@@ -1315,16 +1315,41 @@ router.post("/admin/commissions/compute", adminAuth, financeOrAdminOnly, async (
 });
 
 router.get("/admin/commissions/history", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, unknown>;
+  const office = typeof q.office === "string" && q.office ? q.office : null;
+  const from   = typeof q.from   === "string" && q.from   ? q.from   : null;
+  const to     = typeof q.to     === "string" && q.to     ? q.to     : null;
   try {
     const conn = await pool.getConnection();
     try {
+      const params: string[] = [];
+      let where = "WHERE 1=1";
+      if (office) { where += " AND period_label = ?"; params.push(office); }
+      if (from)   { where += " AND DATE(created_at) >= ?"; params.push(from.slice(0, 10)); }
+      if (to)     { where += " AND DATE(created_at) <= ?"; params.push(to.slice(0, 10)); }
       const [rows] = await conn.execute(
-        "SELECT id, uploaded_by, file_name, period_label, total_commissions, created_at FROM commission_uploads ORDER BY created_at DESC LIMIT 20"
+        `SELECT id, uploaded_by, file_name, period_label, results_json, total_commissions, created_at FROM commission_uploads ${where} ORDER BY created_at DESC LIMIT 1000`,
+        params,
       ) as [Array<Record<string, unknown>>, unknown];
       res.json({ ok: true, history: rows });
     } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch commission history");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/commissions/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM commission_uploads WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete commission upload");
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });

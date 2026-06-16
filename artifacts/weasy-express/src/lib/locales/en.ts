@@ -366,7 +366,7 @@ const en: Translations = {
         email: "Email",
         phone: "Phone",
         city: "City / Wilaya",
-        parcels: "Parcels / month",
+        parcels: "Parcels / day",
         date: "Application date",
         address: "Address",
       },

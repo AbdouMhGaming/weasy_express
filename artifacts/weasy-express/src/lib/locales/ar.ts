@@ -366,7 +366,7 @@ const ar: Translations = {
         email: "البريد الإلكتروني",
         phone: "الهاتف",
         city: "المدينة / الولاية",
-        parcels: "طرود / شهر",
+        parcels: "طرود / يوم",
         date: "تاريخ الطلب",
         address: "العنوان",
       },

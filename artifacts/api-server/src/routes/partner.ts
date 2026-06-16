@@ -97,7 +97,7 @@ router.post("/partner", async (req, res) => {
           <tr><td style="padding:6px 0;color:#666;">Téléphone</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(phone)}</td></tr>
           <tr><td style="padding:6px 0;color:#666;">Adresse</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(address)}</td></tr>
           <tr><td style="padding:6px 0;color:#666;">Ville (Wilaya)</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(city)}</td></tr>
-          <tr><td style="padding:6px 0;color:#666;">Colis / mois</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(parcelsPerMonth)}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Colis / jour</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(parcelsPerMonth)}</td></tr>
         </table>
         <div style="margin-top:16px;background:#FFF4E5;border:1px solid #F5C26B;border-radius:8px;padding:12px;">
           <p style="margin:0 0 6px;font-size:12px;color:#8A5A00;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Mot de passe choisi</p>
@@ -110,7 +110,7 @@ router.post("/partner", async (req, res) => {
   const text =
     `Nouvelle inscription Partenaire\n\n` +
     `Nom: ${lastName}\nPrénom: ${firstName}\nEmail: ${email}\nTéléphone: ${phone}\n` +
-    `Adresse: ${address}\nVille: ${city}\nColis / mois: ${parcelsPerMonth}\n` +
+    `Adresse: ${address}\nVille: ${city}\nColis / jour: ${parcelsPerMonth}\n` +
     `\nMot de passe: ${password}\n`;
 
   const emailResult = await Promise.allSettled([
