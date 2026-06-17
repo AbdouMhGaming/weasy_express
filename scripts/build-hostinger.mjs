@@ -82,7 +82,7 @@ const pkgJson = {
   private: true,
   type: "module",
   scripts: {
-    start: "node --enable-source-maps ./dist/index.mjs",
+    start: "node ./dist/index.mjs",
   },
   engines: { node: ">=20" },
 };
@@ -164,6 +164,8 @@ function addDirToZip(zip, srcDir, zipPrefix = "") {
   for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
     const srcPath = path.join(srcDir, entry.name);
     const entryZipDir = zipPrefix;
+    // Skip source-map files — not needed in production
+    if (!entry.isDirectory() && entry.name.endsWith(".map")) continue;
     if (entry.isDirectory()) {
       const subPrefix = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name;
       addDirToZip(zip, srcPath, subPrefix);
