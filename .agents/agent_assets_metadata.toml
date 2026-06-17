@@ -54,3 +54,9 @@ id = "wApsEn0cExwj5Jq7_F47h"
 uri = "file://deploy/weasy-express-2026-06-16.zip"
 type = "unspecified"
 title = "Weasy Express — Hostinger Package (16 juin 2026)"
+
+[[outputs]]
+id = "H8PoU6KdqV-VqyNe-gEhU"
+uri = "file://deploy/weasy-express-2026-06-17.zip"
+type = "unspecified"
+title = "weasy-express-hostinger-2026-06-17.zip"
