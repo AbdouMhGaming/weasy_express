@@ -1479,11 +1479,6 @@ router.delete("/admin/commissions/:id", adminAuth, superAdminOnly, async (req, r
   }
 });
 
-// Helper: true when MySQL says the table doesn't exist yet
-function isTableMissing(err: unknown): boolean {
-  return (err as { code?: string })?.code === "ER_NO_SUCH_TABLE";
-}
-
 // ── App Settings (key-value store) ────────────────────────────────────────────
 router.get("/admin/settings/:key", adminAuth, async (req, res) => {
   const key = (req.params as { key: string }).key;
@@ -1497,7 +1492,6 @@ router.get("/admin/settings/:key", adminAuth, async (req, res) => {
       res.json({ ok: true, value: rows[0]?.setting_value ?? null });
     } finally { conn.release(); }
   } catch (err) {
-    if (isTableMissing(err)) { res.json({ ok: true, value: null }); return; }
     req.log.error({ err }, "Failed to get setting");
     res.status(500).json({ ok: false, error: "db_error" });
   }
@@ -1517,7 +1511,6 @@ router.put("/admin/settings/:key", adminAuth, financeOrAdminOnly, async (req, re
       res.json({ ok: true });
     } finally { conn.release(); }
   } catch (err) {
-    if (isTableMissing(err)) { res.json({ ok: true }); return; }
     req.log.error({ err }, "Failed to set setting");
     res.status(500).json({ ok: false, error: "db_error" });
   }
@@ -1541,7 +1534,6 @@ router.get("/admin/commission-returns", adminAuth, financeOrAdminOnly, async (re
       res.json({ ok: true, returns: rows });
     } finally { conn.release(); }
   } catch (err) {
-    if (isTableMissing(err)) { res.json({ ok: true, returns: [] }); return; }
     req.log.error({ err }, "Failed to fetch commission returns");
     res.status(500).json({ ok: false, error: "db_error" });
   }
@@ -1567,10 +1559,6 @@ router.post("/admin/commission-returns", adminAuth, financeOrAdminOnly, async (r
       res.json({ ok: true });
     } finally { conn.release(); }
   } catch (err) {
-    if (isTableMissing(err)) {
-      res.status(503).json({ ok: false, error: "table_missing", message: "Run the DB migration to enable returns tracking." });
-      return;
-    }
     req.log.error({ err }, "Failed to add commission return");
     res.status(500).json({ ok: false, error: "db_error" });
   }
@@ -1586,7 +1574,6 @@ router.delete("/admin/commission-returns/:id", adminAuth, financeOrAdminOnly, as
       res.json({ ok: true });
     } finally { conn.release(); }
   } catch (err) {
-    if (isTableMissing(err)) { res.json({ ok: true }); return; }
     req.log.error({ err }, "Failed to delete commission return");
     res.status(500).json({ ok: false, error: "db_error" });
   }
