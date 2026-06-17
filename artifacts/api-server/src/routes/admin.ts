@@ -112,6 +112,38 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   }
 });
 
+router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const username = String(body.username ?? "").trim().slice(0, 100);
+  const password = body.password ? String(body.password) : null;
+  const role = String(body.role ?? "office");
+  const validRoles = ["admin", "office", "finance", "commercial"];
+  if (!username || !validRoles.includes(role)) {
+    res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  if (password !== null && password.length < 8) {
+    res.status(400).json({ ok: false, error: "password_too_short" }); return;
+  }
+  try {
+    const existing = await db.select({ id: adminsTable.id }).from(adminsTable).where(eq(adminsTable.username, username)).limit(1);
+    if (existing.length > 0 && existing[0].id !== id) {
+      res.status(409).json({ ok: false, error: "username_taken" }); return;
+    }
+    if (password !== null) {
+      const hash = await hashPassword(password);
+      await db.update(adminsTable).set({ username, role, passwordHash: hash }).where(eq(adminsTable.id, id));
+    } else {
+      await db.update(adminsTable).set({ username, role }).where(eq(adminsTable.id, id));
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update admin");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 router.delete("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }

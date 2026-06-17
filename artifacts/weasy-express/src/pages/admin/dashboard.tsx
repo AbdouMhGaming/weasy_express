@@ -1515,6 +1515,15 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // Edit state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editRole, setEditRole] = useState<AdminRole>("office");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
   const fetchAdmins = useCallback(async () => {
     setLoading(true);
     try {
@@ -1548,6 +1557,33 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     const res = await fetch(`${API_BASE}/api/admin/admins/${id}`, { method: "DELETE", headers: adminHeaders() });
     if (res.status === 401) { onUnauth(); return; }
     fetchAdmins();
+  }
+
+  function openEdit(a: AdminUser) {
+    setEditId(a.id);
+    setEditUsername(a.username);
+    setEditPassword("");
+    setEditRole(a.role as AdminRole);
+    setEditError("");
+    setShowEdit(true);
+  }
+
+  async function updateAdmin() {
+    if (!editUsername.trim()) { setEditError(t("admin.admins.formError")); return; }
+    if (editPassword && editPassword.length < 8) { setEditError(t("admin.admins.formError")); return; }
+    setEditSaving(true);
+    try {
+      const body: Record<string, string> = { username: editUsername.trim(), role: editRole };
+      if (editPassword) body.password = editPassword;
+      const res = await fetch(`${API_BASE}/api/admin/admins/${editId}`, {
+        method: "PUT", headers: adminHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (res.status === 401) { onUnauth(); return; }
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) { setShowEdit(false); fetchAdmins(); }
+      else setEditError(data.error === "username_taken" ? t("admin.admins.usernameTaken") : t("admin.admins.saveError"));
+    } finally { setEditSaving(false); }
   }
 
   return (
@@ -1584,6 +1620,9 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${ROLE_COLOR[a.role as AdminRole]}`}>{t(`admin.roles.${a.role}`)}</span>
+                    <button onClick={() => openEdit(a)} className="text-gray-300 hover:text-blue-500 p-1.5 rounded-lg hover:bg-blue-50 transition-colors" title={t("admin.admins.edit")}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
                     {a.username !== currentUsername && (
                       <button onClick={() => removeAdmin(a.id, a.username)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -1633,6 +1672,50 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                 <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.admins.cancel")}</button>
                 <button onClick={createAdmin} disabled={saving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60">
                   {saving ? t("admin.admins.saving") : t("admin.admins.save")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl mx-4">
+            <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl" />
+            <div className="px-6 py-5">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-bold text-gray-900 text-lg">{t("admin.admins.editTitle")}</h3>
+                <button onClick={() => setShowEdit(false)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">×</button>
+              </div>
+              {editError && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-4">{editError}</div>}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.username")}</label>
+                  <input type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.newPassword")}</label>
+                  <input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder={t("admin.admins.fields.passwordHint")}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.role")}</label>
+                  <select value={editRole} onChange={(e) => setEditRole(e.target.value as AdminRole)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 bg-white">
+                    {(["admin", "office", "finance", "commercial"] as const).map((r) => (
+                      <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-6">
+                <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.admins.cancel")}</button>
+                <button onClick={updateAdmin} disabled={editSaving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-200 disabled:opacity-60">
+                  {editSaving ? t("admin.admins.saving") : t("admin.admins.save")}
                 </button>
               </div>
             </div>

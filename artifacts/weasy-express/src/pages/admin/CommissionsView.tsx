@@ -314,7 +314,8 @@ export default function CommissionsView() {
     [history]
   );
 
-  const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0);
+  const totalReturnsDZD = Object.values(returnsByOffice).reduce((s, v) => s + v.totalDeduction, 0);
+  const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0) + totalReturnsDZD;
   const activeOfficeCount = new Set(history.map(h => h.period_label)).size;
   const totalDelivered = history.reduce((s, h) => {
     const { breakdown } = parseUpload(h);
@@ -557,7 +558,7 @@ export default function CommissionsView() {
                 const uploads = officeUploads(name);
                 const grossTotal = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
                 const returnAgg = returnsByOffice[name];
-                const netTotal = grossTotal - (returnAgg?.totalDeduction ?? 0);
+                const netTotal = grossTotal + (returnAgg?.totalDeduction ?? 0);
                 const isExpanded = expandedOffice === name;
                 const isReturnExpanded = expandedReturnOffice === name;
                 const hasData = uploads.length > 0;
@@ -591,8 +592,8 @@ export default function CommissionsView() {
                           <>
                             <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
                             {returnAgg && returnAgg.totalDeduction > 0 && (
-                              <p className="text-xs text-red-700 font-semibold">
-                                {fmtDZ(grossTotal)} − {fmtDZ(returnAgg.totalDeduction)}
+                              <p className="text-xs text-green-700 font-semibold">
+                                {fmtDZ(grossTotal)} + {fmtDZ(returnAgg.totalDeduction)}
                               </p>
                             )}
                             <p className="text-xs text-gray-400">
@@ -833,7 +834,7 @@ export default function CommissionsView() {
                           <div className="border-t border-red-100 bg-red-50/40">
                             <div className="px-5 py-2.5 flex items-center justify-between">
                               <p className="text-xs font-bold text-red-800">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
-                              <p className="text-xs text-red-700 font-semibold">− {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
+                              <p className="text-xs text-green-700 font-semibold">+ {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
                             </div>
                             <table className="w-full text-sm">
                               <tbody className="divide-y divide-red-100">
