@@ -85,6 +85,10 @@ const pkgJson = {
     start: "node ./dist/index.mjs",
   },
   engines: { node: ">=20" },
+  // mysql2 is external in the esbuild bundle — Hostinger must install it
+  dependencies: {
+    "mysql2": "^3.22.4",
+  },
 };
 fs.writeFileSync(
   path.join(BUILD_DIR, "package.json"),
