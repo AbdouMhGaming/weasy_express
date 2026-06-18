@@ -77,6 +77,8 @@
   "dependencies": {
     "i18next": "^26.0.7",
     "i18next-browser-languagedetector": "^8.2.1",
+    "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.1",
     "react-i18next": "^17.0.4"
   }
 }

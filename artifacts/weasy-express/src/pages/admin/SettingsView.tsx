@@ -2,9 +2,31 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 
+function Spinner() {
+  return <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>;
+}
+
 interface Category { id: number; cat_key: string; name: string; icon: string; sort_order: number; parent_id: number | null; }
 
-const EMOJI_PRESETS = ["📣","👥","💻","📦","💰","🏭","📋","🚗","✈️","🏠","🔧","📊","🎯","💡","🛒","🤝","📱","🖨️","⚡","🌐","🧾","📈","🏦","💳","🔑","🗂️","📝","🎁","🔒","📌"];
+const EMOJI_PRESETS = [
+  // Business & Finance
+  "📣","👥","💻","📦","💰","🏭","📋","🚗","✈️","🏠","🔧","📊","🎯","💡","🛒","🤝","📱","🖨️","⚡","🌐",
+  "🧾","📈","🏦","💳","🔑","🗂️","📝","🎁","🔒","📌",
+  // Transport & Logistics
+  "🚚","🚛","🚢","🚁","🛳️","🚂","🚌","🏍️","🛵","🚲","⛽","🅿️","🛣️","🛤️","📍","🗺️","🌍","🧭",
+  // Office & Work
+  "🖥️","⌨️","🖱️","📷","📸","📞","☎️","📟","📠","🖊️","✒️","📐","📏","✂️","🔍","🔎","📎","🖇️",
+  // People & Teams
+  "👤","👨‍💼","👩‍💼","👨‍🔧","👩‍🔧","👨‍💻","👩‍💻","👨‍🚚","🧑‍🤝‍🧑","🤵","👷","👨‍⚕️","🧑‍🏫",
+  // Money & Payments
+  "💵","💶","💷","💴","💸","💹","🏧","🪙","💎","🏆","🥇","📉","🤑","💲","🪝",
+  // Buildings & Places
+  "🏢","🏪","🏬","🏗️","🏨","🏦","🏫","🏥","⛪","🕌","🏰","🏯","🕍","🏟️",
+  // Misc Tools
+  "🔨","⚙️","🛠️","⛏️","🔩","🧲","🔋","💿","💾","📀","🖲️","🗜️","📡","🔭","🧪","🧫",
+  // Nature & Environment
+  "🌱","🌿","🍃","♻️","🌊","🌟","☀️","🌙","❄️","🔥","💧","🌬️",
+];
 
 export default function SettingsView() {
   const { t } = useTranslation();
@@ -18,6 +40,13 @@ export default function SettingsView() {
   const [error, setError] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  // Worker positions
+  const [positions, setPositions] = useState<string[]>([]);
+  const [posLoading, setPosLoading] = useState(true);
+  const [newPosition, setNewPosition] = useState("");
+  const [posSaving, setPosSaving] = useState(false);
+  const [posError, setPosError] = useState("");
+
   const fetchCats = useCallback(async () => {
     setLoading(true);
     try {
@@ -27,7 +56,44 @@ export default function SettingsView() {
     } catch { } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchCats(); }, [fetchCats]);
+  const fetchPositions = useCallback(async () => {
+    setPosLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/settings/worker_positions`, { headers: adminHeaders() });
+      const d = await res.json();
+      if (d.ok && d.value) {
+        try { setPositions(JSON.parse(d.value)); } catch { setPositions([]); }
+      }
+    } catch { } finally { setPosLoading(false); }
+  }, []);
+
+  async function savePositions(updated: string[]) {
+    setPosSaving(true); setPosError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/settings/worker_positions`, {
+        method: "PUT", headers: adminHeaders(),
+        body: JSON.stringify({ value: JSON.stringify(updated) }),
+      });
+      const d = await res.json();
+      if (!d.ok) setPosError(t("admin.settings.positions.saveError"));
+      else setPositions(updated);
+    } catch { setPosError(t("admin.settings.positions.saveError")); } finally { setPosSaving(false); }
+  }
+
+  function addPosition() {
+    const trimmed = newPosition.trim();
+    if (!trimmed) return;
+    if (positions.includes(trimmed)) { setPosError(t("admin.settings.positions.duplicate")); return; }
+    setPosError("");
+    setNewPosition("");
+    savePositions([...positions, trimmed]);
+  }
+
+  function removePosition(pos: string) {
+    savePositions(positions.filter(p => p !== pos));
+  }
+
+  useEffect(() => { fetchCats(); fetchPositions(); }, [fetchCats, fetchPositions]);
 
   const parentCats = cats.filter(c => !c.parent_id);
 
@@ -153,11 +219,11 @@ export default function SettingsView() {
                   {newIcon}
                 </button>
                 {showEmojiPicker && (
-                  <div className="absolute top-12 left-0 z-30 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 grid grid-cols-5 gap-2 w-56">
+                  <div className="absolute top-12 left-0 z-30 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 grid grid-cols-8 gap-1.5 w-80 max-h-64 overflow-y-auto">
                     {EMOJI_PRESETS.map(e => (
                       <button key={e} type="button"
                         onClick={() => { setNewIcon(e); setShowEmojiPicker(false); }}
-                        className="text-xl w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                        className="text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
                       >{e}</button>
                     ))}
                   </div>
@@ -265,6 +331,68 @@ export default function SettingsView() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Worker Positions Section */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mt-6">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E10600] to-[#B80500] flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 text-base">{t("admin.settings.positions.title")}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.positions.subtitle")}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.settings.positions.newLabel")}</label>
+              <input
+                type="text"
+                value={newPosition}
+                onChange={e => setNewPosition(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addPosition(); }}
+                placeholder={t("admin.settings.positions.placeholder")}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] shadow-sm"
+              />
+            </div>
+            <button
+              onClick={addPosition}
+              disabled={posSaving || !newPosition.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-[#E10600] hover:bg-[#C50500] rounded-xl shadow-sm disabled:opacity-60 transition-all shrink-0"
+            >
+              {posSaving ? <Spinner /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>}
+              {t("admin.settings.positions.add")}
+            </button>
+          </div>
+          {posError && <p className="text-xs text-red-500 mt-2">{posError}</p>}
+
+          <div className="mt-4">
+            {posLoading ? (
+              <div className="py-8 flex items-center justify-center text-gray-400 text-sm gap-2"><Spinner />{t("admin.settings.loading")}</div>
+            ) : positions.length === 0 ? (
+              <div className="py-8 text-center text-gray-400 text-sm">{t("admin.settings.positions.empty")}</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {positions.map((pos, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-sm font-medium text-gray-700 group transition-colors">
+                    <svg className="w-3.5 h-3.5 text-[#E10600]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    {pos}
+                    <button
+                      onClick={() => removePosition(pos)}
+                      className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all ml-1 text-sm leading-none"
+                      title={t("admin.settings.positions.remove")}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

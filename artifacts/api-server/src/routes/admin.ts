@@ -1611,4 +1611,156 @@ router.delete("/admin/commission-returns/:id", adminAuth, financeOrAdminOnly, as
   }
 });
 
+// ── Workers ──────────────────────────────────────────────────────────────────
+
+router.get("/admin/workers", adminAuth, financeOrAdminOnly, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute("SELECT * FROM workers ORDER BY last_name ASC, first_name ASC");
+      res.json({ ok: true, workers: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch workers");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/workers", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const firstName = typeof body.first_name === "string" ? body.first_name.trim() : "";
+  const lastName = typeof body.last_name === "string" ? body.last_name.trim() : "";
+  const workerId = typeof body.worker_id === "string" ? body.worker_id.trim() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const nin = typeof body.nin === "string" ? body.nin.trim() : "";
+  const position = typeof body.position === "string" ? body.position.trim() : "";
+  const hub = typeof body.hub === "string" ? body.hub.trim() : "";
+  if (!firstName || !lastName) { res.status(400).json({ ok: false, error: "missing_fields" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        "INSERT INTO workers (first_name, last_name, worker_id, phone, nin, position, hub) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [firstName, lastName, workerId, phone, nin, position, hub]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create worker");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.put("/admin/workers/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const firstName = typeof body.first_name === "string" ? body.first_name.trim() : "";
+  const lastName = typeof body.last_name === "string" ? body.last_name.trim() : "";
+  const workerId = typeof body.worker_id === "string" ? body.worker_id.trim() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const nin = typeof body.nin === "string" ? body.nin.trim() : "";
+  const position = typeof body.position === "string" ? body.position.trim() : "";
+  const hub = typeof body.hub === "string" ? body.hub.trim() : "";
+  if (!firstName || !lastName) { res.status(400).json({ ok: false, error: "missing_fields" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        "UPDATE workers SET first_name=?, last_name=?, worker_id=?, phone=?, nin=?, position=?, hub=? WHERE id=?",
+        [firstName, lastName, workerId, phone, nin, position, hub, id]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to update worker");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/workers/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM workers WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete worker");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Décharges ────────────────────────────────────────────────────────────────
+
+router.get("/admin/decharges", adminAuth, financeOrAdminOnly, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute("SELECT * FROM decharges ORDER BY created_at DESC");
+      res.json({ ok: true, decharges: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch decharges");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/decharges", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const workerId = typeof body.worker_id === "number" ? body.worker_id : parseInt(String(body.worker_id ?? "0"), 10);
+  const salaireFixe = parseFloat(String(body.salaire_fixe ?? "0")) || 0;
+  const primes = parseFloat(String(body.primes ?? "0")) || 0;
+  const montantNet = parseFloat(String(body.montant_net ?? "0")) || (salaireFixe + primes);
+  const periodLabel = typeof body.period_label === "string" ? body.period_label.trim() : "";
+  if (!workerId) { res.status(400).json({ ok: false, error: "missing_worker" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      // Fetch worker info
+      const [workerRows] = await conn.execute("SELECT * FROM workers WHERE id = ? LIMIT 1", [workerId]) as [any[], any];
+      if (!workerRows.length) { res.status(404).json({ ok: false, error: "worker_not_found" }); return; }
+      const w = workerRows[0];
+
+      // Generate Reçu number: increment counter in app_settings
+      const year = new Date().getFullYear();
+      const [counterRows] = await conn.execute(
+        "SELECT setting_value FROM app_settings WHERE setting_key = 'decharge_counter' FOR UPDATE"
+      ) as [any[], any];
+      const currentCount = parseInt(String(counterRows[0]?.setting_value ?? "0"), 10);
+      const nextCount = currentCount + 1;
+      await conn.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'decharge_counter'", [String(nextCount)]);
+      const recuNumber = `DEC-${year}-${String(nextCount).padStart(4, "0")}`;
+
+      const authReq = req as AuthedRequest;
+      await conn.execute(
+        `INSERT INTO decharges (worker_db_id, worker_first_name, worker_last_name, worker_position, worker_id_card, worker_phone, worker_nin, worker_hub, recu_number, salaire_fixe, primes, montant_net, period_label, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [workerId, w.first_name, w.last_name, w.position, w.worker_id, w.phone, w.nin, w.hub, recuNumber, salaireFixe, primes, montantNet, periodLabel, authReq.adminUsername ?? ""]
+      );
+      res.json({ ok: true, recu_number: recuNumber });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create decharge");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/decharges/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM decharges WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete decharge");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 export default router;
