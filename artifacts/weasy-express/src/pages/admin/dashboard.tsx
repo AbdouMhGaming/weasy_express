@@ -1681,41 +1681,61 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
 
       {showEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
-          <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl mx-4">
-            <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl" />
-            <div className="px-6 py-5">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="font-bold text-gray-900 text-lg">{t("admin.admins.editTitle")}</h3>
-                <button onClick={() => setShowEdit(false)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">×</button>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl mx-4 overflow-hidden">
+            {/* Brand header bar */}
+            <div className="bg-gradient-to-r from-[#E10600] to-[#B80500] px-6 pt-5 pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-base leading-tight">{t("admin.admins.editTitle")}</h3>
+                    <p className="text-white/70 text-xs">{editUsername}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowEdit(false)} className="text-white/70 hover:text-white w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-xl leading-none">×</button>
               </div>
-              {editError && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-4">{editError}</div>}
-              <div className="space-y-3">
+            </div>
+
+            <div className="px-6 py-5">
+              {editError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-4 flex items-center gap-2">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {editError}
+                </div>
+              )}
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.username")}</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.username")}</label>
                   <input type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.newPassword")}</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.newPassword")}</label>
                   <input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)}
                     placeholder={t("admin.admins.fields.passwordHint")}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.role")}</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.role")}</label>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value as AdminRole)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 bg-white">
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white transition-colors">
                     {(["admin", "office", "finance", "commercial"] as const).map((r) => (
                       <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
                     ))}
                   </select>
                 </div>
               </div>
-              <div className="flex gap-2 mt-6">
-                <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.admins.cancel")}</button>
-                <button onClick={updateAdmin} disabled={editSaving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-200 disabled:opacity-60">
-                  {editSaving ? t("admin.admins.saving") : t("admin.admins.save")}
+              <div className="flex gap-2.5 mt-6">
+                <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">{t("admin.admins.cancel")}</button>
+                <button onClick={updateAdmin} disabled={editSaving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60 transition-all flex items-center justify-center gap-2">
+                  {editSaving ? (
+                    <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>{t("admin.admins.saving")}</>
+                  ) : t("admin.admins.save")}
                 </button>
               </div>
             </div>

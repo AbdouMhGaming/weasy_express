@@ -60,3 +60,9 @@ id = "H8PoU6KdqV-VqyNe-gEhU"
 uri = "file://deploy/weasy-express-2026-06-17.zip"
 type = "unspecified"
 title = "weasy-express-hostinger-2026-06-17.zip"
+
+[[outputs]]
+id = "0CiQFtDPxYKtL7n6xjN9w"
+uri = "file://deploy/weasy-express-2026-06-18.zip"
+type = "unspecified"
+title = "weasy-express-hostinger-2026-06-18.zip"
