@@ -100,7 +100,8 @@ async function generatePDF(d: Decharge) {
   if (logoDataUrl) {
     const logoW = 68;
     const logoH = 36;
-    doc.addImage(logoDataUrl, "PNG", W - 10 - logoW, 3, logoW, logoH);
+    const logoY = (headerH - logoH) / 2;
+    doc.addImage(logoDataUrl, "PNG", W - 10 - logoW, logoY, logoW, logoH);
   }
 
   y = headerH + 8;
