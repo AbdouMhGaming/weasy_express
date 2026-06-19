@@ -311,6 +311,7 @@ const fr = {
       submitting: "Connexion en cours…",
       wrongCredentials: "Identifiants incorrects. Vérifiez votre nom d'utilisateur et mot de passe.",
       networkError: "Erreur de connexion. Vérifiez votre connexion internet.",
+      dbError: "Impossible de joindre la base de données. Réessayez dans quelques instants.",
       footer: "Weasy Express · Tableau de bord administrateur",
     },
     sidebar: {
