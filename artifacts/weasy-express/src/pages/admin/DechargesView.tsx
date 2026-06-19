@@ -68,21 +68,15 @@ async function generatePDF(d: Decharge) {
   // ── Logo ─────────────────────────────────────────────────────────────────────
   let logoDataUrl: string | null = null;
   try {
-    const logoImg = new Image();
-    logoImg.crossOrigin = "anonymous";
-    logoImg.src = "/logo-white.png";
-    await new Promise<void>((resolve) => {
-      logoImg.onload = () => resolve();
-      logoImg.onerror = () => resolve();
-      setTimeout(resolve, 2000);
-    });
-    if (logoImg.naturalWidth > 0) {
-      const lc = document.createElement("canvas");
-      lc.width = logoImg.naturalWidth;
-      lc.height = logoImg.naturalHeight;
-      const ctx = lc.getContext("2d")!;
-      ctx.drawImage(logoImg, 0, 0);
-      logoDataUrl = lc.toDataURL("image/png");
+    const resp = await fetch("/logo-white.png");
+    if (resp.ok) {
+      const blob = await resp.blob();
+      logoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     }
   } catch { /* skip logo if unavailable */ }
 
@@ -104,9 +98,10 @@ async function generatePDF(d: Decharge) {
 
   // Logo top-right inside header — bigger and white version
   if (logoDataUrl) {
-    const logoW = 52;
-    const logoH = 26;
-    doc.addImage(logoDataUrl, "PNG", W - 12 - logoW, 4, logoW, logoH);
+    const logoW = 68;
+    const logoH = 36;
+    const logoY = (headerH - logoH) / 2;
+    doc.addImage(logoDataUrl, "PNG", W - 10 - logoW, logoY, logoW, logoH);
   }
 
   y = headerH + 8;
