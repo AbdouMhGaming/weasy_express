@@ -313,7 +313,6 @@ const en: Translations = {
       submitting: "Signing in…",
       wrongCredentials: "Incorrect credentials. Check your username and password.",
       networkError: "Connection error. Check your internet connection.",
-      dbError: "Cannot reach the database. Please try again in a moment.",
       footer: "Weasy Express · Admin Dashboard",
     },
     sidebar: {

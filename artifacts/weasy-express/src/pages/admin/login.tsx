@@ -26,13 +26,9 @@ export default function AdminLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = (await res.json()) as { ok: boolean; token?: string; role?: string; error?: string };
+      const data = (await res.json()) as { ok: boolean; token?: string; role?: string };
       if (!res.ok || !data.ok || !data.token) {
-        if (res.status === 500 || data.error === "db_error") {
-          setError(t("admin.login.dbError"));
-        } else {
-          setError(t("admin.login.wrongCredentials"));
-        }
+        setError(t("admin.login.wrongCredentials"));
         return;
       }
       localStorage.setItem("admin_token", data.token);
