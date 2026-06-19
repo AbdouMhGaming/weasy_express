@@ -39,6 +39,7 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [catsOpen, setCatsOpen] = useState(true);
 
   // Worker positions
   const [positions, setPositions] = useState<string[]>([]);
@@ -46,6 +47,7 @@ export default function SettingsView() {
   const [newPosition, setNewPosition] = useState("");
   const [posSaving, setPosSaving] = useState(false);
   const [posError, setPosError] = useState("");
+  const [posOpen, setPosOpen] = useState(true);
 
   const fetchCats = useCallback(async () => {
     setLoading(true);
@@ -129,11 +131,21 @@ export default function SettingsView() {
 
       {/* Categories Section */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="font-bold text-gray-900">{t("admin.settings.categories.title")}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.categories.subtitle")}</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCatsOpen(v => !v)}
+          className="w-full px-6 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50/50 transition-colors text-left"
+        >
+          <div>
+            <h2 className="font-bold text-gray-900">{t("admin.settings.categories.title")}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.categories.subtitle")}{!catsOpen && cats.length > 0 && <span className="ml-2 text-[#E10600]/70 font-semibold">{cats.filter(c => !c.parent_id).length} catégorie{cats.filter(c => !c.parent_id).length !== 1 ? "s" : ""}</span>}</p>
+          </div>
+          <svg className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${catsOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
+        {catsOpen && <div>
         {/* Add Category Form */}
         <div className="px-6 pt-5 pb-4 border-b border-gray-100 bg-gradient-to-b from-gray-50/80 to-white">
           {/* Mode toggle */}
@@ -331,23 +343,31 @@ export default function SettingsView() {
             })}
           </div>
         )}
+        </div>}
       </div>
 
       {/* Worker Positions Section */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mt-6">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+        <button
+          type="button"
+          onClick={() => setPosOpen(v => !v)}
+          className="w-full px-6 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-50/50 transition-colors text-left"
+        >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E10600] to-[#B80500] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E10600] to-[#B80500] flex items-center justify-center shrink-0">
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
             </div>
             <div>
               <h2 className="font-bold text-gray-900 text-base">{t("admin.settings.positions.title")}</h2>
-              <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.positions.subtitle")}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.positions.subtitle")}{!posOpen && positions.length > 0 && <span className="ml-2 text-[#E10600]/70 font-semibold">{positions.length} poste{positions.length !== 1 ? "s" : ""}</span>}</p>
             </div>
           </div>
-        </div>
+          <svg className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${posOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
-        <div className="p-6">
+        {posOpen && <div className="p-6">
           <div className="flex items-end gap-3 flex-wrap">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.settings.positions.newLabel")}</label>
@@ -392,7 +412,7 @@ export default function SettingsView() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

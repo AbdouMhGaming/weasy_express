@@ -41,9 +41,11 @@ function Spinner() {
   );
 }
 
-const fmtDZ = (n: number) => `${Math.round(Number(n)).toLocaleString("fr-DZ")} DA`;
+const fmtDZ = (n: number) => `${Math.round(Number(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")} DA`;
 const INPUT_CLS = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors bg-white";
 const LABEL_CLS = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5";
+
+const pdfFmtNum = (n: number) => Math.round(Number(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
 async function generatePDF(d: Decharge) {
   const { jsPDF } = await import("jspdf");
@@ -63,6 +65,27 @@ async function generatePDF(d: Decharge) {
   JsBarcode(canvas, d.recu_number, { format: "CODE128", displayValue: false, width: 1.8, height: 40, margin: 0 });
   const barcodeDataUrl = canvas.toDataURL("image/png");
 
+  // ── Logo ─────────────────────────────────────────────────────────────────────
+  let logoDataUrl: string | null = null;
+  try {
+    const logoImg = new Image();
+    logoImg.crossOrigin = "anonymous";
+    logoImg.src = "/logo.png";
+    await new Promise<void>((resolve) => {
+      logoImg.onload = () => resolve();
+      logoImg.onerror = () => resolve();
+      setTimeout(resolve, 2000);
+    });
+    if (logoImg.naturalWidth > 0) {
+      const lc = document.createElement("canvas");
+      lc.width = logoImg.naturalWidth;
+      lc.height = logoImg.naturalHeight;
+      const ctx = lc.getContext("2d")!;
+      ctx.drawImage(logoImg, 0, 0);
+      logoDataUrl = lc.toDataURL("image/png");
+    }
+  } catch { /* skip logo if unavailable */ }
+
   let y = 14;
 
   // ── Header ───────────────────────────────────────────────────────────────────
@@ -77,6 +100,13 @@ async function generatePDF(d: Decharge) {
   doc.setFont("helvetica", "normal");
   doc.text("Direction Générale  ·  Service Finance", 14, 16);
   doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 21);
+
+  // Logo top-right inside header
+  if (logoDataUrl) {
+    const logoH = 20;
+    const logoW = 40;
+    doc.addImage(logoDataUrl, "PNG", W - 14 - logoW, 4, logoW, logoH);
+  }
 
   y = 36;
 
@@ -97,7 +127,7 @@ async function generatePDF(d: Decharge) {
   const barcodeH = 14;
   const barcodeX = W - 14 - barcodeW;
   doc.addImage(barcodeDataUrl, "PNG", barcodeX, y, barcodeW, barcodeH);
-  y += barcodeH + 1;
+  y += barcodeH + 5;
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
@@ -166,7 +196,7 @@ async function generatePDF(d: Decharge) {
   doc.text("Salaire Fixe :", col2x, y);
   doc.setFont("helvetica", "normal");
   const dotLine1 = ".".repeat(20);
-  doc.text(`${dotLine1} ${Math.round(Number(d.salaire_fixe)).toLocaleString("fr-DZ")} DA`, col2x + 24, y);
+  doc.text(`${dotLine1} ${pdfFmtNum(d.salaire_fixe)} DA`, col2x + 24, y);
   y += 7;
 
   doc.setFont("helvetica", "bold");
@@ -178,7 +208,7 @@ async function generatePDF(d: Decharge) {
   doc.text("Primes :", col2x, y);
   doc.setFont("helvetica", "normal");
   const dotLine2 = ".".repeat(26);
-  doc.text(`${dotLine2} ${Math.round(Number(d.primes)).toLocaleString("fr-DZ")} DA`, col2x + 16, y);
+  doc.text(`${dotLine2} ${pdfFmtNum(d.primes)} DA`, col2x + 16, y);
   y += 7;
 
   doc.setFont("helvetica", "bold");
@@ -198,7 +228,7 @@ async function generatePDF(d: Decharge) {
   doc.setTextColor(...RED);
   doc.text("Montant Net perçu :", W / 2, y + 3, { align: "center" });
 
-  const netStr = `${Math.round(Number(d.montant_net)).toLocaleString("fr-DZ")} DA`;
+  const netStr = `${pdfFmtNum(d.montant_net)} DA`;
   doc.setFontSize(13);
   doc.text(`  ${netStr}`, W / 2 + 28, y + 3);
   y += 18;
@@ -263,7 +293,20 @@ export default function DechargesView() {
   const selWorker = workers.find(w => String(w.id) === selWorkerId) ?? null;
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const role = localStorage.getItem("admin_role") ?? "";
+
+  const filteredDecharges = decharges.filter(d => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      `${d.worker_first_name} ${d.worker_last_name}`.toLowerCase().includes(q) ||
+      d.recu_number.toLowerCase().includes(q) ||
+      (d.period_label ?? "").toLowerCase().includes(q) ||
+      (d.worker_position ?? "").toLowerCase().includes(q) ||
+      (d.worker_hub ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const fetchDecharges = useCallback(async () => {
     setLoading(true);
@@ -348,6 +391,27 @@ export default function DechargesView() {
         </button>
       </div>
 
+      {/* Search bar */}
+      {decharges.length > 0 && (
+        <div className="mb-5">
+          <div className="relative max-w-sm">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Rechercher par nom, N° reçu, période…"
+              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors shadow-sm"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {workers.length === 0 && !loading && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-5 flex items-center gap-3 text-sm text-amber-800">
           <svg className="w-5 h-5 shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -381,7 +445,13 @@ export default function DechargesView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {decharges.map(d => (
+                {filteredDecharges.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">
+                      Aucun résultat pour « {searchQuery} »
+                    </td>
+                  </tr>
+                ) : filteredDecharges.map(d => (
                   <tr key={d.id} className="hover:bg-gray-50/40 transition-colors">
                     <td className="px-5 py-3.5">
                       <span className="font-mono text-xs font-bold text-[#E10600] bg-red-50 px-2.5 py-1 rounded-lg border border-red-100">{d.recu_number}</span>
@@ -498,7 +568,7 @@ export default function DechargesView() {
               {/* Net auto-calc */}
               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-[#E10600]">{t("admin.decharges.fields.net")}</span>
-                <span className="text-lg font-black text-[#E10600]">{montantNet.toLocaleString("fr-DZ")} DA</span>
+                <span className="text-lg font-black text-[#E10600]">{Math.round(montantNet).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")} DA</span>
               </div>
             </div>
 
