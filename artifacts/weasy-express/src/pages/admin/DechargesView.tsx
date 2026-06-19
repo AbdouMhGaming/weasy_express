@@ -70,7 +70,7 @@ async function generatePDF(d: Decharge) {
   try {
     const logoImg = new Image();
     logoImg.crossOrigin = "anonymous";
-    logoImg.src = "/logo.png";
+    logoImg.src = "/logo-white.png";
     await new Promise<void>((resolve) => {
       logoImg.onload = () => resolve();
       logoImg.onerror = () => resolve();
@@ -89,26 +89,27 @@ async function generatePDF(d: Decharge) {
   let y = 14;
 
   // ── Header ───────────────────────────────────────────────────────────────────
+  const headerH = 34;
   doc.setFillColor(...RED);
-  doc.rect(0, 0, W, 28, "F");
+  doc.rect(0, 0, W, headerH, "F");
 
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13);
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("ENTREPRISE Weasydel Express", 14, 10);
-  doc.setFontSize(8);
+  doc.text("ENTREPRISE Weasydel Express", 14, 12);
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Direction Générale  ·  Service Finance", 14, 16);
-  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 21);
+  doc.text("Direction Générale  ·  Service Finance", 14, 19);
+  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 25);
 
-  // Logo top-right inside header
+  // Logo top-right inside header — bigger and white version
   if (logoDataUrl) {
-    const logoH = 20;
-    const logoW = 40;
-    doc.addImage(logoDataUrl, "PNG", W - 14 - logoW, 4, logoW, logoH);
+    const logoW = 52;
+    const logoH = 26;
+    doc.addImage(logoDataUrl, "PNG", W - 12 - logoW, 4, logoW, logoH);
   }
 
-  y = 36;
+  y = headerH + 8;
 
   // ── Title ────────────────────────────────────────────────────────────────────
   doc.setTextColor(...DARK);
@@ -402,7 +403,7 @@ export default function DechargesView() {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Rechercher par nom, N° reçu, période…"
+              placeholder={t("admin.decharges.searchPlaceholder")}
               className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors shadow-sm"
             />
             {searchQuery && (
@@ -448,7 +449,7 @@ export default function DechargesView() {
                 {filteredDecharges.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">
-                      Aucun résultat pour « {searchQuery} »
+                      {t("admin.decharges.noResults", { query: searchQuery })}
                     </td>
                   </tr>
                 ) : filteredDecharges.map(d => (

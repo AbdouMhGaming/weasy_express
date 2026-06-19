@@ -880,6 +880,8 @@ const en: Translations = {
         primes: "Bonuses",
         net: "Net amount received",
       },
+      searchPlaceholder: "Search by name, receipt N°, period…",
+      noResults: "No results for \"{{query}}\"",
     },
     office: {
       title: "Agency Dashboard",

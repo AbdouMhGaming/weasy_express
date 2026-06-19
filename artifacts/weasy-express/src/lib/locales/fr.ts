@@ -878,6 +878,8 @@ const fr = {
         primes: "Primes",
         net: "Montant Net perçu",
       },
+      searchPlaceholder: "Rechercher par nom, N° reçu, période…",
+      noResults: "Aucun résultat pour «\u00a0{{query}}\u00a0»",
     },
     office: {
       title: "Tableau de bord Agence",

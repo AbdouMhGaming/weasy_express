@@ -39,7 +39,7 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [catsOpen, setCatsOpen] = useState(true);
+  const [catsOpen, setCatsOpen] = useState(false);
 
   // Worker positions
   const [positions, setPositions] = useState<string[]>([]);
@@ -47,7 +47,7 @@ export default function SettingsView() {
   const [newPosition, setNewPosition] = useState("");
   const [posSaving, setPosSaving] = useState(false);
   const [posError, setPosError] = useState("");
-  const [posOpen, setPosOpen] = useState(true);
+  const [posOpen, setPosOpen] = useState(false);
 
   const fetchCats = useCallback(async () => {
     setLoading(true);

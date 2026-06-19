@@ -880,6 +880,8 @@ const ar: Translations = {
         primes: "العلاوات",
         net: "الصافي المستلم",
       },
+      searchPlaceholder: "بحث بالاسم، رقم الوصل، الفترة…",
+      noResults: "لا نتائج لـ «{{query}}»",
     },
     office: {
       title: "لوحة تحكم المكتب",
