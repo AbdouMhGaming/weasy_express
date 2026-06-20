@@ -105,7 +105,7 @@ async function generatePDF(d: Decharge) {
   // Logo top-right inside header — bigger and white version
   if (logoDataUrl) {
     const logoW = 52;
-    const logoH = 30;
+    const logoH = 36;
     doc.addImage(logoDataUrl, "PNG", W - 12 - logoW, 4, logoW, logoH);
   }
 
