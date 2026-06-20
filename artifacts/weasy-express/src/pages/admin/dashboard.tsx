@@ -30,7 +30,7 @@ interface Office {
   address: string; phone: string | null; mapsUrl: string; isPrincipal: boolean; createdAt: string;
 }
 interface AdminUser {
-  id: number; username: string; role: AdminRole; createdAt: string;
+  id: number; username: string; role: AdminRole; office_hub: string; createdAt: string;
 }
 interface Order {
   id: number; trackingNumber: string | null; status: OrderStatus;
@@ -1526,8 +1526,10 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<AdminRole>("office");
+  const [newHub, setNewHub] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [offices, setOffices] = useState<Office[]>([]);
 
   // Edit state
   const [showEdit, setShowEdit] = useState(false);
@@ -1535,6 +1537,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [editUsername, setEditUsername] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editRole, setEditRole] = useState<AdminRole>("office");
+  const [editHub, setEditHub] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -1548,7 +1551,15 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     } finally { setLoading(false); }
   }, [onUnauth]);
 
-  useEffect(() => { fetchAdmins(); }, [fetchAdmins]);
+  const fetchOffices = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/offices`, { headers: adminHeaders() });
+      const data = await res.json();
+      if (data.ok) setOffices(data.offices ?? []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchAdmins(); fetchOffices(); }, [fetchAdmins, fetchOffices]);
 
   async function createAdmin() {
     if (!newUsername.trim() || newPassword.length < 8) { setFormError(t("admin.admins.formError")); return; }
@@ -1556,11 +1567,11 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     try {
       const res = await fetch(`${API_BASE}/api/admin/admins`, {
         method: "POST", headers: adminHeaders(),
-        body: JSON.stringify({ username: newUsername.trim(), password: newPassword, role: newRole }),
+        body: JSON.stringify({ username: newUsername.trim(), password: newPassword, role: newRole, office_hub: newRole === "office" ? newHub : "" }),
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean };
-      if (data.ok) { setShowAdd(false); setNewUsername(""); setNewPassword(""); setNewRole("office"); fetchAdmins(); }
+      if (data.ok) { setShowAdd(false); setNewUsername(""); setNewPassword(""); setNewRole("office"); setNewHub(""); fetchAdmins(); }
       else setFormError(t("admin.admins.saveError"));
     } finally { setSaving(false); }
   }
@@ -1578,6 +1589,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     setEditUsername(a.username);
     setEditPassword("");
     setEditRole(a.role as AdminRole);
+    setEditHub(a.office_hub ?? "");
     setEditError("");
     setShowEdit(true);
   }
@@ -1587,7 +1599,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     if (editPassword && editPassword.length < 8) { setEditError(t("admin.admins.formError")); return; }
     setEditSaving(true);
     try {
-      const body: Record<string, string> = { username: editUsername.trim(), role: editRole };
+      const body: Record<string, string> = { username: editUsername.trim(), role: editRole, office_hub: editRole === "office" ? editHub : "" };
       if (editPassword) body.password = editPassword;
       const res = await fetch(`${API_BASE}/api/admin/admins/${editId}`, {
         method: "PUT", headers: adminHeaders(),
@@ -1633,7 +1645,12 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${ROLE_COLOR[a.role as AdminRole]}`}>{t(`admin.roles.${a.role}`)}</span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${ROLE_COLOR[a.role as AdminRole]}`}>{t(`admin.roles.${a.role}`)}</span>
+                      {a.role === "office" && a.office_hub && (
+                        <span className="text-[10px] text-gray-400 font-medium">{a.office_hub}</span>
+                      )}
+                    </div>
                     <button onClick={() => openEdit(a)} className="text-gray-300 hover:text-blue-500 p-1.5 rounded-lg hover:bg-blue-50 transition-colors" title={t("admin.admins.edit")}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
@@ -1681,6 +1698,18 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                     ))}
                   </select>
                 </div>
+                {newRole === "office" && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Hub / Agence</label>
+                    <select value={newHub} onChange={e => setNewHub(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
+                      <option value="">— Choisir un hub —</option>
+                      {offices.map(o => (
+                        <option key={o.id} value={`${o.wilaya}${o.commune ? " — " + o.commune : ""}`}>{o.wilaya}{o.commune ? " — " + o.commune : ""}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="flex gap-2 mt-6">
                 <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.admins.cancel")}</button>
@@ -1743,6 +1772,18 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                     ))}
                   </select>
                 </div>
+                {editRole === "office" && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Hub / Agence</label>
+                    <select value={editHub} onChange={e => setEditHub(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white transition-colors">
+                      <option value="">— Choisir un hub —</option>
+                      {offices.map(o => (
+                        <option key={o.id} value={`${o.wilaya}${o.commune ? " — " + o.commune : ""}`}>{o.wilaya}{o.commune ? " — " + o.commune : ""}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="flex gap-2.5 mt-6">
                 <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">{t("admin.admins.cancel")}</button>

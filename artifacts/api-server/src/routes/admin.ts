@@ -78,13 +78,13 @@ router.post("/admin/change-password", adminAuth, async (req, res) => {
 
 router.get("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   try {
-    const rows = await db.select({
-      id: adminsTable.id,
-      username: adminsTable.username,
-      role: adminsTable.role,
-      createdAt: adminsTable.createdAt,
-    }).from(adminsTable).orderBy(asc(adminsTable.createdAt));
-    res.json({ ok: true, admins: rows });
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT id, username, role, office_hub, created_at AS createdAt FROM admins ORDER BY created_at ASC"
+      );
+      res.json({ ok: true, admins: rows });
+    } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch admins");
     res.status(500).json({ ok: false, error: "db_error" });
@@ -96,16 +96,23 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   const username = String(body.username ?? "").trim().slice(0, 100);
   const password = String(body.password ?? "");
   const role = String(body.role ?? "office");
+  const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
   const validRoles = ["admin", "office", "finance", "commercial"];
   if (!username || password.length < 8 || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
   try {
-    const existing = await db.select({ id: adminsTable.id }).from(adminsTable).where(eq(adminsTable.username, username)).limit(1);
-    if (existing.length > 0) { res.status(409).json({ ok: false, error: "username_taken" }); return; }
-    const hash = await hashPassword(password);
-    const [result] = await db.insert(adminsTable).values({ username, passwordHash: hash, role });
-    res.json({ ok: true, id: (result as { insertId: number }).insertId });
+    const conn = await pool.getConnection();
+    try {
+      const [existing] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]);
+      if ((existing as unknown[]).length > 0) { res.status(409).json({ ok: false, error: "username_taken" }); return; }
+      const hash = await hashPassword(password);
+      const [result] = await conn.execute(
+        "INSERT INTO admins (username, password_hash, role, office_hub) VALUES (?, ?, ?, ?)",
+        [username, hash, role, officeHub]
+      );
+      res.json({ ok: true, id: (result as { insertId: number }).insertId });
+    } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to create admin");
     res.status(500).json({ ok: false, error: "db_error" });
@@ -119,6 +126,7 @@ router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
   const username = String(body.username ?? "").trim().slice(0, 100);
   const password = body.password ? String(body.password) : null;
   const role = String(body.role ?? "office");
+  const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
   const validRoles = ["admin", "office", "finance", "commercial"];
   if (!username || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
@@ -127,17 +135,20 @@ router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
     res.status(400).json({ ok: false, error: "password_too_short" }); return;
   }
   try {
-    const existing = await db.select({ id: adminsTable.id }).from(adminsTable).where(eq(adminsTable.username, username)).limit(1);
-    if (existing.length > 0 && existing[0].id !== id) {
-      res.status(409).json({ ok: false, error: "username_taken" }); return;
-    }
-    if (password !== null) {
-      const hash = await hashPassword(password);
-      await db.update(adminsTable).set({ username, role, passwordHash: hash }).where(eq(adminsTable.id, id));
-    } else {
-      await db.update(adminsTable).set({ username, role }).where(eq(adminsTable.id, id));
-    }
-    res.json({ ok: true });
+    const conn = await pool.getConnection();
+    try {
+      const [existing] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]);
+      if ((existing as Array<{ id: number }>).length > 0 && (existing as Array<{ id: number }>)[0].id !== id) {
+        res.status(409).json({ ok: false, error: "username_taken" }); return;
+      }
+      if (password !== null) {
+        const hash = await hashPassword(password);
+        await conn.execute("UPDATE admins SET username=?, role=?, password_hash=?, office_hub=? WHERE id=?", [username, role, hash, officeHub, id]);
+      } else {
+        await conn.execute("UPDATE admins SET username=?, role=?, office_hub=? WHERE id=?", [username, role, officeHub, id]);
+      }
+      res.json({ ok: true });
+    } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to update admin");
     res.status(500).json({ ok: false, error: "db_error" });
@@ -1759,6 +1770,78 @@ router.delete("/admin/decharges/:id", adminAuth, financeOrAdminOnly, async (req,
     } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to delete decharge");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+// ── Station Commissions ────────────────────────────────────────────────────────
+
+router.get("/admin/station-commissions", adminAuth, financeOrAdminOnly, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT * FROM station_commissions ORDER BY created_at DESC"
+      );
+      res.json({ ok: true, commissions: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch station commissions");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/station-commissions", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const authReq = req as AuthedRequest;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const hubName = String(body.hub_name ?? "").trim();
+  const hubPhone = String(body.hub_phone ?? "").trim();
+  const agentName = String(body.agent_name ?? "").trim();
+  const nbColis = parseInt(String(body.nb_colis ?? "0"), 10) || 0;
+  const bonusRetour = parseFloat(String(body.bonus_retour ?? "0")) || 0;
+  const montantNet = parseFloat(String(body.montant_net ?? "0")) || 0;
+  const periodLabel = String(body.period_label ?? "").trim();
+  if (!hubName) { res.status(400).json({ ok: false, error: "missing_hub" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [counterRows] = await conn.execute(
+        "SELECT setting_value FROM app_settings WHERE setting_key = 'station_comm_counter' FOR UPDATE"
+      );
+      const currentCount = parseInt((counterRows as Array<{ setting_value: string }>)[0]?.setting_value ?? "0", 10);
+      const nextCount = currentCount + 1;
+      await conn.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'station_comm_counter'", [String(nextCount)]);
+      const year = new Date().getFullYear();
+      const recuNumber = `COM-${year}-${String(nextCount).padStart(4, "0")}`;
+      const [result] = await conn.execute(
+        `INSERT INTO station_commissions (hub_name, hub_phone, agent_name, recu_number, nb_colis, bonus_retour, montant_net, period_label, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [hubName, hubPhone, agentName, recuNumber, nbColis, bonusRetour, montantNet, periodLabel, authReq.adminUsername ?? ""]
+      );
+      await conn.commit();
+      res.json({ ok: true, id: (result as { insertId: number }).insertId, recu_number: recuNumber });
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create station commission");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/station-commissions/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM station_commissions WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete station commission");
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });

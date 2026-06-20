@@ -14,6 +14,13 @@ interface Worker {
   created_at: string;
 }
 
+interface Office {
+  id: number;
+  wilaya: string;
+  commune: string | null;
+  phone: string | null;
+}
+
 function Spinner() {
   return (
     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -26,12 +33,17 @@ function Spinner() {
 const INPUT_CLS = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] transition-colors bg-white";
 const LABEL_CLS = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5";
 
+function officeLabel(o: Office) {
+  return `${o.wilaya}${o.commune ? " — " + o.commune : ""}`;
+}
+
 export default function WorkersView() {
   const { t } = useTranslation();
   const role = localStorage.getItem("admin_role") ?? "";
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [positions, setPositions] = useState<string[]>([]);
+  const [offices, setOffices] = useState<Office[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -68,7 +80,15 @@ export default function WorkersView() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchWorkers(); fetchPositions(); }, [fetchWorkers, fetchPositions]);
+  const fetchOffices = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/offices`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok) setOffices(d.offices ?? []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchWorkers(); fetchPositions(); fetchOffices(); }, [fetchWorkers, fetchPositions, fetchOffices]);
 
   function openAdd() {
     setEditWorker(null);
@@ -259,7 +279,16 @@ export default function WorkersView() {
                 </div>
                 <div className="col-span-2">
                   <label className={LABEL_CLS}>{t("admin.workers.fields.hub")}</label>
-                  <input value={hub} onChange={e => setHub(e.target.value)} className={INPUT_CLS} placeholder="Hub / Wilaya" />
+                  {offices.length > 0 ? (
+                    <select value={hub} onChange={e => setHub(e.target.value)} className={INPUT_CLS}>
+                      <option value="">— Choisir un hub —</option>
+                      {offices.map(o => (
+                        <option key={o.id} value={officeLabel(o)}>{officeLabel(o)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input value={hub} onChange={e => setHub(e.target.value)} className={INPUT_CLS} placeholder="Hub / Wilaya" />
+                  )}
                 </div>
               </div>
             </div>

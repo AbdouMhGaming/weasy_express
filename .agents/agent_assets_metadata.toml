@@ -66,3 +66,9 @@ id = "0CiQFtDPxYKtL7n6xjN9w"
 uri = "file://deploy/weasy-express-2026-06-18.zip"
 type = "unspecified"
 title = "weasy-express-hostinger-2026-06-18.zip"
+
+[[outputs]]
+id = "TzHbefZAveohEx4SO0nfB"
+uri = "file://hostinger-build.tar.gz"
+type = "unspecified"
+title = "Hostinger Build (API server + Frontend)"
