@@ -89,26 +89,24 @@ async function generatePDF(d: Decharge) {
   let y = 14;
 
   // ── Header ───────────────────────────────────────────────────────────────────
-  const headerH = 58;
+  const headerH = 36;
   doc.setFillColor(...RED);
   doc.rect(0, 0, W, headerH, "F");
 
-  // Text block vertically centred in header
-  const textMidY = headerH / 2;
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("ENTREPRISE Weasydel Express", 14, textMidY - 8);
+  doc.text("ENTREPRISE Weasydel Express", 14, 12);
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Direction Générale  ·  Service Finance", 14, textMidY - 1);
-  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, textMidY + 6);
+  doc.text("Direction Générale  ·  Service Finance", 14, 19);
+  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 25);
 
-  // Logo centred vertically in header, aligned to right
+  // Logo aligned right, shifted 5mm upward from previous y=1
   if (logoDataUrl) {
     const logoW = 52;
     const logoH = 52;
-    doc.addImage(logoDataUrl, "PNG", W - 12 - logoW, (headerH - logoH) / 2, logoW, logoH);
+    doc.addImage(logoDataUrl, "PNG", W - 12 - logoW, -4, logoW, logoH);
   }
 
   y = headerH + 8;
