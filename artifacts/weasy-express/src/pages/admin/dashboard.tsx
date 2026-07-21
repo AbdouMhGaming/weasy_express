@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
-import PerformanceView from "./PerformanceView";
-import ChargesView from "./ChargesView";
-import CommissionsView from "./CommissionsView";
-import SettingsView from "./SettingsView";
-import OfficeDashboardView from "./OfficeDashboardView";
-import WorkersView from "./WorkersView";
-import DechargesView from "./DechargesView";
+const PerformanceView = lazy(() => import("./PerformanceView"));
+const ChargesView     = lazy(() => import("./ChargesView"));
+const CommissionsView = lazy(() => import("./CommissionsView"));
+const SettingsView    = lazy(() => import("./SettingsView"));
+const OfficeDashboardView = lazy(() => import("./OfficeDashboardView"));
+const WorkersView     = lazy(() => import("./WorkersView"));
+const DechargesView   = lazy(() => import("./DechargesView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -96,7 +96,7 @@ const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges";
 
-function Sidebar({
+function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
   partnerCount, officeCount,
 }: {
@@ -223,6 +223,7 @@ function Sidebar({
     </aside>
   );
 }
+const Sidebar = memo(SidebarInner);
 
 // ── Empty role placeholder ─────────────────────────────────────────────────────
 
@@ -329,6 +330,8 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
   const [topStats, setTopStats] = useState<TopStats | null>(null);
   const [searchOrders, setSearchOrders] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   interface OfficeReportRow {
     id: number; report_type: string; file_name: string;
@@ -448,7 +451,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean };
-      if (data.ok) { setShowModal(false); fetchStats(); onRefreshBadge(); }
+      if (data.ok) { setShowModal(false); fetchStats(); }
     } finally { setSaving(false); }
   }
 
@@ -456,7 +459,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
     if (!confirm(t("admin.dashboard.orders.deleteConfirm"))) return;
     const res = await fetch(`${API_BASE}/api/admin/orders/${id}`, { method: "DELETE", headers: adminHeaders() });
     if (res.status === 401) { onUnauth(); return; }
-    fetchStats(); onRefreshBadge();
+    fetchStats();
   }
 
   function selectPreset(preset: TimePreset) {
@@ -499,14 +502,14 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
     return orders;
   }, [stats, statusFilter, searchOrders]);
 
-  const kpiCards = stats ? [
+  const kpiCards = useMemo(() => stats ? [
     { label: t("admin.dashboard.kpi.total"), value: stats.total, color: "from-slate-600 to-slate-700", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
     { label: t("admin.dashboard.kpi.delivered"), value: stats.delivered, color: "from-emerald-500 to-emerald-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
     { label: t("admin.dashboard.kpi.inTransit"), value: stats.in_transit, color: "from-blue-500 to-blue-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg> },
     { label: t("admin.dashboard.kpi.returned"), value: stats.returned, color: "from-orange-500 to-orange-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg> },
     { label: t("admin.dashboard.kpi.pending"), value: stats.pending, color: "from-amber-500 to-amber-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
     { label: t("admin.dashboard.kpi.successRate"), value: `${stats.successRate}%`, color: "from-[#E10600] to-[#B80500]", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
-  ] : [];
+  ] : [], [stats, t]);
 
   return (
     <>
@@ -714,13 +717,18 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 </svg>
                 <input
                   type="text"
-                  value={searchOrders}
-                  onChange={(e) => setSearchOrders(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSearchInput(v);
+                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                    searchDebounceRef.current = setTimeout(() => setSearchOrders(v), 300);
+                  }}
                   placeholder={t("admin.dashboard.orders.filter.search")}
                   className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-gray-50/60"
                 />
-                {searchOrders && (
-                  <button onClick={() => setSearchOrders("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-sm leading-none">×</button>
+                {searchInput && (
+                  <button onClick={() => { setSearchInput(""); setSearchOrders(""); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-sm leading-none">×</button>
                 )}
               </div>
             </div>
@@ -1946,38 +1954,40 @@ export default function AdminDashboard() {
         officeCount={offices.length}
       />
       <main className="flex-1 ml-64 min-h-screen overflow-y-auto">
-        {role === "office" ? (
-          <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
-        ) : role === "finance" ? (
-          view === "commissions" ? <CommissionsView /> :
-          view === "workers" ? <WorkersView /> :
-          view === "decharges" ? <DechargesView /> :
-          <ChargesView onUnauth={unauth} />
-        ) : !isAdmin ? (
-          <EmptyRoleView role={role} />
-        ) : view === "dashboard" ? (
-          <DashboardView onUnauth={unauth} onRefreshBadge={() => { fetchPartners(); fetchOffices(); }} />
-        ) : view === "partners" ? (
-          <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} />
-        ) : view === "offices" ? (
-          <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
-        ) : view === "performance" ? (
-          <PerformanceView onUnauth={unauth} />
-        ) : view === "charges" ? (
-          <ChargesView onUnauth={unauth} />
-        ) : view === "commissions" ? (
-          <CommissionsView />
-        ) : view === "settings" ? (
-          <SettingsView />
-        ) : view === "workers" ? (
-          <WorkersView />
-        ) : view === "decharges" ? (
-          <DechargesView />
-        ) : view === "office-dashboard" ? (
-          <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
-        ) : (
-          <AdminsView currentUsername={username} onUnauth={unauth} />
-        )}
+        <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
+          {role === "office" ? (
+            <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
+          ) : role === "finance" ? (
+            view === "commissions" ? <CommissionsView /> :
+            view === "workers" ? <WorkersView /> :
+            view === "decharges" ? <DechargesView /> :
+            <ChargesView onUnauth={unauth} />
+          ) : !isAdmin ? (
+            <EmptyRoleView role={role} />
+          ) : view === "dashboard" ? (
+            <DashboardView onUnauth={unauth} onRefreshBadge={fetchPartners} />
+          ) : view === "partners" ? (
+            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} />
+          ) : view === "offices" ? (
+            <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
+          ) : view === "performance" ? (
+            <PerformanceView onUnauth={unauth} />
+          ) : view === "charges" ? (
+            <ChargesView onUnauth={unauth} />
+          ) : view === "commissions" ? (
+            <CommissionsView />
+          ) : view === "settings" ? (
+            <SettingsView />
+          ) : view === "workers" ? (
+            <WorkersView />
+          ) : view === "decharges" ? (
+            <DechargesView />
+          ) : view === "office-dashboard" ? (
+            <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
+          ) : (
+            <AdminsView currentUsername={username} onUnauth={unauth} />
+          )}
+        </Suspense>
       </main>
       {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} />}
     </div>
