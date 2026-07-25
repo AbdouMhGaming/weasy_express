@@ -46,6 +46,25 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const [loading, setLoading] = useState(true);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [chargePreset, setChargePreset] = useState<"all" | "today" | "yesterday" | "7d" | "30d">("all");
+
+  function applyChargePreset(preset: "all" | "today" | "yesterday" | "7d" | "30d") {
+    setChargePreset(preset);
+    const today = new Date();
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    if (preset === "all") { setFilterFrom(""); setFilterTo(""); }
+    else if (preset === "today") { const s = fmt(today); setFilterFrom(s); setFilterTo(s); }
+    else if (preset === "yesterday") {
+      const y = new Date(today); y.setDate(y.getDate() - 1);
+      const s = fmt(y); setFilterFrom(s); setFilterTo(s);
+    } else if (preset === "7d") {
+      const f = new Date(today); f.setDate(f.getDate() - 6);
+      setFilterFrom(fmt(f)); setFilterTo(fmt(today));
+    } else if (preset === "30d") {
+      const f = new Date(today); f.setDate(f.getDate() - 29);
+      setFilterFrom(fmt(f)); setFilterTo(fmt(today));
+    }
+  }
 
   // ── Outcome modal state ──
   const [showCharge, setShowCharge] = useState(false);
@@ -284,21 +303,40 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.from")}</label>
-          <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]" />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6 space-y-3">
+        {/* Preset buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <svg className="w-4 h-4 text-[#E10600] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span className="text-sm font-semibold text-gray-700 shrink-0">{t("admin.charges.period")} :</span>
+          {(["all", "today", "yesterday", "7d", "30d"] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => applyChargePreset(p)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${chargePreset === p ? "bg-[#E10600] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              {t(`admin.timePresets.${p === "7d" ? "d7" : p === "30d" ? "d30" : p}`)}
+            </button>
+          ))}
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.to")}</label>
-          <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]" />
+        {/* Custom date range */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.from")}</label>
+            <input type="date" value={filterFrom} onChange={(e) => { setFilterFrom(e.target.value); setChargePreset("all"); }}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.to")}</label>
+            <input type="date" value={filterTo} onChange={(e) => { setFilterTo(e.target.value); setChargePreset("all"); }}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]" />
+          </div>
+          <button onClick={fetchAll} className="px-4 py-2 text-sm font-bold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl shadow-sm transition-colors">{t("admin.charges.apply")}</button>
+          {(filterFrom || filterTo) && (
+            <button onClick={() => { setFilterFrom(""); setFilterTo(""); setChargePreset("all"); }} className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.reset")}</button>
+          )}
         </div>
-        <button onClick={fetchAll} className="px-4 py-2 text-sm font-bold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl shadow-sm transition-colors">{t("admin.charges.apply")}</button>
-        {(filterFrom || filterTo) && (
-          <button onClick={() => { setFilterFrom(""); setFilterTo(""); }} className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.reset")}</button>
-        )}
       </div>
 
       {/* KPI Row */}

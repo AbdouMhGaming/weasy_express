@@ -982,29 +982,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             />
           </div>
 
-          {/* Top Marketers */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>📣</span>Top Marketers</h3>
-            </div>
-            <div className="p-4">
-              {topStats.marketers.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">Aucun commercial enregistré</p>
-              ) : (
-                <div className="space-y-2">
-                  {topStats.marketers.map((m, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-orange-100 text-xs font-bold text-orange-700 flex items-center justify-center shrink-0">{i + 1}</span>
-                      <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-orange-700">{m.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <span className="text-xs text-gray-700 font-medium truncate flex-1">{m.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Top Marketers — hidden */}
         </div>
       )}
 

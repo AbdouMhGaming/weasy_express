@@ -43,6 +43,16 @@ interface ReturnEntry {
   created_at: string;
 }
 
+interface SpEntry {
+  id: number;
+  office_name: string;
+  sp_count: number;
+  commission_dzd: number;
+  sp_date: string;
+  uploaded_by: string;
+  created_at: string;
+}
+
 const fmtN = (n: number) => Math.round(n).toLocaleString("fr-DZ");
 const fmtDZ = (n: number) => `${fmtN(n)} DZD`;
 
@@ -104,7 +114,7 @@ function Spinner({ size = "sm" }: { size?: "sm" | "md" }) {
   );
 }
 
-type Tab = "offices" | "rates" | "returns";
+type Tab = "offices" | "rates" | "returns" | "sp";
 
 function fullOfficeName(o: Office): string {
   return `${o.wilaya}${o.commune ? " \u2014 " + o.commune : ""}`;
@@ -171,6 +181,34 @@ export default function CommissionsView() {
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split("T")[0]);
   const [returnSaving, setReturnSaving] = useState(false);
 
+  // SP (Stop Desk) state
+  const [spEntries, setSpEntries] = useState<SpEntry[]>([]);
+  const [spLoading, setSpLoading] = useState(false);
+  const [spRate, setSpRate] = useState(0);
+  const [spRateInput, setSpRateInput] = useState("");
+  const [spRateSaved, setSpRateSaved] = useState(false);
+  const [spRateSaving, setSpRateSaving] = useState(false);
+  const [expandedSpOffice, setExpandedSpOffice] = useState<string | null>(null);
+
+  // SP modal state
+  const [showSpModal, setShowSpModal] = useState(false);
+  const [spModalOffice, setSpModalOffice] = useState("");
+  const [spCount, setSpCount] = useState("");
+  const [spDate, setSpDate] = useState(new Date().toISOString().split("T")[0]);
+  const [spSaving, setSpSaving] = useState(false);
+
+  // Aggregate SP entries per office
+  const spByOffice = useMemo(() => {
+    const map: Record<string, { totalCount: number; totalCommission: number; entries: SpEntry[] }> = {};
+    for (const e of spEntries) {
+      if (!map[e.office_name]) map[e.office_name] = { totalCount: 0, totalCommission: 0, entries: [] };
+      map[e.office_name].totalCount += Number(e.sp_count);
+      map[e.office_name].totalCommission += Number(e.commission_dzd);
+      map[e.office_name].entries.push(e);
+    }
+    return map;
+  }, [spEntries]);
+
   // Aggregate returns per office
   const returnsByOffice = useMemo(() => {
     const map: Record<string, { totalCount: number; totalDeduction: number; entries: ReturnEntry[] }> = {};
@@ -182,6 +220,101 @@ export default function CommissionsView() {
     }
     return map;
   }, [returns]);
+
+  // ── Fetch SP rate from DB ──────────────────────────────────────────────────
+  const fetchSpRate = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/settings/commission_sp_rate`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok && d.value != null) {
+        const rate = parseFloat(d.value) || 0;
+        setSpRate(rate);
+        setSpRateInput(rate > 0 ? String(rate) : "");
+      }
+    } catch {}
+  }, []);
+
+  // ── Fetch SP entries from DB ───────────────────────────────────────────────
+  const fetchSp = useCallback(async () => {
+    setSpLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (!showAllTime) {
+        const y = filterYear, m = filterMonth;
+        params.set("from", `${y}-${String(m).padStart(2,"0")}-01`);
+        params.set("to", `${y}-${String(m).padStart(2,"0")}-${new Date(y, m, 0).getDate()}`);
+      }
+      const r = await fetch(`${API_BASE}/api/admin/commission-sp?${params}`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok) setSpEntries(d.entries ?? []);
+    } catch {} finally { setSpLoading(false); }
+  }, [showAllTime, filterYear, filterMonth]);
+
+  async function saveSpRate() {
+    setSpRateSaving(true);
+    try {
+      const rate = parseFloat(spRateInput) || 0;
+      const res = await fetch(`${API_BASE}/api/admin/settings/commission_sp_rate`, {
+        method: "PUT",
+        headers: adminHeaders(),
+        body: JSON.stringify({ value: String(rate) }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setSpRate(rate);
+        setSpRateSaved(true);
+        setTimeout(() => setSpRateSaved(false), 2500);
+      }
+    } catch {} finally { setSpRateSaving(false); }
+  }
+
+  function openSpModal(officeName: string) {
+    setSpModalOffice(officeName);
+    setSpCount("");
+    setSpDate(new Date().toISOString().split("T")[0]);
+    setShowSpModal(true);
+  }
+
+  async function saveSp() {
+    const count = parseInt(spCount) || 0;
+    if (count <= 0) return;
+    const commission = Math.round(count * spRate);
+    setSpSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/commission-sp`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          office_name: spModalOffice,
+          sp_count: count,
+          commission_dzd: commission,
+          sp_date: spDate,
+        }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setShowSpModal(false);
+        const [savedYear, savedMonth] = spDate.split("-").map(Number);
+        setSpCount("");
+        setSpDate(new Date().toISOString().split("T")[0]);
+        if (!showAllTime && (savedYear !== filterYear || savedMonth !== filterMonth)) {
+          setFilterYear(savedYear);
+          setFilterMonth(savedMonth);
+        } else {
+          await fetchSp();
+        }
+      }
+    } catch {} finally { setSpSaving(false); }
+  }
+
+  async function deleteSp(id: number) {
+    try {
+      await fetch(`${API_BASE}/api/admin/commission-sp/${id}`, {
+        method: "DELETE", headers: adminHeaders(),
+      });
+      await fetchSp();
+    } catch {}
+  }
 
   // ── Fetch return rate from DB ──────────────────────────────────────────────
   const fetchReturnRate = useCallback(async () => {
@@ -308,6 +441,8 @@ export default function CommissionsView() {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
   useEffect(() => { fetchReturns(); }, [fetchReturns]);
   useEffect(() => { fetchReturnRate(); }, [fetchReturnRate]);
+  useEffect(() => { fetchSp(); }, [fetchSp]);
+  useEffect(() => { fetchSpRate(); }, [fetchSpRate]);
 
   const officeUploads = useCallback(
     (name: string) => history.filter(h => h.period_label === name),
@@ -315,7 +450,8 @@ export default function CommissionsView() {
   );
 
   const totalReturnsDZD = Object.values(returnsByOffice).reduce((s, v) => s + v.totalDeduction, 0);
-  const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0) + totalReturnsDZD;
+  const totalSpDZD = Object.values(spByOffice).reduce((s, v) => s + v.totalCommission, 0);
+  const periodTotal = history.reduce((s, h) => s + Number(h.total_commissions), 0) + totalReturnsDZD + totalSpDZD;
   const activeOfficeCount = new Set(history.map(h => h.period_label)).size;
   const totalDelivered = history.reduce((s, h) => {
     const { breakdown } = parseUpload(h);
@@ -478,6 +614,7 @@ export default function CommissionsView() {
           {tabBtn("offices", t("admin.commissions.tabs.offices"))}
           {tabBtn("rates", t("admin.commissions.tabs.rates"))}
           {tabBtn("returns", t("admin.commissions.tabs.returns"))}
+          {tabBtn("sp", t("admin.commissions.tabs.sp"))}
         </div>
       </div>
 
@@ -558,7 +695,8 @@ export default function CommissionsView() {
                 const uploads = officeUploads(name);
                 const grossTotal = uploads.reduce((s, h) => s + Number(h.total_commissions), 0);
                 const returnAgg = returnsByOffice[name];
-                const netTotal = grossTotal + (returnAgg?.totalDeduction ?? 0);
+                const spAgg = spByOffice[name];
+                const netTotal = grossTotal + (returnAgg?.totalDeduction ?? 0) + (spAgg?.totalCommission ?? 0);
                 const isExpanded = expandedOffice === name;
                 const isReturnExpanded = expandedReturnOffice === name;
                 const hasData = uploads.length > 0;
@@ -643,6 +781,22 @@ export default function CommissionsView() {
                           </svg>
                           {t("admin.commissions.office.return")}
                         </button>
+                        {/* Add SP (Stop Desk) button — always visible */}
+                        {(() => {
+                          const spAgg = spByOffice[name];
+                          const hasSp = (spAgg?.entries.length ?? 0) > 0;
+                          return (
+                            <button
+                              onClick={() => openSpModal(name)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasSp ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              {t("admin.commissions.office.sp")}
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => openAdd(name)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-lg transition-colors shadow-sm"
@@ -1022,6 +1176,97 @@ export default function CommissionsView() {
         </div>
       )}
 
+      {/* ── SP (Stop Desk) Tab ── */}
+      {tab === "sp" && (
+        <div className="space-y-4 max-w-xl">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900">{t("admin.commissions.spRate.title")}</h2>
+                <p className="text-xs text-gray-400">{t("admin.commissions.spRate.subtitle")}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.spRate.rate")}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={spRateInput}
+                    onChange={e => setSpRateInput(e.target.value)}
+                    placeholder="0"
+                    className="w-40 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
+                  />
+                  <span className="text-sm text-gray-400 font-medium">DZD / {t("admin.commissions.spRate.perParcel")}</span>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed">
+                {t("admin.commissions.spRate.explanation")}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={saveSpRate}
+                  disabled={spRateSaving}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl shadow-sm transition-colors disabled:opacity-60"
+                >
+                  {spRateSaving ? <Spinner /> : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                  )}
+                  {t("admin.commissions.spRate.save")}
+                </button>
+                {spRateSaved && (
+                  <span className="text-sm text-green-600 font-semibold flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                    {t("admin.commissions.spRate.saved")}
+                  </span>
+                )}
+              </div>
+
+              {spRate > 0 && (
+                <p className="text-xs text-gray-500">
+                  {t("admin.commissions.spRate.currentRate")} : <span className="font-bold text-gray-800">{fmtDZ(spRate)}</span> / {t("admin.commissions.spRate.perParcel")}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* SP summary per office */}
+          {Object.keys(spByOffice).length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <p className="text-sm font-bold text-gray-900">{t("admin.commissions.spModal.historyTitle")} · {periodLabel}</p>
+                <p className="text-sm font-black text-[#E10600]">{fmtDZ(totalSpDZD)}</p>
+              </div>
+              {spLoading ? (
+                <div className="py-8 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.commissions.spRate.saving")}</div>
+              ) : (
+                <div className="divide-y divide-gray-50">
+                  {Object.entries(spByOffice).map(([officeName, agg]) => (
+                    <div key={officeName} className="px-5 py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{officeName}</p>
+                        <p className="text-xs text-gray-400">{fmtN(agg.totalCount)} {t("admin.commissions.office.spCount")}</p>
+                      </div>
+                      <p className="text-sm font-bold text-[#E10600] shrink-0">{fmtDZ(agg.totalCommission)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Return Rate Tab ── */}
       {tab === "returns" && (
         <div className="space-y-4 max-w-xl">
@@ -1234,6 +1479,80 @@ export default function CommissionsView() {
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-red-500 hover:bg-red-900 text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
               >
                 {returnSaving ? <Spinner /> : t("admin.commissions.returnModal.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SP Modal ── */}
+      {showSpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSpModal(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900">{t("admin.commissions.spModal.title")}</h3>
+                <p className="text-xs text-gray-400 truncate">{spModalOffice}</p>
+              </div>
+              <button onClick={() => setShowSpModal(false)} className="text-gray-400 hover:text-gray-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-xl shrink-0">×</button>
+            </div>
+
+            {spRate === 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 mb-4">
+                {t("admin.commissions.spModal.noRate")}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.spModal.date")}</label>
+                <input
+                  type="date"
+                  value={spDate}
+                  onChange={e => setSpDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.commissions.spModal.count")}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={spCount}
+                  onChange={e => setSpCount(e.target.value)}
+                  placeholder="0"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600]"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">{t("admin.commissions.spModal.rate")}</span>
+                  <span className="font-semibold text-gray-700">{fmtDZ(spRate)} / {t("admin.commissions.spRate.perParcel")}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm border-t border-gray-200 pt-2">
+                  <span className="font-semibold text-gray-700">{t("admin.commissions.spModal.commission")}</span>
+                  <span className="font-black text-[#E10600]">{fmtDZ(Math.round((parseInt(spCount) || 0) * spRate))}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowSpModal(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">
+                {t("admin.commissions.spModal.cancel")}
+              </button>
+              <button
+                onClick={saveSp}
+                disabled={spRate === 0 || spSaving || !spCount || parseInt(spCount) <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold bg-[#E10600] hover:bg-[#B80500] text-white rounded-xl shadow-sm disabled:opacity-60 transition-colors"
+              >
+                {spSaving ? <Spinner /> : t("admin.commissions.spModal.save")}
               </button>
             </div>
           </div>

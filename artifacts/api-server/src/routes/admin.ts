@@ -1523,6 +1523,69 @@ router.delete("/admin/commission-returns/:id", adminAuth, financeOrAdminOnly, as
   }
 });
 
+// ── Commission SP (Stop Desk) ──────────────────────────────────────────────────
+router.get("/admin/commission-sp", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const q = req.query as Record<string, string>;
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const params: string[] = [];
+      let where = "WHERE 1=1";
+      if (q.from)   { where += " AND sp_date >= ?"; params.push(q.from); }
+      if (q.to)     { where += " AND sp_date <= ?"; params.push(q.to); }
+      if (q.office) { where += " AND office_name = ?"; params.push(q.office); }
+      const [rows] = await conn.execute(
+        `SELECT id, office_name, sp_count, commission_dzd, sp_date, uploaded_by, created_at FROM commission_sp ${where} ORDER BY sp_date DESC, created_at DESC LIMIT 1000`,
+        params
+      ) as [Array<Record<string, unknown>>, unknown];
+      res.json({ ok: true, entries: rows });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch commission SP");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.post("/admin/commission-sp", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const officeName = String(b.office_name ?? "").trim();
+  const spCount = parseInt(String(b.sp_count ?? "0"), 10);
+  const commissionDzd = parseInt(String(b.commission_dzd ?? "0"), 10);
+  const spDate = String(b.sp_date ?? "").trim() || new Date().toISOString().split("T")[0];
+  if (!officeName || isNaN(spCount) || spCount < 0) {
+    res.status(400).json({ ok: false, error: "invalid_fields" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const authReq = req as AuthedRequest;
+      await conn.execute(
+        "INSERT INTO commission_sp (office_name, sp_count, commission_dzd, sp_date, uploaded_by) VALUES (?, ?, ?, ?, ?)",
+        [officeName, spCount, commissionDzd, spDate, authReq.adminUsername ?? ""]
+      );
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to add commission SP");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/commission-sp/:id", adminAuth, financeOrAdminOnly, async (req, res) => {
+  const id = parseInt((req.params as { id: string }).id, 10);
+  if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM commission_sp WHERE id = ?", [id]);
+      res.json({ ok: true });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete commission SP");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 // ── Workers ──────────────────────────────────────────────────────────────────
 
 router.get("/admin/workers", adminAuth, financeOrAdminOnly, async (req, res) => {
