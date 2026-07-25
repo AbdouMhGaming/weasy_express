@@ -346,36 +346,14 @@ function extractFDRRecipientNames(text: string, trackingNums: string[]): string 
       }
     }
 
-    // Clean up multi-line names; filter pure-digit lines AND amount/COD strings
-    // (amounts like "0.002600750.000.000.000.001850" contain 3+ consecutive digits)
+    // Clean up multi-line names and filter out pure numeric lines
     const parts = nameRaw
       .split("\n")
       .map(l => l.trim())
-      .filter(l => {
-        if (l.length < 1) return false;
-        if (/^\d+$/.test(l)) return false;    // pure digits
-        if (/\d{3,}/.test(l)) return false;   // 3+ consecutive digits → amount / phone fragment
-        return true;
-      })
+      .filter(l => l.length >= 1 && !/^\d+$/.test(l))
       .slice(0, 3);
 
-    const joined = parts.join(" ").trim();
-
-    // Return empty when the result is just a wilaya destination (no real client name).
-    // Ecotrack sometimes puts the city name in the recipient column (single or doubled due
-    // to column merging by pdf-parse, e.g. "Batna Batna", "El Oued El Oued").
-    const normStr = (s: string) =>
-      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
-    const normJoined = normStr(joined);
-    const isJustWilaya = joined.length > 0 && KNOWN_WILAYAS.some(w => {
-      const nw = normStr(w);
-      return normJoined === nw
-        || normJoined === `${nw} ${nw}`
-        || normJoined.startsWith(`${nw} ${nw} `)
-        || normJoined.startsWith(`${nw}${nw}`); // concatenated without space
-    });
-
-    recipients.push(isJustWilaya ? "" : joined.slice(0, 100));
+    recipients.push(parts.join(" ").trim().slice(0, 100));
   }
   return recipients.join("|");
 }
