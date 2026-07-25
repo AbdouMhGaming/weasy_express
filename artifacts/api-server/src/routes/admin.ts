@@ -522,23 +522,27 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         });
       }
 
-      // Placeholder rows for parcels without extracted tracking codes
-      const totalParcels = rpt.total_parcels > 0 ? rpt.total_parcels : nums.length;
-      for (let idx = nums.length; idx < totalParcels; idx++) {
-        pdfOrders.push({
-          id: -(rpt.id * 10000 + idx),
-          trackingNumber: null,
-          status,
-          senderName: rpt.sender_name ?? null,
-          recipientName: null,
-          destinationWilayaCode: fallbackWilayaCode,
-          destinationWilaya: fallbackWilayaName,
-          originWilayaCode: null,
-          originWilaya: rpt.station ?? null,
-          createdAt,
-          source: "pdf",
-          reportType: rpt.report_type,
-        });
+      // Placeholder rows for parcels without extracted tracking codes.
+      // Skip for route_sheet (FDR): without a tracking number we have no per-order
+      // sender/recipient data, so these rows would appear completely empty.
+      if (rpt.report_type !== "route_sheet") {
+        const totalParcels = rpt.total_parcels > 0 ? rpt.total_parcels : nums.length;
+        for (let idx = nums.length; idx < totalParcels; idx++) {
+          pdfOrders.push({
+            id: -(rpt.id * 10000 + idx),
+            trackingNumber: null,
+            status,
+            senderName: rpt.sender_name ?? null,
+            recipientName: null,
+            destinationWilayaCode: fallbackWilayaCode,
+            destinationWilaya: fallbackWilayaName,
+            originWilayaCode: null,
+            originWilaya: rpt.station ?? null,
+            createdAt,
+            source: "pdf",
+            reportType: rpt.report_type,
+          });
+        }
       }
     }
 
@@ -707,6 +711,9 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       const names = row.recipient_names.split("|").map((n: string) => n.trim()).filter(Boolean);
       for (const name of names) {
         if (name.length < 2 || name.length > 100) continue;
+        // Skip names that contain 3+ consecutive digits — these are garbage entries
+        // caused by PDF column merging (e.g. "BatnaBatna0.002600750.000.000.000.001850")
+        if (/\d{3,}/.test(name)) continue;
         recipientMap[name] = (recipientMap[name] ?? 0) + 1;
       }
     }
