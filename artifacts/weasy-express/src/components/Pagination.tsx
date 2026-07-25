@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
@@ -11,11 +11,8 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 export function usePagination<T>(items: T[], defaultPageSize = 10) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
-  // Track previous items reference to detect a filter/search change
   const [prevItems, setPrevItems] = useState<T[]>(items);
 
-  // React-recommended pattern: synchronous state reset during render.
-  // When items reference changes, reset page to 1 before this render commits.
   if (items !== prevItems) {
     setPrevItems(items);
     setPage(1);
@@ -53,19 +50,36 @@ type PaginationBarProps = {
 export function PaginationBar({
   page, totalPages, totalItems, pageSize, setPage, setPageSize,
 }: PaginationBarProps) {
+  const [jumpOpenKey, setJumpOpenKey] = useState<string | null>(null);
+  const [jumpVal, setJumpVal] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
   if (totalItems === 0) return null;
 
-  // Build page number list with smart ellipsis
-  const pages: (number | "...")[] = [];
+  // Build page number list with clickable ellipsis slots
+  const pages: (number | { key: string })[] = [];
   if (totalPages <= 7) {
     for (let i = 1; i <= totalPages; i++) pages.push(i);
   } else {
     pages.push(1);
-    if (page > 3) pages.push("...");
+    if (page > 3) pages.push({ key: "left" });
     for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-    if (page < totalPages - 2) pages.push("...");
+    if (page < totalPages - 2) pages.push({ key: "right" });
     pages.push(totalPages);
   }
+
+  const commitJump = () => {
+    const n = parseInt(jumpVal, 10);
+    if (!isNaN(n) && n >= 1 && n <= totalPages) setPage(n);
+    setJumpOpenKey(null);
+    setJumpVal("");
+  };
+
+  const openJump = (key: string) => {
+    setJumpOpenKey(key);
+    setJumpVal("");
+    // focus happens via autoFocus on the input
+  };
 
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, totalItems);
@@ -91,6 +105,7 @@ export function PaginationBar({
       {/* Page navigation */}
       {totalPages > 1 && (
         <div className="flex items-center gap-0.5">
+          {/* Prev */}
           <button
             onClick={() => setPage(Math.max(1, page - 1))}
             disabled={page === 1}
@@ -100,10 +115,46 @@ export function PaginationBar({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          {pages.map((p, i) =>
-            p === "..." ? (
-              <span key={`ellipsis-${i}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">…</span>
-            ) : (
+
+          {pages.map((p, i) => {
+            // Ellipsis slot
+            if (typeof p === "object") {
+              const { key } = p;
+              if (jumpOpenKey === key) {
+                return (
+                  <input
+                    key={`jump-input-${key}`}
+                    ref={inputRef}
+                    autoFocus
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    value={jumpVal}
+                    placeholder="#"
+                    onChange={(e) => setJumpVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitJump();
+                      if (e.key === "Escape") { setJumpOpenKey(null); setJumpVal(""); }
+                    }}
+                    onBlur={() => { setJumpOpenKey(null); setJumpVal(""); }}
+                    className="w-12 h-7 text-center text-xs border border-[#E10600]/50 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#E10600]/40 focus:border-[#E10600] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                );
+              }
+              return (
+                <button
+                  key={`ellipsis-${key}-${i}`}
+                  onClick={() => openJump(key)}
+                  title="Aller à la page…"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#E10600] hover:bg-red-50 transition-colors text-xs font-bold tracking-widest"
+                >
+                  ···
+                </button>
+              );
+            }
+
+            // Regular page button
+            return (
               <button
                 key={p}
                 onClick={() => setPage(p as number)}
@@ -115,8 +166,10 @@ export function PaginationBar({
               >
                 {p}
               </button>
-            )
-          )}
+            );
+          })}
+
+          {/* Next */}
           <button
             onClick={() => setPage(Math.min(totalPages, page + 1))}
             disabled={page === totalPages}

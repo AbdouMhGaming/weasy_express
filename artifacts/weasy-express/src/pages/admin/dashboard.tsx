@@ -744,7 +744,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             ) : filteredOrders.length === 0 ? (
               <div className="py-20 text-center text-gray-400 text-sm">{t("admin.dashboard.orders.noData")}</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-gray-100 bg-gray-50/80 backdrop-blur-sm">
