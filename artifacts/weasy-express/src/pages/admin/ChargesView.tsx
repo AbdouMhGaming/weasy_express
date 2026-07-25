@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 
 type ChargeType = "outcome" | "income";
 
@@ -180,8 +181,10 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
     fetchAll();
   }
 
-  const outcomes = charges.filter(c => c.type === "outcome" || !c.type);
-  const incomes = charges.filter(c => c.type === "income");
+  const outcomes = useMemo(() => charges.filter(c => c.type === "outcome" || !c.type), [charges]);
+  const incomes = useMemo(() => charges.filter(c => c.type === "income"), [charges]);
+  const pagedOutcomes = usePagination(outcomes);
+  const pagedIncomes = usePagination(incomes);
   const totalOutcome = summary?.totalCharges ?? 0;
   const totalIncome = summary?.totalIncome ?? 0;
   const balance = totalIncome - totalOutcome;
@@ -353,8 +356,8 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           ) : outcomes.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">{t("admin.charges.list.noCharges")}</div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
-              {outcomes.map((c) => {
+            <div className="divide-y divide-gray-50">
+              {pagedOutcomes.paged.map((c) => {
                 const cat = getCat(c.category);
                 return (
                   <div key={c.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50/50 transition-colors">
@@ -382,6 +385,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               })}
             </div>
           )}
+          {!loading && outcomes.length > 0 && <PaginationBar {...pagedOutcomes} />}
         </div>
 
         {/* Income list */}
@@ -398,8 +402,8 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           ) : incomes.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">{t("admin.charges.list.noIncome")}</div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
-              {incomes.map((c) => {
+            <div className="divide-y divide-gray-50">
+              {pagedIncomes.paged.map((c) => {
                 const cat = getCat(c.category);
                 return (
                   <div key={c.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50/50 transition-colors">
@@ -427,6 +431,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               })}
             </div>
           )}
+          {!loading && incomes.length > 0 && <PaginationBar {...pagedIncomes} />}
         </div>
       </div>
 

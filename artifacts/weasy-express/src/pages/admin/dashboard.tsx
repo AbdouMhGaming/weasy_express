@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 const PerformanceView = lazy(() => import("./PerformanceView"));
 const ChargesView     = lazy(() => import("./ChargesView"));
 const CommissionsView = lazy(() => import("./CommissionsView"));
@@ -502,6 +503,9 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
     return orders;
   }, [stats, statusFilter, searchOrders]);
 
+  const ordersPag = usePagination(filteredOrders);
+  const reportsPag = usePagination(officeReports);
+
   const kpiCards = useMemo(() => stats ? [
     { label: t("admin.dashboard.kpi.total"), value: stats.total, color: "from-slate-600 to-slate-700", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
     { label: t("admin.dashboard.kpi.delivered"), value: stats.delivered, color: "from-emerald-500 to-emerald-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
@@ -740,7 +744,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             ) : filteredOrders.length === 0 ? (
               <div className="py-20 text-center text-gray-400 text-sm">{t("admin.dashboard.orders.noData")}</div>
             ) : (
-              <div className="overflow-x-auto overflow-y-auto max-h-[460px]">
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-gray-100 bg-gray-50/80 backdrop-blur-sm">
@@ -755,7 +759,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredOrders.map((o) => (
+                    {ordersPag.paged.map((o) => (
                       <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors ${o.source === "pdf" ? "bg-blue-50/20" : ""}`}>
                         <td className="px-5 py-3">
                           <div className="flex flex-col gap-0.5">
@@ -808,6 +812,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 </table>
               </div>
             )}
+            {!loading && filteredOrders.length > 0 && <PaginationBar {...ordersPag} />}
           </div>
 
           {/* Heatmap */}
@@ -1012,7 +1017,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {officeReports.map((r) => {
+                {reportsPag.paged.map((r) => {
                   const typeLabel = r.report_type === "delivery_receipt" ? { icon: "✅", label: "Décharge", badge: "bg-emerald-100 text-emerald-700" }
                     : r.report_type === "route_sheet" ? { icon: "🗺️", label: "Feuille de route", badge: "bg-blue-100 text-blue-700" }
                     : r.report_type === "returns_list" ? { icon: "↩️", label: "Retours", badge: "bg-orange-100 text-orange-700" }
@@ -1089,6 +1094,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             </table>
           </div>
         )}
+        {!reportsLoading && officeReports.length > 0 && <PaginationBar {...reportsPag} />}
       </div>
 
       {/* Add / Edit Order Modal */}

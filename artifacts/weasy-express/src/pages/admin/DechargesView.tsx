@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 
 interface Worker {
   id: number;
@@ -476,7 +477,7 @@ export default function DechargesView() {
 
   const selOffice = offices.find(o => String(o.id) === commOfficeId) ?? null;
 
-  const filteredDecharges = decharges.filter(d => {
+  const filteredDecharges = useMemo(() => decharges.filter(d => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -486,9 +487,9 @@ export default function DechargesView() {
       (d.worker_position ?? "").toLowerCase().includes(q) ||
       (d.worker_hub ?? "").toLowerCase().includes(q)
     );
-  });
+  }), [decharges, searchQuery]);
 
-  const filteredCommissions = commissions.filter(c => {
+  const filteredCommissions = useMemo(() => commissions.filter(c => {
     if (!commSearch.trim()) return true;
     const q = commSearch.toLowerCase();
     return (
@@ -497,7 +498,10 @@ export default function DechargesView() {
       (c.agent_name ?? "").toLowerCase().includes(q) ||
       (c.period_label ?? "").toLowerCase().includes(q)
     );
-  });
+  }), [commissions, commSearch]);
+
+  const pagedDecharges = usePagination(filteredDecharges);
+  const pagedCommissions = usePagination(filteredCommissions);
 
   const fetchDecharges = useCallback(async () => {
     setLoading(true);
@@ -714,9 +718,9 @@ export default function DechargesView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredDecharges.length === 0 ? (
-                      <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">{t("admin.decharges.noResults", { query: searchQuery })}</td></tr>
-                    ) : filteredDecharges.map(d => (
+                    {pagedDecharges.paged.length === 0 ? (
+                      <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">{filteredDecharges.length === 0 ? t("admin.decharges.noResults", { query: searchQuery }) : ""}</td></tr>
+                    ) : pagedDecharges.paged.map(d => (
                       <tr key={d.id} className="hover:bg-gray-50/40 transition-colors">
                         <td className="px-5 py-3.5"><span className="font-mono text-xs font-bold text-[#E10600] bg-red-50 px-2.5 py-1 rounded-lg border border-red-100">{d.recu_number}</span></td>
                         <td className="px-4 py-3.5">
@@ -750,6 +754,7 @@ export default function DechargesView() {
                   </tbody>
                 </table>
               </div>
+              <PaginationBar {...pagedDecharges} />
             </div>
           )}
         </>
@@ -792,9 +797,9 @@ export default function DechargesView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredCommissions.length === 0 ? (
+                    {pagedCommissions.paged.length === 0 ? (
                       <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-gray-400">Aucun résultat</td></tr>
-                    ) : filteredCommissions.map(c => (
+                    ) : pagedCommissions.paged.map(c => (
                       <tr key={c.id} className="hover:bg-gray-50/40 transition-colors">
                         <td className="px-5 py-3.5"><span className="font-mono text-xs font-bold text-[#E10600] bg-red-50 px-2.5 py-1 rounded-lg border border-red-100">{c.recu_number}</span></td>
                         <td className="px-4 py-3.5">
@@ -823,6 +828,7 @@ export default function DechargesView() {
                   </tbody>
                 </table>
               </div>
+              <PaginationBar {...pagedCommissions} />
             </div>
           )}
         </>

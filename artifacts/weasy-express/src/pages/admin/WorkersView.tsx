@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 
 interface Worker {
   id: number;
@@ -128,9 +129,13 @@ export default function WorkersView() {
     } catch {}
   }
 
-  const filtered = workers.filter(w =>
-    `${w.first_name} ${w.last_name} ${w.worker_id} ${w.position} ${w.hub}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(() =>
+    workers.filter(w =>
+      `${w.first_name} ${w.last_name} ${w.worker_id} ${w.position} ${w.hub}`.toLowerCase().includes(search.toLowerCase())
+    ),
+    [workers, search]
   );
+  const pagedWorkers = usePagination(filtered);
 
   return (
     <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
@@ -179,7 +184,7 @@ export default function WorkersView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map(w => (
+                {pagedWorkers.paged.map(w => (
                   <tr key={w.id} className="hover:bg-gray-50/40 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
@@ -216,6 +221,7 @@ export default function WorkersView() {
               </tbody>
             </table>
           </div>
+          <PaginationBar {...pagedWorkers} />
         </div>
       )}
 

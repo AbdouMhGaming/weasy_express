@@ -1,0 +1,62 @@
+Good analysis. Let me read the critical sections of the dashboard to implement the fixes properly.
+
+
+7 actions
+Let me read the key sections I need to implement the fixes:
+
+
+4 actions
+Now I have a clear picture of all the issues. Here's what's causing the heaviness:
+
+All 8 sub-views loaded upfront — massive JS bundle even when you only open one section
+kpiCards rebuilt on every render with inline SVG JSX — not memoized
+Sidebar re-renders on every parent state change — no React.memo
+onRefreshBadge fetches all partners + offices on every order save
+Search re-filters on every keystroke without debounce
+Let me fix all of these now:
+
+
+3 actions
+Now I have everything needed. Here are all the fixes I'll implement in parallel:
+
+
+3 actions
+I need to close the memo( wrapper on Sidebar, then apply the remaining fixes. Let me do all in parallel:
+
+
+8 actions
+Let me find the search input in the JSX and fix the onRefreshBadge calls, all in parallel:
+
+
+5 actions
+Now applying all remaining fixes in parallel:
+
+
+7 actions
+There's a syntax error — the memo( wrapper wasn't closed correctly. Let me check and fix:
+
+
+3 actions
+The TypeScript type annotation inside memo(function...({}: {...}) {...}) is confusing Babel's parser. I'll use the safer pattern — define first, wrap separately:
+
+
+6 actions
+The HMR is still showing the old });. Let me check the actual current state of the file:
+
+
+2 actions
+The file is now correct. Vite's HMR should have picked up the fix. Let me verify:
+
+
+5 actions
+All fixes are live and working. Here's what was done to make the admin dashboard significantly lighter and faster:
+
+1. Lazy-loaded all sub-views — Previously all 7 views (Performance, Charges, Commissions, Settings, Workers, Décharges, OfficeDashboard) were bundled and parsed upfront. Now they load on-demand with React.lazy + Suspense, so opening /admin only loads the code for the view you're actually on.
+
+2. Memoized the Sidebar — The sidebar was re-rendering on every state change in the parent (e.g. every time partners or offices data updated). Wrapping it with memo means it only re-renders when its own props actually change.
+
+3. Memoized KPI cards — The 6 KPI cards with inline SVG icons were rebuilt on every render cycle. Now they're cached with useMemo and only recalculate when stats change.
+
+4. Debounced the order search — Typing in the search box now waits 300ms before filtering, instead of re-filtering the entire orders list on every keystroke.
+
+5. Removed a redundant double-fetch — Saving or deleting an order was triggering a full refetch of all partners and all offices (totally unrelated data) on top of the stats refresh. That extra load is gone.
