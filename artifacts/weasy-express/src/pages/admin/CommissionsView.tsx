@@ -788,7 +788,7 @@ export default function CommissionsView() {
                           return (
                             <button
                               onClick={() => openSpModal(name)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasSp ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors border ${hasSp ? "bg-red-50 text-[#E10600] border-[#E10600]/30 hover:bg-red-100" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -1014,14 +1014,66 @@ export default function CommissionsView() {
                                   </tr>
                                 ))}
                               </tbody>
+                              {!spAgg && (
+                                <tfoot>
+                                  <tr className="bg-red-100/70 border-t border-red-200/60">
+                                    <td colSpan={2} className="px-5 py-2 text-xs font-bold text-red-800">Net {office.wilaya}</td>
+                                    <td className="px-4 py-2 text-right font-black text-red-800">{fmtDZ(netTotal)}</td>
+                                    <td />
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        )}
+
+                        {/* SP (Stop Desk) entries inline (when expanded) */}
+                        {spAgg && (spAgg.entries.length > 0) && (
+                          <div className="border-t border-[#E10600]/20 bg-red-50/30">
+                            <div className="px-5 py-2.5 flex items-center justify-between">
+                              <p className="text-xs font-bold text-[#E10600]">{t("admin.commissions.spModal.historyTitle")} · {periodLabel}</p>
+                              <p className="text-xs text-green-700 font-semibold">+ {fmtDZ(spAgg.totalCommission)}</p>
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody className="divide-y divide-[#E10600]/10">
+                                {spAgg.entries.map(entry => (
+                                  <tr key={entry.id} className="hover:bg-red-50 transition-colors">
+                                    <td className="px-5 py-2.5 text-gray-700 font-medium whitespace-nowrap">
+                                      {new Date(entry.sp_date).toLocaleDateString("fr-DZ", { day:"2-digit", month:"short", year:"numeric" })}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-[#E10600] font-bold">{fmtN(Number(entry.sp_count))} {t("admin.commissions.office.spCount")}</td>
+                                    <td className="px-4 py-2.5 text-right font-bold text-[#E10600]">{fmtDZ(Number(entry.commission_dzd))}</td>
+                                    <td className="px-4 py-2.5 w-10 text-right">
+                                      {role === "admin" && (
+                                        <button
+                                          onClick={() => deleteSp(entry.id)}
+                                          className="p-1 rounded-lg text-gray-300 hover:text-[#E10600] hover:bg-red-50 transition-colors"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
                               <tfoot>
-                                <tr className="bg-red-100/70 border-t border-red-200/60">
-                                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-red-800">Net {office.wilaya}</td>
-                                  <td className="px-4 py-2 text-right font-black text-red-800">{fmtDZ(netTotal)}</td>
+                                <tr className="bg-[#E10600]/10 border-t-2 border-[#E10600]/20">
+                                  <td colSpan={2} className="px-5 py-2 text-xs font-bold text-[#E10600]">Net {office.wilaya}</td>
+                                  <td className="px-4 py-2 text-right font-black text-[#E10600]">{fmtDZ(netTotal)}</td>
                                   <td />
                                 </tr>
                               </tfoot>
                             </table>
+                          </div>
+                        )}
+
+                        {/* Net total row when only returns exist (no SP) */}
+                        {hasReturns && !spAgg && (
+                          <div className="border-t border-[#E10600]/20 bg-[#E10600]/5 px-5 py-2.5 flex items-center justify-between">
+                            <span className="text-xs font-bold text-[#E10600]">Net {office.wilaya}</span>
+                            <span className="text-sm font-black text-[#E10600]">{fmtDZ(netTotal)}</span>
                           </div>
                         )}
                       </div>
@@ -1181,8 +1233,8 @@ export default function CommissionsView() {
         <div className="space-y-4 max-w-xl">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-[#E10600]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
@@ -1209,7 +1261,7 @@ export default function CommissionsView() {
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed">
+              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-800 leading-relaxed">
                 {t("admin.commissions.spRate.explanation")}
               </div>
 
@@ -1491,8 +1543,8 @@ export default function CommissionsView() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSpModal(false)} />
           <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-[#E10600]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
