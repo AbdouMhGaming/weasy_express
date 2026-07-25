@@ -699,9 +699,10 @@ export default function CommissionsView() {
                 const netTotal = grossTotal + (returnAgg?.totalDeduction ?? 0) + (spAgg?.totalCommission ?? 0);
                 const isExpanded = expandedOffice === name;
                 const isReturnExpanded = expandedReturnOffice === name;
-                const hasData = uploads.length > 0;
-                const badge = wilayaBadge(office.wilayaNumber);
                 const hasReturns = (returnAgg?.entries.length ?? 0) > 0;
+                const hasSp = (spAgg?.entries.length ?? 0) > 0;
+                const hasData = uploads.length > 0 || hasReturns || hasSp;
+                const badge = wilayaBadge(office.wilayaNumber);
 
                 return (
                   <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -729,11 +730,15 @@ export default function CommissionsView() {
                         {hasData ? (
                           <>
                             <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
-                            {returnAgg && returnAgg.totalDeduction > 0 && (
-                              <p className="text-xs text-green-700 font-semibold">
-                                {fmtDZ(grossTotal)} + {fmtDZ(returnAgg.totalDeduction)}
-                              </p>
-                            )}
+                            {(() => {
+                              const parts: string[] = [];
+                              if (grossTotal > 0) parts.push(fmtDZ(grossTotal));
+                              if (returnAgg && returnAgg.totalDeduction > 0) parts.push(fmtDZ(returnAgg.totalDeduction));
+                              if (spAgg && spAgg.totalCommission > 0) parts.push(`${fmtDZ(spAgg.totalCommission)} SD`);
+                              return parts.length > 1 ? (
+                                <p className="text-xs text-green-700 font-semibold">{parts.join(" + ")}</p>
+                              ) : null;
+                            })()}
                             <p className="text-xs text-gray-400">
                               {fmtN(uploads.reduce((s, h) => {
                                 const { breakdown } = parseUpload(h);
@@ -741,6 +746,9 @@ export default function CommissionsView() {
                               }, 0))} {t("admin.commissions.office.parcels")}
                               {returnAgg && returnAgg.totalCount > 0 && (
                                 <span className="text-red-400 ml-1">· {returnAgg.totalCount} {t("admin.commissions.office.returned")}</span>
+                              )}
+                              {spAgg && spAgg.totalCount > 0 && (
+                                <span className="text-gray-500 ml-1">· {fmtN(spAgg.totalCount)} SD</span>
                               )}
                             </p>
                           </>
@@ -860,9 +868,15 @@ export default function CommissionsView() {
                       </div>
                     )}
 
-                    {/* Expanded: upload history */}
-                    {isExpanded && uploads.length > 0 && (
+                    {/* Expanded: upload history + returns + SP */}
+                    {isExpanded && (uploads.length > 0 || hasReturns || hasSp) && (
                       <div className="border-t border-gray-100 bg-gray-50/60">
+                        {uploads.length === 0 && (
+                          <div className="px-5 py-3 text-xs text-gray-400 italic">
+                            {t("admin.commissions.office.noData")} — {t("admin.commissions.kpi.uploadsPlural")}
+                          </div>
+                        )}
+                        {uploads.length > 0 && (
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-gray-100">
@@ -982,6 +996,7 @@ export default function CommissionsView() {
                             </tr>
                           </tfoot>
                         </table>
+                        )}
 
                         {/* Return entries inline (when expanded) */}
                         {hasReturns && (
@@ -1292,30 +1307,6 @@ export default function CommissionsView() {
             </div>
           </div>
 
-          {/* SP summary per office */}
-          {Object.keys(spByOffice).length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <p className="text-sm font-bold text-gray-900">{t("admin.commissions.spModal.historyTitle")} · {periodLabel}</p>
-                <p className="text-sm font-black text-[#E10600]">{fmtDZ(totalSpDZD)}</p>
-              </div>
-              {spLoading ? (
-                <div className="py-8 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.commissions.spRate.saving")}</div>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {Object.entries(spByOffice).map(([officeName, agg]) => (
-                    <div key={officeName} className="px-5 py-3 flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{officeName}</p>
-                        <p className="text-xs text-gray-400">{fmtN(agg.totalCount)} {t("admin.commissions.office.spCount")}</p>
-                      </div>
-                      <p className="text-sm font-bold text-[#E10600] shrink-0">{fmtDZ(agg.totalCommission)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
