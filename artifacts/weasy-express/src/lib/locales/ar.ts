@@ -936,8 +936,12 @@ const ar: Translations = {
         wilayasSubtitle: "عدد الطرود لكل ولاية (جميع التقارير)",
         noData: "لا توجد بيانات — استورد ملفات PDF",
         topSenders: "أبرز المرسلين",
-        topSendersSubtitle: "حسب عدد الطرود المعالجة",
+        topSendersSubtitle: "حسب عدد طرود FDR",
         noSenders: "لم يُكتشف أي مرسل",
+        topClients: "أبرز العملاء",
+        topClientsSubtitle: "حسب عدد طرود FDR",
+        noClients: "لم يُكتشف أي عميل",
+        fdrOnly: "أوراق الطريق فقط",
       },
       units: {
         parcel: "طرد",

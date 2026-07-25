@@ -330,6 +330,10 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
 
   const [topStats, setTopStats] = useState<TopStats | null>(null);
+  const topSendersAll = useMemo(() => topStats?.topSenders ?? [], [topStats]);
+  const topRecipientsAll = useMemo(() => topStats?.topRecipients ?? [], [topStats]);
+  const sendersPag = usePagination(topSendersAll);
+  const recipientsPag = usePagination(topRecipientsAll);
   const [searchOrders, setSearchOrders] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -895,53 +899,87 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
       {topStats && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Top Senders */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🏆</span>Top Expéditeurs</h3>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>🏆</span>{t("admin.office.charts.topSenders")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("admin.office.charts.fdrOnly")}</p>
+              </div>
+              {topSendersAll.length > 0 && (
+                <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{topSendersAll.length}</span>
+              )}
             </div>
-            <div className="p-4 space-y-3">
-              {topStats.topSenders.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
-              ) : topStats.topSenders.map((s, i) => {
-                const maxS = Number(topStats.topSenders[0]?.count ?? 1);
-                const pct = Math.round((Number(s.count) / maxS) * 100);
-                return (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
-                    <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
-                      <div className="h-1.5 rounded-full bg-[#E10600]" style={{ width: `${pct}%` }} />
+            <div className="overflow-y-auto max-h-72 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div className="p-4 space-y-3">
+                {topSendersAll.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">{t("admin.office.charts.noSenders")}</p>
+                ) : sendersPag.paged.map((s, i) => {
+                  const globalRank = (sendersPag.page - 1) * sendersPag.pageSize + i + 1;
+                  const maxS = Number(topSendersAll[0]?.count ?? 1);
+                  const pct = Math.round((Number(s.count) / maxS) * 100);
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="min-w-[1.5rem] h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0 px-1">{globalRank}</span>
+                      <span className="text-xs text-gray-700 flex-1 truncate font-medium">{s.name}</span>
+                      <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
+                        <div className="h-1.5 rounded-full bg-[#E10600]" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-gray-900 min-w-[1.5rem] text-right shrink-0">{Number(s.count)}</span>
                     </div>
-                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(s.count)}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
+            <PaginationBar
+              page={sendersPag.page}
+              totalPages={sendersPag.totalPages}
+              totalItems={sendersPag.totalItems}
+              pageSize={sendersPag.pageSize}
+              setPage={sendersPag.setPage}
+              setPageSize={sendersPag.setPageSize}
+            />
           </div>
 
-          {/* Top Clients — top recipients (destinataires les plus fréquents) */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>⭐</span>Top Clients</h3>
+          {/* Top Clients — top recipients from FDR PDFs */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2"><span>⭐</span>{t("admin.office.charts.topClients")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("admin.office.charts.fdrOnly")}</p>
+              </div>
+              {topRecipientsAll.length > 0 && (
+                <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{topRecipientsAll.length}</span>
+              )}
             </div>
-            <div className="p-4 space-y-3">
-              {(!topStats.topRecipients || topStats.topRecipients.length === 0) ? (
-                <p className="text-xs text-gray-400 text-center py-4">Aucune donnée</p>
-              ) : topStats.topRecipients.map((r, i) => {
-                const maxR = Number(topStats.topRecipients[0]?.count ?? 1);
-                const pct = Math.round((Number(r.count) / maxR) * 100);
-                return (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.name}</span>
-                    <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
-                      <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+            <div className="overflow-y-auto max-h-72 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div className="p-4 space-y-3">
+                {topRecipientsAll.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">{t("admin.office.charts.noClients")}</p>
+                ) : recipientsPag.paged.map((r, i) => {
+                  const globalRank = (recipientsPag.page - 1) * recipientsPag.pageSize + i + 1;
+                  const maxR = Number(topRecipientsAll[0]?.count ?? 1);
+                  const pct = Math.round((Number(r.count) / maxR) * 100);
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="min-w-[1.5rem] h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0 px-1">{globalRank}</span>
+                      <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.name}</span>
+                      <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
+                        <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-gray-900 min-w-[1.5rem] text-right shrink-0">{Number(r.count)}</span>
                     </div>
-                    <span className="text-xs font-bold text-gray-900 w-5 text-right shrink-0">{Number(r.count)}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
+            <PaginationBar
+              page={recipientsPag.page}
+              totalPages={recipientsPag.totalPages}
+              totalItems={recipientsPag.totalItems}
+              pageSize={recipientsPag.pageSize}
+              setPage={recipientsPag.setPage}
+              setPageSize={recipientsPag.setPageSize}
+            />
           </div>
 
           {/* Top Marketers */}
