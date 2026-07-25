@@ -731,18 +731,13 @@ export default function CommissionsView() {
                           <>
                             <p className="text-lg font-black text-[#E10600]">{fmtDZ(netTotal)}</p>
                             {(() => {
-                              const segments: React.ReactNode[] = [];
-                              if (grossTotal > 0) segments.push(<span key="gross" className="text-green-700">{fmtDZ(grossTotal)}</span>);
-                              if (returnAgg && returnAgg.totalDeduction > 0) segments.push(<span key="ret" className="text-green-700">{fmtDZ(returnAgg.totalDeduction)}</span>);
-                              if (spAgg && spAgg.totalCommission > 0) segments.push(<span key="sd" className="text-[#E10600]">{fmtDZ(spAgg.totalCommission)} SD</span>);
-                              if (segments.length <= 1) return null;
-                              return (
-                                <p className="text-xs font-semibold">
-                                  {segments.reduce<React.ReactNode[]>((acc, seg, i) =>
-                                    i === 0 ? [seg] : [...acc, <span key={`sep-${i}`} className="text-gray-400"> + </span>, seg], []
-                                  )}
-                                </p>
-                              );
+                              const parts: string[] = [];
+                              if (grossTotal > 0) parts.push(fmtDZ(grossTotal));
+                              if (returnAgg && returnAgg.totalDeduction > 0) parts.push(fmtDZ(returnAgg.totalDeduction));
+                              if (spAgg && spAgg.totalCommission > 0) parts.push(`${fmtDZ(spAgg.totalCommission)} SD`);
+                              return parts.length > 1 ? (
+                                <p className="text-xs text-green-700 font-semibold">{parts.join(" + ")}</p>
+                              ) : null;
                             })()}
                             <p className="text-xs text-gray-400">
                               {fmtN(uploads.reduce((s, h) => {
