@@ -734,7 +734,7 @@ export default function CommissionsView() {
                               const parts: string[] = [];
                               if (grossTotal > 0) parts.push(fmtDZ(grossTotal));
                               if (returnAgg && returnAgg.totalDeduction > 0) parts.push(fmtDZ(returnAgg.totalDeduction));
-                              if (spAgg && spAgg.totalCommission > 0) parts.push(`${fmtDZ(spAgg.totalCommission)} SD`);
+                              if (spAgg && spAgg.totalCommission > 0) parts.push(fmtDZ(spAgg.totalCommission));
                               return parts.length > 1 ? (
                                 <p className="text-xs text-green-700 font-semibold">{parts.join(" + ")}</p>
                               ) : null;
@@ -748,7 +748,7 @@ export default function CommissionsView() {
                                 <span className="text-red-400 ml-1">· {returnAgg.totalCount} {t("admin.commissions.office.returned")}</span>
                               )}
                               {spAgg && spAgg.totalCount > 0 && (
-                                <span className="text-gray-500 ml-1">· {fmtN(spAgg.totalCount)} SD</span>
+                                <span className="text-[#E10600] ml-1">· {fmtN(spAgg.totalCount)} SD</span>
                               )}
                             </p>
                           </>
