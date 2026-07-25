@@ -194,6 +194,12 @@ function SidebarInner({
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           )}
         </nav>
+      ) : role === "commercial" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItem("partners", t("admin.sidebar.partners"), partnerCount,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          )}
+        </nav>
       ) : (
         <div className="flex-1" />
       )}
@@ -1200,16 +1206,43 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
 // ── Partners view ──────────────────────────────────────────────────────────────
 
-function PartnersView({ partners, loading, error, onRefresh, onUnauth }: {
-  partners: Partner[]; loading: boolean; error: string; onRefresh: () => void; onUnauth: () => void;
+function PartnersView({ partners, loading, error, onRefresh, onUnauth, role }: {
+  partners: Partner[]; loading: boolean; error: string; onRefresh: () => void; onUnauth: () => void; role: AdminRole;
 }) {
   const { t } = useTranslation();
+  const isAdmin = role === "admin";
   const [filter, setFilter] = useState<PartnerStatus | "all">("all");
   const [selected, setSelected] = useState<Partner | null>(null);
   const [editStatus, setEditStatus] = useState<PartnerStatus>("pending");
   const [editNotes, setEditNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Add partner form
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ firstName: "", lastName: "", email: "", phone: "", city: "", address: "", parcelsPerMonth: "", password: "", status: "pending" as PartnerStatus, notes: "" });
+  const [addSaving, setAddSaving] = useState(false);
+  const [addError, setAddError] = useState("");
+
+  function openAdd() { setAddForm({ firstName: "", lastName: "", email: "", phone: "", city: "", address: "", parcelsPerMonth: "", password: "", status: "pending", notes: "" }); setAddError(""); setShowAdd(true); }
+  function setAdd<K extends keyof typeof addForm>(k: K, v: typeof addForm[K]) { setAddForm((f) => ({ ...f, [k]: v })); }
+
+  async function addPartner() {
+    if (!addForm.firstName || !addForm.lastName || !addForm.email || !addForm.phone || !addForm.city || !addForm.address || !addForm.parcelsPerMonth) {
+      setAddError(t("admin.partners.addError")); return;
+    }
+    setAddSaving(true); setAddError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/partners`, {
+        method: "POST", headers: adminHeaders(),
+        body: JSON.stringify({ ...addForm, password: addForm.password || null, notes: addForm.notes || null }),
+      });
+      if (res.status === 401) { onUnauth(); return; }
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) { setShowAdd(false); onRefresh(); }
+      else setAddError(t("admin.partners.addError"));
+    } catch { setAddError(t("admin.partners.addError")); } finally { setAddSaving(false); }
+  }
 
   function open(p: Partner) {
     setSelected(p); setEditStatus(p.status); setEditNotes(p.notes ?? ""); setShowPassword(false);
@@ -1253,10 +1286,16 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth }: {
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.partners.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.partners.subtitle")}</p>
           </div>
-          <button onClick={onRefresh} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            {t("admin.partners.refresh")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={openAdd} className="flex items-center gap-2 text-sm font-semibold bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white px-4 py-2 rounded-xl shadow-sm shadow-red-200 transition-all">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              {t("admin.partners.addPartner")}
+            </button>
+            <button onClick={onRefresh} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              {t("admin.partners.refresh")}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
@@ -1361,28 +1400,129 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth }: {
                 )}
                 {selected.password && <p className="text-xs text-gray-400 mt-1">{t("admin.partners.passwordNote")}</p>}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.statusLabel")}</label>
-                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as PartnerStatus)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
-                  {(["pending", "reviewing", "approved", "rejected"] as const).map((s) => (
-                    <option key={s} value={s}>{t(`admin.partners.statusOptions.${s}`)}</option>
-                  ))}
-                </select>
+              {isAdmin ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.statusLabel")}</label>
+                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as PartnerStatus)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
+                      {(["pending", "reviewing", "approved", "rejected"] as const).map((s) => (
+                        <option key={s} value={s}>{t(`admin.partners.statusOptions.${s}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.notesLabel")}</label>
+                    <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] resize-none"
+                      placeholder={t("admin.partners.notesPh")} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => remove(selected.id)} className="py-2.5 px-4 text-sm text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50">
+                      {t("admin.partners.delete")}
+                    </button>
+                    <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.partners.cancel")}</button>
+                    <button onClick={save} disabled={saving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60">
+                      {saving ? t("admin.partners.saving") : t("admin.partners.save")}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.partners.cancel")}</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Partner modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAdd(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">{t("admin.partners.addTitle")}</h2>
+              <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.firstName")} *</label>
+                  <input value={addForm.firstName} onChange={(e) => setAdd("firstName", e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                    placeholder={t("admin.partners.fields.firstNamePh")} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.lastName")} *</label>
+                  <input value={addForm.lastName} onChange={(e) => setAdd("lastName", e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                    placeholder={t("admin.partners.fields.lastNamePh")} />
+                </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.notesLabel")}</label>
-                <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] resize-none"
-                  placeholder={t("admin.partners.notesPh")} />
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.email")} *</label>
+                <input type="email" value={addForm.email} onChange={(e) => setAdd("email", e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                  placeholder="partenaire@email.com" />
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => remove(selected.id)} className="py-2.5 px-4 text-sm text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50">
-                  {t("admin.partners.delete")}
-                </button>
-                <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.partners.cancel")}</button>
-                <button onClick={save} disabled={saving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60">
-                  {saving ? t("admin.partners.saving") : t("admin.partners.save")}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.phone")} *</label>
+                  <input value={addForm.phone} onChange={(e) => setAdd("phone", e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                    placeholder="06XXXXXXXX" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.city")} *</label>
+                  <input value={addForm.city} onChange={(e) => setAdd("city", e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                    placeholder={t("admin.partners.fields.cityPh")} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.address")} *</label>
+                <input value={addForm.address} onChange={(e) => setAdd("address", e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                  placeholder={t("admin.partners.fields.addressPh")} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.parcels")} *</label>
+                <input value={addForm.parcelsPerMonth} onChange={(e) => setAdd("parcelsPerMonth", e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                  placeholder="50-100" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.passwordOpt")}</label>
+                <input type="text" value={addForm.password} onChange={(e) => setAdd("password", e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
+                  placeholder={t("admin.partners.fields.passwordOptPh")} />
+              </div>
+              {isAdmin && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.statusLabel")}</label>
+                    <select value={addForm.status} onChange={(e) => setAdd("status", e.target.value as PartnerStatus)}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
+                      {(["pending", "reviewing", "approved", "rejected"] as const).map((s) => (
+                        <option key={s} value={s}>{t(`admin.partners.statusOptions.${s}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.notesLabel")}</label>
+                    <textarea value={addForm.notes} onChange={(e) => setAdd("notes", e.target.value)} rows={2}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] resize-none"
+                      placeholder={t("admin.partners.notesPh")} />
+                  </div>
+                </>
+              )}
+              {addError && <p className="text-sm text-red-600 font-medium">{addError}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.partners.cancel")}</button>
+                <button onClick={addPartner} disabled={addSaving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60">
+                  {addSaving ? t("admin.partners.saving") : t("admin.partners.addPartner")}
                 </button>
               </div>
             </div>
@@ -1925,7 +2065,7 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
-  const defaultView: SidebarView = role === "finance" ? "charges" : "dashboard";
+  const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
 
@@ -1963,6 +2103,7 @@ export default function AdminDashboard() {
     const token = localStorage.getItem("admin_token");
     if (!token) { navigate("/admin/login"); return; }
     if (role === "admin") { fetchPartners(); fetchOffices(); }
+    else if (role === "commercial") { fetchPartners(); }
   }, [fetchPartners, fetchOffices, navigate, role]);
 
   const isAdmin = role === "admin";
@@ -1984,12 +2125,14 @@ export default function AdminDashboard() {
             view === "workers" ? <WorkersView /> :
             view === "decharges" ? <DechargesView /> :
             <ChargesView onUnauth={unauth} />
+          ) : role === "commercial" ? (
+            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} />
           ) : !isAdmin ? (
             <EmptyRoleView role={role} />
           ) : view === "dashboard" ? (
             <DashboardView onUnauth={unauth} onRefreshBadge={fetchPartners} />
           ) : view === "partners" ? (
-            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} />
+            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} />
           ) : view === "offices" ? (
             <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
           ) : view === "performance" ? (

@@ -12,6 +12,7 @@ import {
   adminAuth,
   superAdminOnly,
   financeOrAdminOnly,
+  commercialOrAdminOnly,
   generateToken,
   verifyToken,
   verifyAdminCredentials,
@@ -184,7 +185,38 @@ router.get("/admin/partners", adminAuth, async (req, res) => {
   }
 });
 
-router.patch("/admin/partners/:id", adminAuth, async (req, res) => {
+router.post("/admin/partners", adminAuth, commercialOrAdminOnly, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const firstName = String(body.firstName ?? "").trim().slice(0, 100);
+  const lastName = String(body.lastName ?? "").trim().slice(0, 100);
+  const email = String(body.email ?? "").trim().slice(0, 200);
+  const phone = String(body.phone ?? "").trim().slice(0, 50);
+  const address = String(body.address ?? "").trim().slice(0, 500);
+  const city = String(body.city ?? "").trim().slice(0, 100);
+  const parcelsPerMonth = String(body.parcelsPerMonth ?? "").trim().slice(0, 50);
+  const password = body.password ? String(body.password).trim().slice(0, 200) : null;
+  const allowedStatuses = ["pending", "reviewing", "approved", "rejected"];
+  const status = allowedStatuses.includes(String(body.status)) ? String(body.status) : "pending";
+  const notes = body.notes ? String(body.notes).trim().slice(0, 2000) : null;
+  if (!firstName || !lastName || !email || !phone || !address || !city || !parcelsPerMonth) {
+    res.status(400).json({ ok: false, error: "missing_fields" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [result] = await conn.execute(
+        "INSERT INTO partners (first_name, last_name, email, password, phone, address, city, parcels_per_month, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [firstName, lastName, email, password, phone, address, city, parcelsPerMonth, status, notes]
+      );
+      res.json({ ok: true, id: (result as { insertId: number }).insertId });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log.error({ err }, "Failed to create partner");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.patch("/admin/partners/:id", adminAuth, superAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   const body = (req.body ?? {}) as { status?: unknown; notes?: unknown };
@@ -205,7 +237,7 @@ router.patch("/admin/partners/:id", adminAuth, async (req, res) => {
   }
 });
 
-router.delete("/admin/partners/:id", adminAuth, async (req, res) => {
+router.delete("/admin/partners/:id", adminAuth, superAdminOnly, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
   try {
