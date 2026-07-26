@@ -26,7 +26,7 @@ export default function AdminLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = (await res.json()) as { ok: boolean; token?: string; role?: string };
+      const data = (await res.json()) as { ok: boolean; token?: string; role?: string; allowedPartnerStatuses?: string | null; canChangePartnerStatus?: boolean };
       if (!res.ok || !data.ok || !data.token) {
         setError(t("admin.login.wrongCredentials"));
         return;
@@ -34,6 +34,13 @@ export default function AdminLogin() {
       localStorage.setItem("admin_token", data.token);
       localStorage.setItem("admin_role", data.role ?? "admin");
       localStorage.setItem("admin_username", username);
+      if (data.role === "commercial") {
+        localStorage.setItem("admin_allowed_statuses", data.allowedPartnerStatuses ?? "");
+        localStorage.setItem("admin_can_change_status", data.canChangePartnerStatus ? "1" : "0");
+      } else {
+        localStorage.removeItem("admin_allowed_statuses");
+        localStorage.removeItem("admin_can_change_status");
+      }
       navigate("/admin");
     } catch {
       setError(t("admin.login.networkError"));

@@ -31,7 +31,9 @@ interface Office {
   address: string; phone: string | null; mapsUrl: string; isPrincipal: boolean; createdAt: string;
 }
 interface AdminUser {
-  id: number; username: string; role: AdminRole; office_hub: string; createdAt: string;
+  id: number; username: string; role: AdminRole; office_hub: string;
+  allowed_partner_statuses: string | null; can_change_partner_status: number;
+  createdAt: string;
 }
 interface Order {
   id: number; trackingNumber: string | null; status: OrderStatus;
@@ -1206,11 +1208,12 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
 // ── Partners view ──────────────────────────────────────────────────────────────
 
-function PartnersView({ partners, loading, error, onRefresh, onUnauth, role }: {
-  partners: Partner[]; loading: boolean; error: string; onRefresh: () => void; onUnauth: () => void; role: AdminRole;
+function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, canChangeStatus }: {
+  partners: Partner[]; loading: boolean; error: string; onRefresh: () => void; onUnauth: () => void; role: AdminRole; canChangeStatus?: boolean;
 }) {
   const { t } = useTranslation();
   const isAdmin = role === "admin";
+  const canEdit = isAdmin || (role === "commercial" && canChangeStatus === true);
   const [filter, setFilter] = useState<PartnerStatus | "all">("all");
   const [selected, setSelected] = useState<Partner | null>(null);
   const [editStatus, setEditStatus] = useState<PartnerStatus>("pending");
@@ -1400,7 +1403,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role }: {
                 )}
                 {selected.password && <p className="text-xs text-gray-400 mt-1">{t("admin.partners.passwordNote")}</p>}
               </div>
-              {isAdmin ? (
+              {canEdit ? (
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.statusLabel")}</label>
@@ -1411,16 +1414,20 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role }: {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.notesLabel")}</label>
-                    <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] resize-none"
-                      placeholder={t("admin.partners.notesPh")} />
-                  </div>
+                  {isAdmin && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.notesLabel")}</label>
+                      <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={3}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] resize-none"
+                        placeholder={t("admin.partners.notesPh")} />
+                    </div>
+                  )}
                   <div className="flex gap-2">
-                    <button onClick={() => remove(selected.id)} className="py-2.5 px-4 text-sm text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50">
-                      {t("admin.partners.delete")}
-                    </button>
+                    {isAdmin && (
+                      <button onClick={() => remove(selected.id)} className="py-2.5 px-4 text-sm text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50">
+                        {t("admin.partners.delete")}
+                      </button>
+                    )}
                     <button onClick={() => setSelected(null)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.partners.cancel")}</button>
                     <button onClick={save} disabled={saving} className="flex-1 py-2.5 text-sm bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 disabled:opacity-60">
                       {saving ? t("admin.partners.saving") : t("admin.partners.save")}
@@ -1697,6 +1704,8 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<AdminRole>("office");
   const [newHub, setNewHub] = useState("");
+  const [newAllowedStatuses, setNewAllowedStatuses] = useState<PartnerStatus[]>(["pending", "reviewing", "approved", "rejected"]);
+  const [newCanChangeStatus, setNewCanChangeStatus] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [offices, setOffices] = useState<Office[]>([]);
@@ -1708,6 +1717,8 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [editPassword, setEditPassword] = useState("");
   const [editRole, setEditRole] = useState<AdminRole>("office");
   const [editHub, setEditHub] = useState("");
+  const [editAllowedStatuses, setEditAllowedStatuses] = useState<PartnerStatus[]>(["pending", "reviewing", "approved", "rejected"]);
+  const [editCanChangeStatus, setEditCanChangeStatus] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -1737,11 +1748,11 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     try {
       const res = await fetch(`${API_BASE}/api/admin/admins`, {
         method: "POST", headers: adminHeaders(),
-        body: JSON.stringify({ username: newUsername.trim(), password: newPassword, role: newRole, office_hub: newRole === "office" ? newHub : "" }),
+        body: JSON.stringify({ username: newUsername.trim(), password: newPassword, role: newRole, office_hub: newRole === "office" ? newHub : "", ...(newRole === "commercial" ? { allowed_partner_statuses: newAllowedStatuses, can_change_partner_status: newCanChangeStatus } : {}) }),
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean };
-      if (data.ok) { setShowAdd(false); setNewUsername(""); setNewPassword(""); setNewRole("office"); setNewHub(""); fetchAdmins(); }
+      if (data.ok) { setShowAdd(false); setNewUsername(""); setNewPassword(""); setNewRole("office"); setNewHub(""); setNewAllowedStatuses(["pending", "reviewing", "approved", "rejected"]); setNewCanChangeStatus(false); fetchAdmins(); }
       else setFormError(t("admin.admins.saveError"));
     } finally { setSaving(false); }
   }
@@ -1760,6 +1771,8 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     setEditPassword("");
     setEditRole(a.role as AdminRole);
     setEditHub(a.office_hub ?? "");
+    try { setEditAllowedStatuses(a.allowed_partner_statuses ? JSON.parse(a.allowed_partner_statuses) : ["pending", "reviewing", "approved", "rejected"]); } catch { setEditAllowedStatuses(["pending", "reviewing", "approved", "rejected"]); }
+    setEditCanChangeStatus(a.can_change_partner_status === 1);
     setEditError("");
     setShowEdit(true);
   }
@@ -1769,7 +1782,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
     if (editPassword && editPassword.length < 8) { setEditError(t("admin.admins.formError")); return; }
     setEditSaving(true);
     try {
-      const body: Record<string, string> = { username: editUsername.trim(), role: editRole, office_hub: editRole === "office" ? editHub : "" };
+      const body: Record<string, unknown> = { username: editUsername.trim(), role: editRole, office_hub: editRole === "office" ? editHub : "", ...(editRole === "commercial" ? { allowed_partner_statuses: editAllowedStatuses, can_change_partner_status: editCanChangeStatus } : {}) };
       if (editPassword) body.password = editPassword;
       const res = await fetch(`${API_BASE}/api/admin/admins/${editId}`, {
         method: "PUT", headers: adminHeaders(),
@@ -1880,6 +1893,28 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                     </select>
                   </div>
                 )}
+                {newRole === "commercial" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.allowedStatuses")}</label>
+                      <p className="text-xs text-gray-400 mb-2">{t("admin.admins.fields.allowedStatusesHint")}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(["pending", "reviewing", "approved", "rejected"] as PartnerStatus[]).map(s => (
+                          <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" checked={newAllowedStatuses.includes(s)}
+                              onChange={e => setNewAllowedStatuses(prev => e.target.checked ? [...prev, s] : prev.filter(x => x !== s))}
+                              className="rounded accent-[#E10600]" />
+                            <span className="text-sm text-gray-700">{t(`admin.partners.statusOptions.${s}`)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input type="checkbox" checked={newCanChangeStatus} onChange={e => setNewCanChangeStatus(e.target.checked)} className="rounded accent-[#E10600]" />
+                      <span className="text-sm font-medium text-gray-700">{t("admin.admins.fields.canChangeStatus")}</span>
+                    </label>
+                  </>
+                )}
               </div>
               <div className="flex gap-2 mt-6">
                 <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-sm text-gray-600 font-medium rounded-xl border border-gray-200 hover:bg-gray-50">{t("admin.admins.cancel")}</button>
@@ -1953,6 +1988,28 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                       ))}
                     </select>
                   </div>
+                )}
+                {editRole === "commercial" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.allowedStatuses")}</label>
+                      <p className="text-xs text-gray-400 mb-2">{t("admin.admins.fields.allowedStatusesHint")}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(["pending", "reviewing", "approved", "rejected"] as PartnerStatus[]).map(s => (
+                          <label key={s} className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input type="checkbox" checked={editAllowedStatuses.includes(s)}
+                              onChange={e => setEditAllowedStatuses(prev => e.target.checked ? [...prev, s] : prev.filter(x => x !== s))}
+                              className="rounded accent-[#E10600]" />
+                            <span className="text-sm text-gray-700">{t(`admin.partners.statusOptions.${s}`)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input type="checkbox" checked={editCanChangeStatus} onChange={e => setEditCanChangeStatus(e.target.checked)} className="rounded accent-[#E10600]" />
+                      <span className="text-sm font-medium text-gray-700">{t("admin.admins.fields.canChangeStatus")}</span>
+                    </label>
+                  </>
                 )}
               </div>
               <div className="flex gap-2.5 mt-6">
@@ -2065,6 +2122,7 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
+  const canChangePartnerStatus = role === "commercial" && localStorage.getItem("admin_can_change_status") === "1";
   const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
@@ -2126,7 +2184,7 @@ export default function AdminDashboard() {
             view === "decharges" ? <DechargesView /> :
             <ChargesView onUnauth={unauth} />
           ) : role === "commercial" ? (
-            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} />
+            <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} canChangeStatus={canChangePartnerStatus} />
           ) : !isAdmin ? (
             <EmptyRoleView role={role} />
           ) : view === "dashboard" ? (

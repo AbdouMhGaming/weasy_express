@@ -449,6 +449,10 @@ const fr = {
         newPassword: "Nouveau mot de passe",
         passwordHint: "Laisser vide pour ne pas changer",
         role: "Rôle",
+        allowedStatuses: "Statuts visibles",
+        allowedStatusesHint: "Cochez les statuts que cet utilisateur pourra voir.",
+        canChangeStatus: "Autoriser à changer le statut",
+        canChangeStatusHint: "L'utilisateur peut modifier le statut des partenaires visibles.",
       },
     },
     changePassword: {

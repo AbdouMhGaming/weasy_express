@@ -44,7 +44,20 @@ router.post("/admin/login", async (req, res) => {
   if (!result.valid) {
     res.status(401).json({ ok: false, error: "invalid_credentials" }); return;
   }
-  res.json({ ok: true, token: generateToken(username, result.role!), role: result.role });
+  let commercialSettings: { allowedPartnerStatuses: string | null; canChangePartnerStatus: boolean } | null = null;
+  if (result.role === "commercial") {
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const [rows] = await conn.execute(
+          "SELECT allowed_partner_statuses, can_change_partner_status FROM admins WHERE username = ? LIMIT 1", [username]
+        );
+        const row = (rows as Array<{ allowed_partner_statuses: string | null; can_change_partner_status: number }>)[0];
+        if (row) commercialSettings = { allowedPartnerStatuses: row.allowed_partner_statuses, canChangePartnerStatus: row.can_change_partner_status === 1 };
+      } finally { conn.release(); }
+    } catch { /* non-fatal */ }
+  }
+  res.json({ ok: true, token: generateToken(username, result.role!), role: result.role, ...(commercialSettings ?? {}) });
 });
 
 router.post("/admin/verify", adminAuth, (req, res) => {
@@ -82,7 +95,7 @@ router.get("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.execute(
-        "SELECT id, username, role, office_hub, created_at AS createdAt FROM admins ORDER BY created_at ASC"
+        "SELECT id, username, role, office_hub, allowed_partner_statuses, can_change_partner_status, created_at AS createdAt FROM admins ORDER BY created_at ASC"
       );
       res.json({ ok: true, admins: rows });
     } finally { conn.release(); }
@@ -108,9 +121,13 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
       const [existing] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]);
       if ((existing as unknown[]).length > 0) { res.status(409).json({ ok: false, error: "username_taken" }); return; }
       const hash = await hashPassword(password);
+      const allowedStatuses = role === "commercial" && Array.isArray(body.allowed_partner_statuses)
+        ? JSON.stringify((body.allowed_partner_statuses as string[]).filter((s) => ["pending", "reviewing", "approved", "rejected"].includes(s)))
+        : null;
+      const canChangeStatus = role === "commercial" ? (body.can_change_partner_status === true ? 1 : 0) : 0;
       const [result] = await conn.execute(
-        "INSERT INTO admins (username, password_hash, role, office_hub) VALUES (?, ?, ?, ?)",
-        [username, hash, role, officeHub]
+        "INSERT INTO admins (username, password_hash, role, office_hub, allowed_partner_statuses, can_change_partner_status) VALUES (?, ?, ?, ?, ?, ?)",
+        [username, hash, role, officeHub, allowedStatuses, canChangeStatus]
       );
       res.json({ ok: true, id: (result as { insertId: number }).insertId });
     } finally { conn.release(); }
@@ -142,11 +159,15 @@ router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
       if ((existing as Array<{ id: number }>).length > 0 && (existing as Array<{ id: number }>)[0].id !== id) {
         res.status(409).json({ ok: false, error: "username_taken" }); return;
       }
+      const allowedStatuses = role === "commercial" && Array.isArray(body.allowed_partner_statuses)
+        ? JSON.stringify((body.allowed_partner_statuses as string[]).filter((s) => ["pending", "reviewing", "approved", "rejected"].includes(s)))
+        : null;
+      const canChangeStatus = role === "commercial" ? (body.can_change_partner_status === true ? 1 : 0) : 0;
       if (password !== null) {
         const hash = await hashPassword(password);
-        await conn.execute("UPDATE admins SET username=?, role=?, password_hash=?, office_hub=? WHERE id=?", [username, role, hash, officeHub, id]);
+        await conn.execute("UPDATE admins SET username=?, role=?, password_hash=?, office_hub=?, allowed_partner_statuses=?, can_change_partner_status=? WHERE id=?", [username, role, hash, officeHub, allowedStatuses, canChangeStatus, id]);
       } else {
-        await conn.execute("UPDATE admins SET username=?, role=?, office_hub=? WHERE id=?", [username, role, officeHub, id]);
+        await conn.execute("UPDATE admins SET username=?, role=?, office_hub=?, allowed_partner_statuses=?, can_change_partner_status=? WHERE id=?", [username, role, officeHub, allowedStatuses, canChangeStatus, id]);
       }
       res.json({ ok: true });
     } finally { conn.release(); }
@@ -176,9 +197,29 @@ router.delete("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) =
 // ── Partners ──────────────────────────────────────────────────────────────────
 
 router.get("/admin/partners", adminAuth, async (req, res) => {
+  const role = (req as AuthedRequest).adminRole;
+  const username = (req as AuthedRequest).adminUsername ?? "";
   try {
-    const rows = await db.select().from(partnersTable).orderBy(desc(partnersTable.createdAt));
-    res.json({ ok: true, partners: rows });
+    if (role === "commercial") {
+      const conn = await pool.getConnection();
+      try {
+        const [adminRows] = await conn.execute(
+          "SELECT allowed_partner_statuses FROM admins WHERE username = ? LIMIT 1", [username]
+        );
+        const raw = (adminRows as Array<{ allowed_partner_statuses: string | null }>)[0]?.allowed_partner_statuses;
+        const allowed: string[] = raw ? JSON.parse(raw) : ["pending", "reviewing", "approved", "rejected"];
+        if (allowed.length === 0) { res.json({ ok: true, partners: [] }); return; }
+        const placeholders = allowed.map(() => "?").join(",");
+        const [rows] = await conn.execute(
+          `SELECT id, first_name AS firstName, last_name AS lastName, email, password, phone, address, city, parcels_per_month AS parcelsPerMonth, status, notes, created_at AS createdAt FROM partners WHERE status IN (${placeholders}) ORDER BY created_at DESC`,
+          allowed
+        );
+        res.json({ ok: true, partners: rows });
+      } finally { conn.release(); }
+    } else {
+      const rows = await db.select().from(partnersTable).orderBy(desc(partnersTable.createdAt));
+      res.json({ ok: true, partners: rows });
+    }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch partners");
     res.status(500).json({ ok: false, error: "db_error" });
@@ -216,9 +257,27 @@ router.post("/admin/partners", adminAuth, commercialOrAdminOnly, async (req, res
   }
 });
 
-router.patch("/admin/partners/:id", adminAuth, superAdminOnly, async (req, res) => {
+router.patch("/admin/partners/:id", adminAuth, async (req, res) => {
   const id = parseInt((req.params as { id: string }).id, 10);
   if (isNaN(id)) { res.status(400).json({ ok: false, error: "invalid_id" }); return; }
+  const role = (req as AuthedRequest).adminRole;
+  const username = (req as AuthedRequest).adminUsername ?? "";
+  // Admins can always edit; commercial only if can_change_partner_status=1
+  if (role !== "admin") {
+    if (role !== "commercial") { res.status(403).json({ ok: false, error: "forbidden" }); return; }
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const [rows] = await conn.execute("SELECT can_change_partner_status FROM admins WHERE username = ? LIMIT 1", [username]);
+        if (!(rows as Array<{ can_change_partner_status: number }>)[0]?.can_change_partner_status) {
+          res.status(403).json({ ok: false, error: "forbidden" }); return;
+        }
+      } finally { conn.release(); }
+    } catch (err) {
+      req.log.error({ err }, "Failed to check partner edit permission");
+      res.status(500).json({ ok: false, error: "db_error" }); return;
+    }
+  }
   const body = (req.body ?? {}) as { status?: unknown; notes?: unknown };
   const allowed = ["pending", "reviewing", "approved", "rejected"];
   if (body.status !== undefined && !allowed.includes(String(body.status))) {
@@ -226,7 +285,7 @@ router.patch("/admin/partners/:id", adminAuth, superAdminOnly, async (req, res) 
   }
   const update: Record<string, string> = {};
   if (body.status !== undefined) update["status"] = String(body.status);
-  if (body.notes !== undefined) update["notes"] = String(body.notes);
+  if (role === "admin" && body.notes !== undefined) update["notes"] = String(body.notes);
   if (Object.keys(update).length === 0) { res.status(400).json({ ok: false, error: "no_fields" }); return; }
   try {
     await db.update(partnersTable).set(update).where(eq(partnersTable.id, id));

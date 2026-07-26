@@ -451,6 +451,10 @@ const ar: Translations = {
         newPassword: "كلمة المرور الجديدة",
         passwordHint: "اتركه فارغاً للإبقاء على الحالي",
         role: "الدور",
+        allowedStatuses: "الحالات المرئية",
+        allowedStatusesHint: "حدد الحالات التي يمكن لهذا المستخدم رؤيتها.",
+        canChangeStatus: "السماح بتغيير الحالة",
+        canChangeStatusHint: "يمكن للمستخدم تعديل حالة الشركاء المرئيين.",
       },
     },
     changePassword: {

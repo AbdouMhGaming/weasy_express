@@ -451,6 +451,10 @@ const en: Translations = {
         newPassword: "New password",
         passwordHint: "Leave blank to keep unchanged",
         role: "Role",
+        allowedStatuses: "Visible statuses",
+        allowedStatusesHint: "Check the statuses this user can see.",
+        canChangeStatus: "Allow status changes",
+        canChangeStatusHint: "The user can modify the status of visible partners.",
       },
     },
     changePassword: {
