@@ -204,17 +204,19 @@ router.get("/admin/partners", adminAuth, async (req, res) => {
       const conn = await pool.getConnection();
       try {
         const [adminRows] = await conn.execute(
-          "SELECT allowed_partner_statuses FROM admins WHERE username = ? LIMIT 1", [username]
+          "SELECT allowed_partner_statuses, can_change_partner_status FROM admins WHERE username = ? LIMIT 1", [username]
         );
-        const raw = (adminRows as Array<{ allowed_partner_statuses: string | null }>)[0]?.allowed_partner_statuses;
+        const adminRow = (adminRows as Array<{ allowed_partner_statuses: string | null; can_change_partner_status: number }>)[0];
+        const raw = adminRow?.allowed_partner_statuses;
         const allowed: string[] = raw ? JSON.parse(raw) : ["pending", "reviewing", "approved", "rejected"];
-        if (allowed.length === 0) { res.json({ ok: true, partners: [] }); return; }
+        const canChangePartnerStatus = adminRow?.can_change_partner_status === 1;
+        if (allowed.length === 0) { res.json({ ok: true, partners: [], canChangePartnerStatus }); return; }
         const placeholders = allowed.map(() => "?").join(",");
         const [rows] = await conn.execute(
           `SELECT id, first_name AS firstName, last_name AS lastName, email, password, phone, address, city, parcels_per_month AS parcelsPerMonth, status, notes, created_at AS createdAt FROM partners WHERE status IN (${placeholders}) ORDER BY created_at DESC`,
           allowed
         );
-        res.json({ ok: true, partners: rows });
+        res.json({ ok: true, partners: rows, canChangePartnerStatus });
       } finally { conn.release(); }
     } else {
       const rows = await db.select().from(partnersTable).orderBy(desc(partnersTable.createdAt));

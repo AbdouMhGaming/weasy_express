@@ -2122,7 +2122,6 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
-  const canChangePartnerStatus = role === "commercial" && localStorage.getItem("admin_can_change_status") === "1";
   const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
@@ -2130,6 +2129,9 @@ export default function AdminDashboard() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
   const [partnersError, setPartnersError] = useState("");
+  const [canChangePartnerStatus, setCanChangePartnerStatus] = useState(
+    role === "commercial" && localStorage.getItem("admin_can_change_status") === "1"
+  );
 
   const [offices, setOffices] = useState<Office[]>([]);
   const [officesLoading, setOfficesLoading] = useState(true);
@@ -2142,8 +2144,11 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/partners`, { headers: adminHeaders() });
       if (res.status === 401) { unauth(); return; }
-      const data = (await res.json()) as { ok: boolean; partners: Partner[] };
-      if (data.ok) setPartners(data.partners);
+      const data = (await res.json()) as { ok: boolean; partners: Partner[]; canChangePartnerStatus?: boolean };
+      if (data.ok) {
+        setPartners(data.partners);
+        if (data.canChangePartnerStatus !== undefined) setCanChangePartnerStatus(data.canChangePartnerStatus);
+      }
     } catch { setPartnersError("Impossible de charger les candidatures."); } finally { setPartnersLoading(false); }
   }, []);
 
