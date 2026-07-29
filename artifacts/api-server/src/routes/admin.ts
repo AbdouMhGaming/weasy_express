@@ -741,9 +741,9 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
           const officeFilter = officeStr ? " AND uploaded_by = ?" : "";
           const officeParam = officeStr ? [officeStr] : [];
 
-          // route_sheet: per_order_senders aligned per-parcel list + recipient_names
+          // route_sheet: per_order_senders aligned per-parcel list + recipient_names + phones
           const [rsRows] = await conn.execute(
-            `SELECT per_order_senders, recipient_names
+            `SELECT per_order_senders, recipient_names, recipient_phones
              FROM office_reports
              WHERE report_type = 'route_sheet'
                ${officeFilter}`,
@@ -757,7 +757,7 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
             officeParam,
           );
           return {
-            rsRows: rsRows as Array<{ per_order_senders: string|null; recipient_names: string|null }>,
+            rsRows: rsRows as Array<{ per_order_senders: string|null; recipient_names: string|null; recipient_phones: string|null }>,
             allWilayas: ((wilayaRows as Array<{all_wilayas:string|null}>)[0]?.all_wilayas ?? ""),
           };
         } finally { conn.release(); }
@@ -777,18 +777,22 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       .map(([name, count]) => ({ name, count, delivered: 0 }))
       .sort((a, b) => b.count - a.count);
 
-    // ── Top Clients — FDR recipient_names only ────────────────────────────────
-    const recipientMap: Record<string, number> = {};
+    // ── Top Clients — FDR recipient_names + phones (grouped by name+phone pair) ─
+    const recipientMap: Record<string, { name: string; phone: string; count: number }> = {};
     for (const row of pdfRaw.rsRows) {
       if (!row.recipient_names) continue;
-      const names = row.recipient_names.split("|").map((n: string) => n.trim()).filter(Boolean);
-      for (const name of names) {
-        if (name.length < 2 || name.length > 100) continue;
-        recipientMap[name] = (recipientMap[name] ?? 0) + 1;
+      const names  = row.recipient_names.split("|").map((n: string) => n.trim());
+      const phones = (row.recipient_phones ?? "").split("|").map((p: string) => p.trim());
+      for (let i = 0; i < names.length; i++) {
+        const name  = names[i];
+        const phone = phones[i] ?? "";
+        if (!name || name.length < 2 || name.length > 100) continue;
+        const key = `${name}\x00${phone}`; // null-byte separator avoids false collisions
+        if (!recipientMap[key]) recipientMap[key] = { name, phone, count: 0 };
+        recipientMap[key].count++;
       }
     }
-    const topRecipients = Object.entries(recipientMap)
-      .map(([name, count]) => ({ name, count }))
+    const topRecipients = Object.values(recipientMap)
       .sort((a, b) => b.count - a.count);
 
     // ── Top wilayas — all report types (unchanged) ────────────────────────────

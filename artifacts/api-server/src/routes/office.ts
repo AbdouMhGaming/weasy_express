@@ -359,6 +359,73 @@ function extractFDRRecipientNames(text: string, trackingNums: string[]): string 
   return recipients.join("|");
 }
 
+// ─── Recipient phone extraction ───────────────────────────────────────────────
+// Returns one phone per tracking number, pipe-separated (empty string when not found).
+// Three variants mirroring the name extractors above.
+
+function extractDeliveryRecipientPhones(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const PHONE_RE = /0[5-7]\d{8}/g;
+  const result: string[] = [];
+  for (const code of trackingNums) {
+    const idx = text.indexOf(code);
+    if (idx === -1) { result.push(""); continue; }
+    const after = getBoundedWindow(text, idx + code.length, 500);
+    const afterClean = after.replace(/^[\s\-]*[A-Z]{2,8}(?=\d)/, "");
+    const positions: number[] = [];
+    PHONE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PHONE_RE.exec(afterClean)) !== null) positions.push(m.index);
+    if (positions.length === 0) { result.push(""); continue; }
+    const textBeforeFirst = afterClean.slice(0, positions[0]);
+    const hasLetters = /[A-Za-z\u00C0-\u017E]{2,}/.test(textBeforeFirst);
+    // Normal layout: name before first phone → first phone is recipient's
+    // Reference phone first: second phone is recipient's
+    const phoneIdx = (hasLetters || positions.length < 2) ? positions[0] : positions[1];
+    result.push(afterClean.slice(phoneIdx, phoneIdx + 10));
+  }
+  return result.join("|");
+}
+
+function extractReturnsRecipientPhones(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const TYPE_RE = /Livraison|Echange|Retour/i;
+  const PHONE_RE = /0[5-7]\d{8}/;
+  const result: string[] = [];
+  for (const code of trackingNums) {
+    const codeIdx = text.indexOf(code);
+    if (codeIdx === -1) { result.push(""); continue; }
+    const win = text.slice(codeIdx + code.length, codeIdx + code.length + 500);
+    const nextEC = win.match(/EC[A-Z0-9]{4}\d{11,13}/);
+    const rowText = (nextEC && nextEC.index! > 0) ? win.slice(0, nextEC.index!) : win.slice(0, 300);
+    const noRef = rowText.replace(/^CX[a-f0-9]{8,16}/i, "");
+    const typeMatch = TYPE_RE.exec(noRef);
+    if (!typeMatch) { result.push(""); continue; }
+    const flat = noRef.slice(typeMatch.index + typeMatch[0].length).replace(/\n/g, " ");
+    const phoneMatch = PHONE_RE.exec(flat);
+    result.push(phoneMatch ? flat.slice(phoneMatch.index, phoneMatch.index + 10) : "");
+  }
+  return result.join("|");
+}
+
+function extractFDRRecipientPhones(text: string, trackingNums: string[]): string {
+  if (trackingNums.length === 0) return "";
+  const SENDER_PHONE_RE = /0[5-9]\d{8}/g;
+  const result: string[] = [];
+  for (const code of trackingNums) {
+    const idx = text.indexOf(code);
+    if (idx === -1) { result.push(""); continue; }
+    const after = getBoundedWindow(text, idx + code.length, 600);
+    SENDER_PHONE_RE.lastIndex = 0;
+    const senderPhoneMatch = SENDER_PHONE_RE.exec(after);
+    if (!senderPhoneMatch) { result.push(""); continue; }
+    const recipientArea = after.slice(senderPhoneMatch.index + 10).replace(/^\n/, "");
+    const recipientPhoneMatch = /0[5-9]\d{8}/.exec(recipientArea);
+    result.push(recipientPhoneMatch ? recipientArea.slice(recipientPhoneMatch.index, recipientPhoneMatch.index + 10) : "");
+  }
+  return result.join("|");
+}
+
 // ─── Sender extraction — returns_list ────────────────────────────────────────
 // Supports two layouts:
 //   Multi-line: Livraison\nSenderLine1\nSenderLine2\nARABIC_RECIPIENT
@@ -494,6 +561,12 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
       reportType === "route_sheet"   ? extractFDRRecipientNames(text, trackingNums) :
                                        extractRecipientNames(text, trackingNums);
 
+    // Recipient phones — aligned pipe-separated list matching recipient_names
+    const recipientPhonesStr =
+      reportType === "returns_list"  ? extractReturnsRecipientPhones(text, trackingNums) :
+      reportType === "route_sheet"   ? extractFDRRecipientPhones(text, trackingNums) :
+                                       extractDeliveryRecipientPhones(text, trackingNums);
+
     let totalAmount    = 0;
     let netAmount      = 0;
     let fraisLivraison = 0;
@@ -539,8 +612,8 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
            (report_type, file_name, report_date, total_parcels,
             total_amount_dzd, net_amount_dzd, frais_livraison_dzd,
             station, sender_name, tracking_numbers, recipient_names, wilayas,
-            uploaded_by, file_data, order_wilayas, per_order_senders)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            uploaded_by, file_data, order_wilayas, per_order_senders, recipient_phones)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           reportType, file.originalname.slice(0, 255), reportDate, totalParcels,
           totalAmount, netAmount, fraisLivraison, station, senderName,
@@ -549,6 +622,7 @@ router.post("/office/reports/upload", adminAuth, upload.single("pdf"), async (re
           file.buffer,          // store PDF binary for later download
           orderWilayasStr,
           perOrderSendersStr,
+          recipientPhonesStr || null,
         ],
       );
     } finally { conn.release(); }

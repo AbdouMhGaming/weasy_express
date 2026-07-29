@@ -52,7 +52,7 @@ interface DashboardStats {
 }
 interface TopStats {
   topSenders: Array<{ name: string; count: string | number; delivered: string | number }>;
-  topRecipients: Array<{ name: string; count: number }>;
+  topRecipients: Array<{ name: string; phone: string; count: number }>;
   topWilayas: Array<{ name: string; count: string | number }>;
   officeAgents: Array<{ name: string; createdAt: string }>;
   marketers: Array<{ name: string; createdAt: string }>;
@@ -970,7 +970,10 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                   return (
                     <div key={i} className="flex items-center gap-2">
                       <span className="min-w-[1.5rem] h-5 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0 px-1">{globalRank}</span>
-                      <span className="text-xs text-gray-700 flex-1 truncate font-medium">{r.name}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700 font-medium truncate">{r.name}</p>
+                        {r.phone && <p className="text-[10px] text-gray-400 truncate">{r.phone}</p>}
+                      </div>
                       <div className="w-12 bg-gray-100 rounded-full h-1.5 shrink-0">
                         <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
                       </div>
