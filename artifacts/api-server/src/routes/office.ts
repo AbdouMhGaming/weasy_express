@@ -36,11 +36,12 @@ function extractDate(text: string): string {
 }
 
 // ─── Tracking numbers ─────────────────────────────────────────────────────────
-// Ecotrack tracking codes are exactly: EC + 4 alphanumeric chars + 12 digits = 18 chars.
-// Using a precise pattern prevents greedily capturing reference numbers or phone digits
-// that immediately follow the code in the concatenated pdf-parse output.
+// Ecotrack tracking codes follow: EC + 4 alphanumeric chars + 11–13 digits (currently 12 = 18 chars).
+// We use a range (\d{11,13}) rather than a fixed count so the parser survives minor format changes.
+// The upper bound of 13 stays safely below Algeria's 10-digit phone numbers + reference suffixes,
+// preventing greedy capture of digits that follow the code in the concatenated pdf-parse output.
 function extractTrackingNumbers(text: string): string[] {
-  const raw = text.match(/EC[A-Z0-9]{4}\d{12}/g) ?? [];
+  const raw = text.match(/EC[A-Z0-9]{4}\d{11,13}/g) ?? [];
   const seen = new Set<string>();
   const result: string[] = [];
   for (const n of raw) {
@@ -52,7 +53,7 @@ function extractTrackingNumbers(text: string): string[] {
 // ─── Helper: get extraction window bounded by next tracking number ────────────
 function getBoundedWindow(text: string, fromIdx: number, maxLen = 500): string {
   const slice = text.slice(fromIdx, fromIdx + maxLen + 30);
-  const nextMatch = slice.match(/EC[A-Z0-9]{4}\d{12}/);
+  const nextMatch = slice.match(/EC[A-Z0-9]{4}\d{11,13}/);
   const end = nextMatch && nextMatch.index! > 0 ? Math.min(nextMatch.index!, maxLen) : maxLen;
   return slice.slice(0, end);
 }
@@ -138,7 +139,7 @@ function extractReturnsRecipientNames(text: string, trackingNums: string[]): str
     if (codeIdx === -1) continue;
     const win = text.slice(codeIdx + code.length, codeIdx + code.length + 500);
     // Bound to next tracking code to avoid bleeding into the next row
-    const nextEC = win.match(/EC[A-Z0-9]{4}\d{12}/);
+    const nextEC = win.match(/EC[A-Z0-9]{4}\d{11,13}/);
     const rowText = (nextEC && nextEC.index! > 0) ? win.slice(0, nextEC.index!) : win.slice(0, 300);
     // Remove optional CX-ref (hex digits only, e.g. "CX2930353e2e1"); must stop before type keyword
     const noRef = rowText.replace(/^CX[a-f0-9]{8,16}/i, "");
@@ -253,7 +254,7 @@ function extractDeliverySender(text: string): string {
 // Increased {1,6}? from {1,3}? to handle 4-line station names.
 function extractFDRSenders(text: string): string[] {
   const senders = new Set<string>();
-  for (const m of text.matchAll(/EC[A-Z0-9]{4}\d{12}\n((?:[^\n]+\n){1,6}?)\d{10}\n/g)) {
+  for (const m of text.matchAll(/EC[A-Z0-9]{4}\d{11,13}\n((?:[^\n]+\n){1,6}?)\d{10}\n/g)) {
     const raw = m[1].replace(/\n/g, " ").trim().replace(/^\d+$/, "");
     if (raw.length > 0 && raw.length < 120) senders.add(raw);
   }
