@@ -615,24 +615,8 @@ router.get("/admin/stats", adminAuth, async (req, res) => {
         });
       }
 
-      // Placeholder rows for parcels without extracted tracking codes
-      const totalParcels = rpt.total_parcels > 0 ? rpt.total_parcels : nums.length;
-      for (let idx = nums.length; idx < totalParcels; idx++) {
-        pdfOrders.push({
-          id: -(rpt.id * 10000 + idx),
-          trackingNumber: null,
-          status,
-          senderName: rpt.sender_name ?? null,
-          recipientName: null,
-          destinationWilayaCode: fallbackWilayaCode,
-          destinationWilaya: fallbackWilayaName,
-          originWilayaCode: null,
-          originWilaya: rpt.station ?? null,
-          createdAt,
-          source: "pdf",
-          reportType: rpt.report_type,
-        });
-      }
+      // Note: placeholder rows for unextracted parcels are intentionally omitted.
+      // Statistics use total_parcels directly (above), so no fake rows are needed here.
     }
 
     // Merge manual orders + PDF virtual orders, sort newest first (no hard cap)
