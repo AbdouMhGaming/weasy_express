@@ -778,6 +778,113 @@ router.get("/office/reports/stats", adminAuth, async (req, res) => {
   }
 });
 
+// ─── Re-process all stored PDFs ──────────────────────────────────────────────
+// Re-parses every office_reports row that has file_data and updates all extracted
+// fields (tracking_numbers, per_order_senders, recipient_names, recipient_phones,
+// order_wilayas, sender_name, station, wilayas, amounts, etc.).
+// Use this to fix any extraction bugs in previously uploaded PDFs.
+router.post("/office/reports/reprocess-all", adminAuth, async (req, res) => {
+  const authReq = req as AuthedRequest;
+  if (authReq.adminRole !== "admin") {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        "SELECT id, report_type, file_data FROM office_reports WHERE file_data IS NOT NULL",
+      ) as [Array<{ id: number; report_type: string; file_data: Buffer | null }>, unknown];
+
+      let updated = 0;
+      let failed  = 0;
+
+      for (const row of rows) {
+        try {
+          const buf = row.file_data;
+          if (!buf) { failed++; continue; }
+          const buffer = Buffer.isBuffer(buf) ? buf : Buffer.from(buf as unknown as ArrayBuffer);
+          const pdfData = await pdfParse(buffer);
+          const text    = normaliseLigatures(pdfData.text);
+
+          const reportType   = row.report_type as "delivery_receipt" | "route_sheet" | "returns_list" | "unknown";
+          const reportDate   = extractDate(text);
+          const trackingNums = extractTrackingNumbers(text);
+          const wilayaCounts = extractWilayaCounts(text);
+          const totalParcels = extractParcels(text, reportType, trackingNums.length);
+          const station      = extractStation(text);
+
+          const orderWilayasArr = extractPerOrderWilayas(text, trackingNums);
+          const orderWilayasStr = orderWilayasArr.some(Boolean) ? orderWilayasArr.join("|") : null;
+
+          const recipientNamesStr =
+            reportType === "returns_list" ? extractReturnsRecipientNames(text, trackingNums) :
+            reportType === "route_sheet"  ? extractFDRRecipientNames(text, trackingNums) :
+                                            extractRecipientNames(text, trackingNums);
+
+          const recipientPhonesStr =
+            reportType === "returns_list" ? extractReturnsRecipientPhones(text, trackingNums) :
+            reportType === "route_sheet"  ? extractFDRRecipientPhones(text, trackingNums) :
+                                            extractDeliveryRecipientPhones(text, trackingNums);
+
+          let totalAmount    = 0;
+          let netAmount      = 0;
+          let fraisLivraison = 0;
+          let senderName     = "";
+          let perOrderSendersStr: string | null = null;
+
+          if (reportType === "delivery_receipt") {
+            const { total, net, frais } = extractDeliveryAmounts(text);
+            totalAmount    = total;
+            netAmount      = net;
+            fraisLivraison = frais;
+            senderName     = extractDeliverySender(text);
+          } else if (reportType === "route_sheet") {
+            totalAmount        = extractRouteTotal(text);
+            senderName         = extractFDRSenders(text).join("|").slice(0, 255);
+            const perOrder     = extractFDRSenderNames(text, trackingNums);
+            perOrderSendersStr = perOrder || null;
+          } else if (reportType === "returns_list") {
+            totalAmount = extractReturnAmounts(text);
+            senderName  = extractReturnSender(text);
+          }
+
+          const wilayasStr = serialiseWilayaCounts(wilayaCounts);
+
+          await conn.execute(
+            `UPDATE office_reports SET
+               report_date = ?, total_parcels = ?,
+               total_amount_dzd = ?, net_amount_dzd = ?, frais_livraison_dzd = ?,
+               station = ?, sender_name = ?,
+               tracking_numbers = ?, recipient_names = ?, wilayas = ?,
+               order_wilayas = ?, per_order_senders = ?, recipient_phones = ?
+             WHERE id = ?`,
+            [
+              reportDate, totalParcels,
+              totalAmount, netAmount, fraisLivraison,
+              station, senderName || null,
+              trackingNums.join(",") || null,
+              recipientNamesStr || null,
+              wilayasStr || null,
+              orderWilayasStr,
+              perOrderSendersStr,
+              recipientPhonesStr || null,
+              row.id,
+            ],
+          );
+          updated++;
+        } catch {
+          failed++;
+        }
+      }
+
+      res.json({ ok: true, total: rows.length, updated, failed });
+    } finally { conn.release(); }
+  } catch (err) {
+    req.log?.error({ err }, "Failed to reprocess reports");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 router.delete("/office/reports/:id", adminAuth, async (req, res) => {
   const authReq = req as AuthedRequest;

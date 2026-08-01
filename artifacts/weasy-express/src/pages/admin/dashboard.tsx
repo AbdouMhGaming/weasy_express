@@ -355,6 +355,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   }
   const [officeReports, setOfficeReports] = useState<OfficeReportRow[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const fetchTopStats = useCallback(async () => {
     try {
@@ -400,6 +401,22 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   }, [onUnauth, timePreset, filterWilaya, filterFrom, filterTo, filterOffice]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const handleReprocessAll = useCallback(async () => {
+    if (!window.confirm("Re-traiter tous les PDFs importés ?\n\nCela relit chaque fichier original et corrige les données extraites (expéditeurs, numéros de suivi, destinataires, etc.).")) return;
+    setReprocessing(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/office/reports/reprocess-all`, { method: "POST", headers: adminHeaders() });
+      const data = await res.json();
+      if (data.ok) {
+        alert(`✅ ${data.updated} rapport(s) retraité(s) sur ${data.total}${data.failed ? ` · ${data.failed} échec(s)` : ""}`);
+        fetchStats(); fetchTopStats(); fetchOfficeReports();
+      } else {
+        alert("Erreur lors du retraitement.");
+      }
+    } catch { alert("Erreur réseau."); }
+    finally { setReprocessing(false); }
+  }, [fetchStats, fetchTopStats, fetchOfficeReports]);
 
   useEffect(() => {
     const el = mapRef.current;
@@ -1009,15 +1026,28 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
               </span>
             )}
           </div>
-          <button
-            onClick={fetchOfficeReports}
-            className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors"
-          >
-            <svg className={`w-3.5 h-3.5 ${reportsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Actualiser
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleReprocessAll}
+              disabled={reprocessing}
+              className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Relit tous les PDFs depuis le fichier original et corrige les données extraites"
+            >
+              <svg className={`w-3.5 h-3.5 ${reprocessing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+              </svg>
+              {reprocessing ? "En cours…" : "Re-traiter PDFs"}
+            </button>
+            <button
+              onClick={fetchOfficeReports}
+              className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 ${reportsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Actualiser
+            </button>
+          </div>
         </div>
         {reportsLoading ? (
           <div className="py-10 flex justify-center">
