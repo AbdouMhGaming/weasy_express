@@ -2,12 +2,12 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { Truck, Check, Search, Package, ArrowRight, Zap, Banknote, MapPinned, ShieldCheck, Lock, CheckCircle2 } from "lucide-react";
+import { Truck, Check, Search, Package, ArrowRight, Zap, Banknote, MapPinned, ShieldCheck, Lock, CheckCircle2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { getTrackingStatus, TrackingResult, getStatusKind, TrackingFetchError } from "@/lib/tracking";
+import { getTrackingStatus, TrackingResult, getStatusKind, TrackingFetchError, getEcotrackFallbackUrl } from "@/lib/tracking";
 import HeroImage from "@assets/WhatsApp_Image_2026-04-25_at_12.54.22_PM_1777118737136.jpeg";
 import ShieldImage from "@assets/WhatsApp_Image_2026-04-25_at_12.54.23_PM_1777118737137.jpeg";
 import VanImage from "@assets/Picsart_26-04-25_15-16-41-467_1777128939021.png";
@@ -46,6 +46,7 @@ export default function HomePage() {
   const [trackingState, setTrackingState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null);
   const [trackingError, setTrackingError] = useState<string>("");
+  const [trackingFallbackUrl, setTrackingFallbackUrl] = useState<string | null>(null);
 
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const [hoveredWilaya, setHoveredWilaya] = useState<{ name: string; eta: string } | null>(null);
@@ -118,6 +119,7 @@ export default function HomePage() {
     if (!val) return;
     setTrackingState("loading");
     setTrackingError("");
+    setTrackingFallbackUrl(null);
     try {
       const result = await getTrackingStatus(val, i18n.resolvedLanguage || i18n.language || "fr");
       setTrackingResult(result);
@@ -129,6 +131,10 @@ export default function HomePage() {
         setTrackingError(t("home.quickTrack.notFound"));
       } else {
         setTrackingError(t("home.quickTrack.genericError"));
+        const fallback = err instanceof TrackingFetchError && err.fallbackUrl
+          ? err.fallbackUrl
+          : getEcotrackFallbackUrl(val, i18n.resolvedLanguage || i18n.language || "fr");
+        setTrackingFallbackUrl(fallback);
       }
     }
   };
@@ -446,8 +452,19 @@ export default function HomePage() {
                 })()}
 
                 {trackingState === "error" && (
-                  <div className="mt-4 text-destructive text-sm font-medium">
-                    {trackingError}
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    <p className="text-destructive text-sm font-medium">{trackingError}</p>
+                    {trackingFallbackUrl && (
+                      <a
+                        href={trackingFallbackUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-primary underline underline-offset-2 hover:opacity-80"
+                      >
+                        {t("tracking.upstreamError.openExternal")}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
                   </div>
                 )}
               </div>

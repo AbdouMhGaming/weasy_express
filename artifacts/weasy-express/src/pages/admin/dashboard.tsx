@@ -1028,17 +1028,6 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleReprocessAll}
-              disabled={reprocessing}
-              className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Relit tous les PDFs depuis le fichier original et corrige les données extraites"
-            >
-              <svg className={`w-3.5 h-3.5 ${reprocessing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
-              </svg>
-              {reprocessing ? "En cours…" : "Re-traiter PDFs"}
-            </button>
-            <button
               onClick={fetchOfficeReports}
               className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 transition-colors"
             >
