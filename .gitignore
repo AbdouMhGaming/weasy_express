@@ -4,4 +4,4 @@ build
 *.log
 *.zip
 *.tar.gz
-.env
+.en
