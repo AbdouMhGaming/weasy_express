@@ -101,19 +101,20 @@ type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performanc
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
-  partnerCount, officeCount,
+  partnerCount, officeCount, isOpen, onClose,
 }: {
   view: SidebarView; setView: (v: SidebarView) => void;
   role: AdminRole; username: string;
   onLogout: () => void; onChangePassword: () => void;
   partnerCount: number; officeCount: number;
+  isOpen: boolean; onClose: () => void;
 }) {
   const { t } = useTranslation();
   const isAdmin = role === "admin";
 
   const navItem = (v: SidebarView, label: string, badge: number, icon: React.ReactNode) => (
     <button
-      onClick={() => setView(v)}
+      onClick={() => { setView(v); onClose(); }}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
         view === v ? "bg-[#E10600] text-white shadow-lg shadow-red-900/30" : "text-white/60 hover:text-white hover:bg-white/5"
       }`}
@@ -127,7 +128,7 @@ function SidebarInner({
   );
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-[#0F172A] flex flex-col z-30 shadow-xl">
+    <aside className={`fixed inset-y-0 left-0 w-64 bg-[#0F172A] flex flex-col z-40 shadow-xl transition-transform duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="px-5 py-5 border-b border-white/10">
         <img src={logoWhitePath} alt="Weasy Express" className="h-10 w-auto object-contain" />
         <p className="text-white/40 text-xs mt-2 font-medium uppercase tracking-widest">{t("admin.sidebar.label")}</p>
@@ -2147,6 +2148,7 @@ export default function AdminDashboard() {
   const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
@@ -2195,13 +2197,34 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex" dir="ltr">
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-[#0F172A] flex items-center px-4 shadow-lg">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-all"
+          aria-label="Open menu"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <img src={logoWhitePath} alt="Weasy Express" className="h-7 w-auto object-contain ml-3" />
+      </div>
+      {/* Backdrop for mobile sidebar */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <Sidebar
         view={view} setView={setView} role={role} username={username}
         onLogout={unauth} onChangePassword={() => setShowChangePass(true)}
         partnerCount={partners.filter((p) => p.status === "pending").length}
         officeCount={offices.length}
+        isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
       />
-      <main className="flex-1 ml-64 min-h-screen overflow-y-auto">
+      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "office" ? (
             <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
