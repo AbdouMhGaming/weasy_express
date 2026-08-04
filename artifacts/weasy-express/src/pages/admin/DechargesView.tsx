@@ -647,7 +647,7 @@ export default function DechargesView() {
   );
 
   return (
-    <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
+    <div className="p-3 sm:p-6 lg:p-8 min-h-screen bg-gray-50/50">
       {/* Header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-4">
         <div>

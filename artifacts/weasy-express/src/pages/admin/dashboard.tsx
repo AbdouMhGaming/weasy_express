@@ -547,8 +547,8 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
 
   return (
     <>
-      <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-between mb-5">
+      <div className="p-3 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.dashboard.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.dashboard.subtitle")}</p>
@@ -687,13 +687,13 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             ))
           ) : (
             kpiCards.map((card) => (
-              <div key={card.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${card.color} text-white flex items-center justify-center shrink-0 shadow-sm`}>
+              <div key={card.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-5 flex items-center gap-3">
+                <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${card.color} text-white flex items-center justify-center shrink-0 shadow-sm`}>
                   {card.icon}
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900 leading-none">{card.value}</p>
-                  <p className="text-xs text-gray-500 mt-1 font-medium">{card.label}</p>
+                <div className="min-w-0">
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900 leading-none truncate">{card.value}</p>
+                  <p className="text-xs text-gray-500 mt-1 font-medium leading-tight">{card.label}</p>
                 </div>
               </div>
             ))
@@ -1306,13 +1306,13 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
 
   return (
     <>
-      <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-3 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.partners.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.partners.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button onClick={openAdd} className="flex items-center gap-2 text-sm font-semibold bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white px-4 py-2 rounded-xl shadow-sm shadow-red-200 transition-all">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               {t("admin.partners.addPartner")}
@@ -1477,7 +1477,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
               <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.firstName")} *</label>
                   <input value={addForm.firstName} onChange={(e) => setAdd("firstName", e.target.value)}
@@ -1497,7 +1497,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
                   placeholder="partenaire@email.com" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.phone")} *</label>
                   <input value={addForm.phone} onChange={(e) => setAdd("phone", e.target.value)}
@@ -1603,8 +1603,8 @@ function OfficesView({ offices, loading, error, onRefresh, onUnauth }: {
 
   return (
     <>
-      <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-3 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.offices.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.offices.subtitle")}</p>
@@ -1820,8 +1820,8 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
 
   return (
     <>
-      <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-3 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t("admin.admins.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t("admin.admins.subtitle")}</p>

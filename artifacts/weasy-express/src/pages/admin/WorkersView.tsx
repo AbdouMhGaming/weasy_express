@@ -138,7 +138,7 @@ export default function WorkersView() {
   const pagedWorkers = usePagination(filtered);
 
   return (
-    <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
+    <div className="p-3 sm:p-6 lg:p-8 min-h-screen bg-gray-50/50">
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("admin.workers.title")}</h1>

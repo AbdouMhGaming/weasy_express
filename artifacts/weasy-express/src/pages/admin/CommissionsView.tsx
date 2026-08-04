@@ -602,7 +602,7 @@ export default function CommissionsView() {
   );
 
   return (
-    <div className="p-6 lg:p-8 min-h-screen bg-gray-50/50">
+    <div className="p-3 sm:p-6 lg:p-8 min-h-screen bg-gray-50/50">
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
@@ -660,7 +660,7 @@ export default function CommissionsView() {
 
           {/* KPI */}
           {!historyLoading && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("admin.commissions.kpi.total")}</p>
                 <p className="text-2xl font-black text-[#E10600]">{fmtDZ(periodTotal)}</p>
@@ -706,7 +706,7 @@ export default function CommissionsView() {
 
                 return (
                   <div key={office.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="flex items-center gap-4 px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-3 px-4 py-4">
                       <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0"
                         style={{ background: hasData ? "#E10600" : "#f3f4f6", color: hasData ? "#fff" : "#9ca3af" }}
@@ -758,7 +758,7 @@ export default function CommissionsView() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                         {hasData && (
                           <button
                             onClick={() => setExpandedOffice(isExpanded ? null : name)}
@@ -823,7 +823,8 @@ export default function CommissionsView() {
                         <div className="px-5 py-2.5 flex items-center justify-between">
                           <p className="text-xs font-bold text-red-800">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
                         </div>
-                        <table className="w-full text-sm">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[360px]">
                           <thead>
                             <tr className="border-b border-red-100">
                               <th className="text-left text-xs font-semibold text-red-400 px-5 py-2">{t("admin.commissions.returnModal.date")}</th>
@@ -865,6 +866,7 @@ export default function CommissionsView() {
                             </tr>
                           </tfoot>
                         </table>
+                        </div>
                       </div>
                     )}
 
@@ -877,7 +879,8 @@ export default function CommissionsView() {
                           </div>
                         )}
                         {uploads.length > 0 && (
-                        <table className="w-full text-sm">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[480px]">
                           <thead>
                             <tr className="border-b border-gray-100">
                               <th className="text-left text-xs font-semibold text-gray-400 px-5 py-2.5">Date</th>
@@ -996,6 +999,7 @@ export default function CommissionsView() {
                             </tr>
                           </tfoot>
                         </table>
+                        </div>
                         )}
 
                         {/* Return entries inline (when expanded) */}
@@ -1005,7 +1009,8 @@ export default function CommissionsView() {
                               <p className="text-xs font-bold text-red-800">{t("admin.commissions.returnModal.historyTitle")} · {periodLabel}</p>
                               <p className="text-xs text-green-700 font-semibold">+ {fmtDZ(returnAgg?.totalDeduction ?? 0)}</p>
                             </div>
-                            <table className="w-full text-sm">
+                            <div className="overflow-x-auto">
+                            <table className="w-full text-sm min-w-[320px]">
                               <tbody className="divide-y divide-red-100">
                                 {returnAgg?.entries.map(entry => (
                                   <tr key={entry.id} className="hover:bg-red-50 transition-colors">
@@ -1039,6 +1044,7 @@ export default function CommissionsView() {
                                 </tfoot>
                               )}
                             </table>
+                            </div>
                           </div>
                         )}
 
@@ -1049,7 +1055,8 @@ export default function CommissionsView() {
                               <p className="text-xs font-bold text-[#E10600]">{t("admin.commissions.spModal.historyTitle")} · {periodLabel}</p>
                               <p className="text-xs text-green-700 font-semibold">+ {fmtDZ(spAgg.totalCommission)}</p>
                             </div>
-                            <table className="w-full text-sm">
+                            <div className="overflow-x-auto">
+                            <table className="w-full text-sm min-w-[320px]">
                               <tbody className="divide-y divide-[#E10600]/10">
                                 {spAgg.entries.map(entry => (
                                   <tr key={entry.id} className="hover:bg-red-50 transition-colors">
@@ -1081,6 +1088,7 @@ export default function CommissionsView() {
                                 </tr>
                               </tfoot>
                             </table>
+                            </div>
                           </div>
                         )}
 
@@ -1176,7 +1184,7 @@ export default function CommissionsView() {
                                   {ALL_WILAYAS.map(w => {
                                     const vals = officeRateInputs[w.name] ?? { csd: "0", cd: "0", esd: "0", ed: "0" };
                                     const isDirty = [vals.csd, vals.cd, vals.esd, vals.ed].some(v => parseFloat(v) !== 0);
-                                    const inputCls = "w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white";
+                                    const inputCls = "w-16 border border-gray-200 rounded-lg px-1.5 py-1.5 text-xs text-right font-semibold text-[#E10600] focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white";
                                     return (
                                       <tr key={w.num} className="hover:bg-gray-50/60 transition-colors">
                                         <td className="px-5 py-2 text-xs font-bold text-gray-400">{w.num}</td>
