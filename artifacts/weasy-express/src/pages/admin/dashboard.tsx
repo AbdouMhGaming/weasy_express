@@ -802,6 +802,17 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                                 PDF
                               </span>
                             )}
+                            {/* Mobile-only secondary info */}
+                            <div className="sm:hidden mt-1 flex flex-col gap-0.5">
+                              {(o.senderName || o.destinationWilaya) && (
+                                <span className="text-xs text-gray-500 truncate max-w-[160px]">
+                                  {[o.senderName, o.destinationWilaya].filter(Boolean).join(" → ")}
+                                </span>
+                              )}
+                              {o.createdAt && (
+                                <span className="text-xs text-gray-400">{fmtDate(o.createdAt)}</span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-3 py-3 text-gray-700 text-xs hidden sm:table-cell max-w-[120px]">
