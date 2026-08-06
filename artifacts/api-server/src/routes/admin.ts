@@ -777,7 +777,9 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
       .map(([name, count]) => ({ name, count, delivered: 0 }))
       .sort((a, b) => b.count - a.count);
 
-    // ── Top Clients — FDR recipient_names + phones (grouped by name+phone pair) ─
+    // ── Top Clients — FDR recipient_names + phones (grouped by name, best phone wins) ─
+    // Key is name only so the same recipient is merged across old PDFs (no phone) and
+    // new PDFs (with phone). The first non-empty phone seen is kept for display.
     const recipientMap: Record<string, { name: string; phone: string; count: number }> = {};
     for (const row of pdfRaw.rsRows) {
       if (!row.recipient_names) continue;
@@ -787,9 +789,10 @@ router.get("/admin/top-stats", adminAuth, async (req, res) => {
         const name  = names[i];
         const phone = phones[i] ?? "";
         if (!name || name.length < 2 || name.length > 100) continue;
-        const key = `${name}\x00${phone}`; // null-byte separator avoids false collisions
-        if (!recipientMap[key]) recipientMap[key] = { name, phone, count: 0 };
-        recipientMap[key].count++;
+        if (!recipientMap[name]) recipientMap[name] = { name, phone: "", count: 0 };
+        recipientMap[name].count++;
+        // Prefer a non-empty phone; once we have one, keep it
+        if (!recipientMap[name].phone && phone) recipientMap[name].phone = phone;
       }
     }
     const topRecipients = Object.values(recipientMap)
