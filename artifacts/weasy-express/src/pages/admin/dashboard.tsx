@@ -97,7 +97,7 @@ const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges";
+type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -172,6 +172,28 @@ function SidebarInner({
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
+          {navItem("queue", t("admin.sidebar.queue"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+          )}
+          {navItem("returns", t("admin.sidebar.returns"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+          )}
+          {navItem("merchants", t("admin.sidebar.merchants"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          )}
+          {navItem("payouts", t("admin.sidebar.payouts"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          )}
+          {navItem("messaging", t("admin.sidebar.messaging"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+          )}
+          {navItem("team", t("admin.sidebar.team"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          )}
+          {navItem("analytics", t("admin.sidebar.analytics"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+          <div className="my-2 border-t border-white/5" />
           {navItem("settings", t("admin.settings.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
@@ -179,6 +201,28 @@ function SidebarInner({
       ) : role === "office" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItem("office-dashboard", t("admin.sidebar.officeDashboard"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+          <div className="my-2 border-t border-white/5" />
+          {navItem("queue", t("admin.sidebar.queue"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+          )}
+          {navItem("returns", t("admin.sidebar.returns"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+          )}
+          {navItem("merchants", t("admin.sidebar.merchants"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          )}
+          {navItem("payouts", t("admin.sidebar.payouts"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          )}
+          {navItem("messaging", t("admin.sidebar.messaging"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+          )}
+          {navItem("team", t("admin.sidebar.team"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          )}
+          {navItem("analytics", t("admin.sidebar.analytics"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
         </nav>
@@ -247,6 +291,33 @@ function EmptyRoleView({ role }: { role: AdminRole }) {
       <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("admin.emptyRole.title")}</h2>
       <p className="text-gray-500 max-w-sm">{t("admin.emptyRole.subtitle")}</p>
       <p className="text-gray-400 text-sm mt-2">{t("admin.emptyRole.hint")}</p>
+    </div>
+  );
+}
+
+// ── Coming Soon placeholder ────────────────────────────────────────────────────
+
+const COMING_SOON_ICONS: Record<string, React.ReactNode> = {
+  queue:     <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>,
+  returns:   <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
+  merchants: <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  payouts:   <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  messaging: <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>,
+  team:      <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+  analytics: <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+};
+
+function ComingSoonView({ section }: { section: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center py-32 px-8 text-center">
+      <div className="mb-5">{COMING_SOON_ICONS[section]}</div>
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200 mb-4">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        {t("admin.sidebar." + section)}
+      </span>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">{t("admin.comingSoon.title")}</h2>
+      <p className="text-gray-400 text-sm max-w-xs">{t("admin.comingSoon.subtitle")}</p>
     </div>
   );
 }
@@ -2290,6 +2361,13 @@ export default function AdminDashboard() {
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "office" ? (
+            view === "queue"     ? <ComingSoonView section="queue" /> :
+            view === "returns"   ? <ComingSoonView section="returns" /> :
+            view === "merchants" ? <ComingSoonView section="merchants" /> :
+            view === "payouts"   ? <ComingSoonView section="payouts" /> :
+            view === "messaging" ? <ComingSoonView section="messaging" /> :
+            view === "team"      ? <ComingSoonView section="team" /> :
+            view === "analytics" ? <ComingSoonView section="analytics" /> :
             <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
           ) : role === "finance" ? (
             view === "commissions" ? <CommissionsView /> :
@@ -2320,6 +2398,20 @@ export default function AdminDashboard() {
             <DechargesView />
           ) : view === "office-dashboard" ? (
             <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
+          ) : view === "queue" ? (
+            <ComingSoonView section="queue" />
+          ) : view === "returns" ? (
+            <ComingSoonView section="returns" />
+          ) : view === "merchants" ? (
+            <ComingSoonView section="merchants" />
+          ) : view === "payouts" ? (
+            <ComingSoonView section="payouts" />
+          ) : view === "messaging" ? (
+            <ComingSoonView section="messaging" />
+          ) : view === "team" ? (
+            <ComingSoonView section="team" />
+          ) : view === "analytics" ? (
+            <ComingSoonView section="analytics" />
           ) : (
             <AdminsView currentUsername={username} onUnauth={unauth} />
           )}

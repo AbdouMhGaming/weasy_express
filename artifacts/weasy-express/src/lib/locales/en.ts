@@ -327,6 +327,13 @@ const en: Translations = {
       logout: "Sign out",
       workers: "Employees",
       decharges: "Discharges",
+      queue: "Queue",
+      returns: "Returns",
+      merchants: "Merchants",
+      payouts: "Payouts",
+      messaging: "Messaging",
+      team: "Team",
+      analytics: "Analytics",
     },
     timePresets: {
       all: "All",
@@ -539,6 +546,10 @@ const en: Translations = {
       title: "Dashboard",
       subtitle: "This section will be available soon.",
       hint: "Contact your administrator for more information.",
+    },
+    comingSoon: {
+      title: "Coming Soon",
+      subtitle: "This section is under construction and will be available in a future update.",
     },
     performance: {
       title: "Performance",

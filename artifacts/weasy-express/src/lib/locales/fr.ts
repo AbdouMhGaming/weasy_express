@@ -325,6 +325,13 @@ const fr = {
       logout: "Déconnexion",
       workers: "Employés",
       decharges: "Décharges",
+      queue: "File d'attente",
+      returns: "Retours",
+      merchants: "Marchands",
+      payouts: "Paiements",
+      messaging: "Messagerie",
+      team: "Équipe",
+      analytics: "Analytique",
     },
     timePresets: {
       all: "Tout",
@@ -537,6 +544,10 @@ const fr = {
       title: "Tableau de bord",
       subtitle: "Cette section sera disponible prochainement.",
       hint: "Contactez l'administrateur pour plus d'informations.",
+    },
+    comingSoon: {
+      title: "Bientôt disponible",
+      subtitle: "Cette section est en cours de développement et sera disponible dans une prochaine mise à jour.",
     },
     performance: {
       title: "Performance",

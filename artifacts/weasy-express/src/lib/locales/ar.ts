@@ -327,6 +327,13 @@ const ar: Translations = {
       logout: "تسجيل الخروج",
       workers: "الموظفون",
       decharges: "وصولات الأجر",
+      queue: "قائمة الانتظار",
+      returns: "المرتجعات",
+      merchants: "التجار",
+      payouts: "المدفوعات",
+      messaging: "المراسلة",
+      team: "الفريق",
+      analytics: "التحليلات",
     },
     timePresets: {
       all: "الكل",
@@ -539,6 +546,10 @@ const ar: Translations = {
       title: "لوحة التحكم",
       subtitle: "هذا القسم سيكون متاحاً قريباً.",
       hint: "تواصل مع المدير للمزيد من المعلومات.",
+    },
+    comingSoon: {
+      title: "قريباً",
+      subtitle: "هذا القسم قيد التطوير وسيكون متاحاً في تحديث قادم.",
     },
     performance: {
       title: "الأداء",
