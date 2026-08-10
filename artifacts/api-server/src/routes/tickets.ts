@@ -19,6 +19,20 @@ async function generateTicketRef(conn: Awaited<ReturnType<typeof pool.getConnect
   return `#${String(next).padStart(4, "0")}`;
 }
 
+async function logEvent(
+  conn: Awaited<ReturnType<typeof pool.getConnection>>,
+  ticketId: number | string,
+  eventType: string,
+  actor: string,
+  body: string | null = null,
+  meta: string | null = null
+) {
+  await conn.execute(
+    "INSERT INTO ticket_events (ticket_id, event_type, actor, body, meta) VALUES (?, ?, ?, ?, ?)",
+    [ticketId, eventType, actor, body, meta]
+  );
+}
+
 const VALID_STATUSES = ["open", "claimed", "in_progress", "resolved", "pending_close", "pending_accept", "closed"];
 
 // ── GET /api/tickets — list tickets ────────────────────────────────────────
@@ -62,7 +76,7 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
   try {
     await conn.beginTransaction();
     const ref = await generateTicketRef(conn);
-    await conn.execute(
+    const [result]: any = await conn.execute(
       `INSERT INTO tickets
          (ticket_ref, destination_type, recipient_username, support_service, reason, custom_reason, comment, parcel_numbers, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -80,6 +94,8 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
         req.adminUsername,
       ]
     );
+    const ticketId = result.insertId;
+    await logEvent(conn, ticketId, "status_change", req.adminUsername!, null, "open");
     await conn.commit();
     res.json({ ok: true, ref });
   } catch (err) {
@@ -113,6 +129,7 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     await conn.execute("UPDATE tickets SET status = ? WHERE id = ?", [status, id]);
+    await logEvent(conn, id, "status_change", username, null, status);
     res.json({ ok: true });
   } finally {
     conn.release();
@@ -139,7 +156,54 @@ router.put("/tickets/:id/claim", adminAuth, async (req: AuthedRequest, res) => {
       "UPDATE tickets SET status = 'claimed', handled_by = ? WHERE id = ?",
       [username, id]
     );
+    await logEvent(conn, id, "claim", username, null, "claimed");
     res.json({ ok: true });
+  } finally {
+    conn.release();
+  }
+});
+
+// ── GET /api/tickets/:id/events — list events ──────────────────────────────
+
+router.get("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) => {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    const [[ticket]] = await conn.execute("SELECT id FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
+    if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
+
+    const [rows] = await conn.execute(
+      "SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC",
+      [id]
+    ) as any;
+    res.json({ ok: true, events: rows });
+  } finally {
+    conn.release();
+  }
+});
+
+// ── POST /api/tickets/:id/events — add comment ─────────────────────────────
+
+router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) => {
+  const { id } = req.params;
+  const { body } = req.body;
+  if (!body?.trim()) return res.status(400).json({ ok: false, error: "Empty comment" });
+
+  const conn = await pool.getConnection();
+  try {
+    const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
+    if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
+
+    const username = req.adminUsername!;
+    const [result]: any = await conn.execute(
+      "INSERT INTO ticket_events (ticket_id, event_type, actor, body) VALUES (?, 'comment', ?, ?)",
+      [id, username, body.trim()]
+    );
+    const [rows] = await conn.execute(
+      "SELECT * FROM ticket_events WHERE id = ? LIMIT 1",
+      [result.insertId]
+    ) as any;
+    res.json({ ok: true, event: rows[0] });
   } finally {
     conn.release();
   }
@@ -151,6 +215,7 @@ router.delete("/tickets/:id", adminAuth, superAdminOnly, async (req, res) => {
   const { id } = req.params;
   const conn = await pool.getConnection();
   try {
+    await conn.execute("DELETE FROM ticket_events WHERE ticket_id = ?", [id]);
     await conn.execute("DELETE FROM tickets WHERE id = ?", [id]);
     res.json({ ok: true });
   } finally {

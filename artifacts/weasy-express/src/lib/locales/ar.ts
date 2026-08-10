@@ -600,6 +600,13 @@ const ar: Translations = {
         handledBy: "يُعالجها", claim: "استلام",
         markInProgress: "قيد المعالجة", markResolved: "تم الحل", markClosed: "إغلاق",
         unassigned: "غير مُعيَّن", changeStatus: "تحديث الحالة",
+        assignee: "مسند إلى", priority: "عادي",
+        ticketCreated: "تم إنشاء التذكرة",
+        claimedEvent: "استلم التذكرة",
+        statusChangedEvent: "غيّر الحالة إلى",
+        writeComment: "اكتب تعليقاً…",
+        send: "إرسال",
+        loadingEvents: "جارٍ تحميل المحادثة…",
       },
     },
     performance: {

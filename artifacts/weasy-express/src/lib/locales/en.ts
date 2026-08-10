@@ -600,6 +600,13 @@ const en: Translations = {
         handledBy: "Handled by", claim: "Claim",
         markInProgress: "In Progress", markResolved: "Resolved", markClosed: "Close",
         unassigned: "Unassigned", changeStatus: "Update Status",
+        assignee: "Assignee", priority: "Normal",
+        ticketCreated: "Ticket created",
+        claimedEvent: "claimed the ticket",
+        statusChangedEvent: "changed status to",
+        writeComment: "Write a comment…",
+        send: "Send",
+        loadingEvents: "Loading conversation…",
       },
     },
     performance: {

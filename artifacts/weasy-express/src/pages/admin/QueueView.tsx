@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
@@ -23,6 +23,16 @@ interface Ticket {
 }
 
 interface AdminUser { id: number; username: string; office_hub: string | null; }
+
+interface TicketEvent {
+  id: number;
+  ticket_id: number;
+  event_type: "comment" | "status_change" | "claim" | "unclaim";
+  actor: string;
+  body: string | null;
+  meta: string | null;
+  created_at: string;
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -70,6 +80,18 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-DZ", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
   });
+}
+
+function relTime(iso: string) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diff / 60000);
+  const hrs  = Math.round(diff / 3600000);
+  const days = Math.round(diff / 86400000);
+  if (diff < 60000) return "< 1 min";
+  if (mins < 60) return `${mins}m`;
+  if (hrs < 24)  return `${hrs}h`;
+  return `${days}d`;
 }
 
 function Spinner() {
@@ -124,6 +146,15 @@ export default function QueueView() {
   const [selected, setSelected]             = useState<Ticket | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // conversation / events
+  const [events, setEvents]               = useState<TicketEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [commentText, setCommentText]     = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const feedBottomRef = useRef<HTMLDivElement>(null);
+  const commentRef    = useRef<HTMLTextAreaElement>(null);
+
   // ── Fetch ──────────────────────────────────────────────────────────────
 
   const fetchTickets = useCallback(async () => {
@@ -152,6 +183,16 @@ export default function QueueView() {
   }, []);
 
   useEffect(() => { fetchTickets(); fetchMeta(); }, [fetchTickets, fetchMeta]);
+
+  useEffect(() => {
+    if (selected) {
+      setEvents([]);
+      setCommentText("");
+      setShowStatusMenu(false);
+      fetchEvents(selected.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   // ── Filter ─────────────────────────────────────────────────────────────
 
@@ -242,9 +283,37 @@ export default function QueueView() {
       await fetch(`${API_BASE}/api/tickets/${ticket.id}/claim`, {
         method: "PUT", headers: adminHeaders(),
       });
-      setSelected(prev => prev ? { ...prev, status: "claimed", handled_by: username } : null);
+      const updated = { ...ticket, status: "claimed", handled_by: username };
+      setSelected(prev => prev?.id === ticket.id ? updated : prev);
       fetchTickets();
+      fetchEvents(ticket.id);
     } catch { }
+  }
+
+  const fetchEvents = useCallback(async (id: number) => {
+    setEventsLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/tickets/${id}/events`, { headers: adminHeaders() });
+      const d = await r.json();
+      if (d.ok) setEvents(d.events ?? []);
+    } catch { } finally { setEventsLoading(false); }
+  }, []);
+
+  async function sendComment() {
+    if (!commentText.trim() || !selected) return;
+    setSendingComment(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/tickets/${selected.id}/events`, {
+        method: "POST", headers: adminHeaders(),
+        body: JSON.stringify({ body: commentText.trim() }),
+      });
+      const d = await r.json();
+      if (d.ok && d.event) {
+        setEvents(prev => [...prev, d.event]);
+        setCommentText("");
+        setTimeout(() => feedBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      }
+    } catch { } finally { setSendingComment(false); }
   }
 
   const pag = usePagination(filtered, 20);
@@ -704,136 +773,275 @@ export default function QueueView() {
       )}
 
       {/* ══════════════════════════════════════════════
-          TICKET DETAIL PANEL
+          TICKET DETAIL — conversation style
       ══════════════════════════════════════════════ */}
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelected(null)} />
-          <div className="relative w-full max-w-lg bg-white shadow-2xl flex flex-col z-10" onClick={e => e.stopPropagation()}>
+      {selected && (() => {
+        const dest = DEST_CFG[selected.destination_type] ?? DEST_CFG.merchant;
+        const recipientLabel =
+          selected.destination_type === "central_team"
+            ? (selected.support_service ?? t("admin.queue.newModal.centralTeam"))
+            : (selected.recipient_username ?? "—");
 
-            {/* Header */}
-            <div className="px-6 py-5 flex items-start justify-between bg-gradient-to-r from-[#0F172A] to-[#1E293B] shrink-0">
-              <div>
-                <p className="text-white/40 text-xs font-mono mb-1">{selected.ticket_ref}</p>
-                <h2 className="text-base font-bold text-white">{t("admin.queue.detail.title")}</h2>
-                <div className="mt-2"><StatusBadge status={selected.status} /></div>
-              </div>
-              <button onClick={() => setSelected(null)} className="text-white/50 hover:text-white transition-colors p-1 mt-0.5">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+        let parsedParcels: string[] = [];
+        try { if (selected.parcel_numbers) parsedParcels = JSON.parse(selected.parcel_numbers).filter(Boolean); } catch { /* noop */ }
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        return (
+          <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setSelected(null); setShowStatusMenu(false); }} />
+            <div className="relative w-full max-w-lg bg-[#f7f8fa] shadow-2xl flex flex-col z-10" onClick={e => e.stopPropagation()}>
 
-              {/* Info grid */}
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: t("admin.queue.detail.destination"),
-                    value: selected.destination_type === "central_team"
-                      ? (selected.support_service ?? t("admin.queue.newModal.centralTeam"))
-                      : (selected.recipient_username ?? "—"),
-                    icon: DEST_CFG[selected.destination_type]?.icon },
-                  { label: t("admin.queue.detail.createdBy"), value: selected.created_by },
-                  { label: t("admin.queue.detail.createdAt"), value: fmtDate(selected.created_at) },
-                  { label: t("admin.queue.detail.handledBy"),
-                    value: selected.handled_by ?? t("admin.queue.detail.unassigned") },
-                ].map((item, i) => (
-                  <div key={i} className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-1">{item.label}</p>
-                    <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                      {item.icon && <span>{item.icon}</span>}
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Reason */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-xs font-bold text-gray-400 mb-1.5">{t("admin.queue.detail.reason")}</p>
-                <p className="text-sm font-semibold text-gray-800">{selected.custom_reason || selected.reason}</p>
-              </div>
-
-              {/* Comment */}
-              {selected.comment && (
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <p className="text-xs font-bold text-gray-400 mb-1.5">{t("admin.queue.detail.comment")}</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{selected.comment}</p>
+              {/* ── Top header ── */}
+              <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-2 shrink-0">
+                <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-700 truncate">
+                    <span className="font-mono text-gray-500">{selected.created_by}</span>
+                    <span className="mx-1.5 text-gray-300">→</span>
+                    <span className="font-mono text-gray-500">{recipientLabel}</span>
+                  </p>
                 </div>
-              )}
 
-              {/* Parcels */}
-              {selected.parcel_numbers && (() => {
-                try {
-                  const parsed: string[] = JSON.parse(selected.parcel_numbers);
-                  if (!Array.isArray(parsed) || parsed.length === 0) return null;
-                  return (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs font-bold text-gray-400 mb-2">{t("admin.queue.detail.parcels")}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {parsed.map((p, i) => (
-                          <span key={i} className="font-mono text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-gray-700">{p}</span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                } catch { return null; }
-              })()}
-
-              {/* Status actions */}
-              <div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t("admin.queue.detail.changeStatus")}</p>
-                <div className="flex flex-wrap gap-2">
+                {/* Action buttons */}
+                <div className="flex items-center gap-1.5 shrink-0">
                   {selected.status === "open" && (
                     <button
                       onClick={() => claimTicket(selected)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-100 transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all"
                     >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
                       {t("admin.queue.detail.claim")}
-                    </button>
-                  )}
-                  {["open","claimed"].includes(selected.status) && (
-                    <button
-                      onClick={() => updateStatus(selected, "in_progress")} disabled={updatingStatus}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition-all disabled:opacity-50"
-                    >
-                      {t("admin.queue.detail.markInProgress")}
                     </button>
                   )}
                   {["open","claimed","in_progress"].includes(selected.status) && (
                     <button
-                      onClick={() => updateStatus(selected, "resolved")} disabled={updatingStatus}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 text-green-700 text-xs font-bold rounded-xl hover:bg-green-100 transition-all disabled:opacity-50"
+                      onClick={() => { updateStatus(selected, "resolved"); }}
+                      disabled={updatingStatus}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
                     >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
                       {t("admin.queue.detail.markResolved")}
                     </button>
                   )}
-                  {["open","claimed","in_progress","resolved"].includes(selected.status) && (
+
+                  {/* More options */}
+                  <div className="relative">
                     <button
-                      onClick={() => updateStatus(selected, "pending_close")} disabled={updatingStatus}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl hover:bg-orange-100 transition-all disabled:opacity-50"
+                      onClick={() => setShowStatusMenu(v => !v)}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
                     >
-                      {t("admin.queue.filters.pending_close")}
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                      </svg>
                     </button>
-                  )}
-                  {selected.status !== "closed" && (
-                    <button
-                      onClick={() => updateStatus(selected, "closed")} disabled={updatingStatus}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border border-gray-200 text-gray-500 text-xs font-bold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
-                    >
-                      {t("admin.queue.detail.markClosed")}
-                    </button>
-                  )}
-                  {updatingStatus && <Spinner />}
+                    {showStatusMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1.5 text-xs">
+                        {["open","claimed"].includes(selected.status) && (
+                          <button onClick={() => { updateStatus(selected, "in_progress"); setShowStatusMenu(false); }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-amber-600 font-semibold">
+                            {t("admin.queue.detail.markInProgress")}
+                          </button>
+                        )}
+                        {["open","claimed","in_progress","resolved"].includes(selected.status) && (
+                          <button onClick={() => { updateStatus(selected, "pending_close"); setShowStatusMenu(false); }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-orange-600 font-semibold">
+                            {t("admin.queue.filters.pending_close")}
+                          </button>
+                        )}
+                        {selected.status !== "closed" && (
+                          <button onClick={() => { updateStatus(selected, "closed"); setShowStatusMenu(false); }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-gray-500 font-semibold">
+                            {t("admin.queue.detail.markClosed")}
+                          </button>
+                        )}
+                        {selected.status !== "open" && (
+                          <button onClick={() => { updateStatus(selected, "open"); setShowStatusMenu(false); }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-blue-600 font-semibold border-t border-gray-100 mt-1 pt-2">
+                            Reopen
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* ── Tag strip ── */}
+              <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2 flex-wrap shrink-0">
+                <StatusBadge status={selected.status} />
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${dest.color} border-current/20`}>
+                  {dest.icon} {t(`admin.queue.newModal.${selected.destination_type === "central_team" ? "centralTeam" : selected.destination_type === "pickup_desk" ? "pickupDesk" : "merchant"}`)}
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                  • {t("admin.queue.detail.priority")}
+                </span>
+                {parsedParcels.length > 0 && parsedParcels.map((p, i) => (
+                  <span key={i} className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">{p}</span>
+                ))}
+              </div>
+
+              {/* ── Assignee row ── */}
+              <div className="bg-white border-b border-gray-100 px-4 py-2.5 flex items-center gap-3 text-xs shrink-0">
+                <span className="text-gray-400 flex items-center gap-1.5 shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {t("admin.queue.detail.assignee")}
+                </span>
+                <span className="bg-gray-100 text-gray-600 font-semibold px-2 py-0.5 rounded-full">{selected.created_by}</span>
+                <div className="flex-1" />
+                <span className={`font-semibold ${selected.handled_by ? "text-gray-800" : "text-gray-400"}`}>
+                  {selected.handled_by ?? t("admin.queue.detail.unassigned")}
+                </span>
+              </div>
+
+              {/* ── Conversation feed ── */}
+              <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
+
+                {/* Ticket created system event */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                    {t("admin.queue.detail.ticketCreated")} · {relTime(selected.created_at)}
+                  </span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+
+                {/* Original ticket message bubble */}
+                <div className="flex items-start gap-2.5">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm ${avatarColor(selected.created_by)}`}>
+                    {initials(selected.created_by)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400 mb-1 font-medium">{selected.created_by}</p>
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100">
+                      {/* Ticket ref pill */}
+                      <div className="flex items-center justify-between gap-2 mb-2.5 pb-2.5 border-b border-gray-100">
+                        <span className="font-mono text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold border border-indigo-100 tracking-wide">
+                          {selected.ticket_ref}
+                        </span>
+                        <button
+                          onClick={() => navigator.clipboard?.writeText(selected.ticket_ref)}
+                          className="p-1 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors"
+                          title="Copy ref"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      </div>
+                      {/* Reason */}
+                      <p className="text-sm text-gray-800 font-medium leading-snug">
+                        {selected.custom_reason || selected.reason}
+                      </p>
+                      {/* Destination */}
+                      <p className="text-[11px] text-gray-400 mt-1.5">
+                        {dest.icon} {recipientLabel}
+                      </p>
+                    </div>
+                    <p className="text-[10px] text-gray-300 mt-1 ml-1">{fmtDate(selected.created_at)}</p>
+                  </div>
+                </div>
+
+                {/* Initial comment bubble (from creation) */}
+                {selected.comment && (
+                  <div className="flex items-start gap-2.5">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm ${avatarColor(selected.created_by)}`}>
+                      {initials(selected.created_by)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-gray-400 mb-1 font-medium">{selected.created_by}</p>
+                      <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100">
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{selected.comment}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Events (comments + status changes from DB) */}
+                {eventsLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-2 text-gray-400 text-xs">
+                    <Spinner />{t("admin.queue.detail.loadingEvents")}
+                  </div>
+                ) : events.map(ev => {
+                  if (ev.event_type === "comment") {
+                    return (
+                      <div key={ev.id} className="flex items-start gap-2.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm ${avatarColor(ev.actor)}`}>
+                          {initials(ev.actor)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-gray-400 mb-1 font-medium">{ev.actor}</p>
+                          <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100">
+                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{ev.body}</p>
+                          </div>
+                          <p className="text-[10px] text-gray-300 mt-1 ml-1">{relTime(ev.created_at)}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // System events (status_change, claim, etc.)
+                  const evLabel =
+                    ev.event_type === "claim"
+                      ? `${ev.actor} ${t("admin.queue.detail.claimedEvent")}`
+                      : ev.meta
+                        ? `${ev.actor} ${t("admin.queue.detail.statusChangedEvent")} ${t(`admin.queue.status.${ev.meta}`, { defaultValue: ev.meta ?? "" })}`
+                        : null;
+                  if (!evLabel) return null;
+                  return (
+                    <div key={ev.id} className="flex items-center gap-3">
+                      <div className="flex-1 h-px bg-gray-200" />
+                      <span className="text-[11px] text-gray-400 whitespace-nowrap text-center px-1">{evLabel} · {relTime(ev.created_at)}</span>
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                  );
+                })}
+
+                <div ref={feedBottomRef} />
+              </div>
+
+              {/* ── Comment input ── */}
+              <div className="bg-white border-t border-gray-100 px-4 py-3 flex items-end gap-3 shrink-0">
+                <textarea
+                  ref={commentRef}
+                  value={commentText}
+                  onChange={e => {
+                    setCommentText(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                  }}
+                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment(); }}
+                  placeholder={t("admin.queue.detail.writeComment")}
+                  rows={1}
+                  className="flex-1 resize-none border border-gray-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-gray-50 transition-all leading-relaxed"
+                  style={{ minHeight: "42px", maxHeight: "120px" }}
+                />
+                <button
+                  onClick={sendComment}
+                  disabled={sendingComment || !commentText.trim()}
+                  className="w-9 h-9 bg-[#E10600] hover:bg-[#C50500] disabled:bg-gray-200 rounded-full flex items-center justify-center text-white transition-all shrink-0 mb-0.5"
+                >
+                  {sendingComment
+                    ? <Spinner />
+                    : (
+                      <svg className="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                </button>
+              </div>
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

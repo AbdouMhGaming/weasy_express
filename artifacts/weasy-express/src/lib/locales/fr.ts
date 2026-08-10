@@ -598,6 +598,13 @@ const fr = {
         handledBy: "Géré par", claim: "Prendre en charge",
         markInProgress: "En cours", markResolved: "Résolu", markClosed: "Clôturer",
         unassigned: "Non assigné", changeStatus: "Mettre à jour le statut",
+        assignee: "Assigné", priority: "Normal",
+        ticketCreated: "Ticket créé",
+        claimedEvent: "a pris en charge le ticket",
+        statusChangedEvent: "a changé le statut en",
+        writeComment: "Écrire un commentaire…",
+        send: "Envoyer",
+        loadingEvents: "Chargement de la conversation…",
       },
     },
     performance: {
