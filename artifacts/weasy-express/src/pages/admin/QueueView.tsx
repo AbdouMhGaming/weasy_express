@@ -341,7 +341,7 @@ export default function QueueView() {
           <h1 className="text-2xl font-bold text-gray-900">{t("admin.queue.title")}</h1>
           <p className="text-sm text-gray-400 mt-0.5">{t("admin.queue.subtitle")}</p>
         </div>
-        {isAdmin && (
+        {(isAdmin || role === "office") && (
           <button
             onClick={() => { setShowNew(true); setForm({ ...DEFAULT_FORM }); setSubmitError(""); setSubmitSuccess(""); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#E10600] hover:bg-[#C50500] text-white text-sm font-bold rounded-xl shadow-sm transition-all"
