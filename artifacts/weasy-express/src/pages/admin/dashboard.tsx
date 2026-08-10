@@ -8,6 +8,7 @@ const SettingsView    = lazy(() => import("./SettingsView"));
 const OfficeDashboardView = lazy(() => import("./OfficeDashboardView"));
 const WorkersView     = lazy(() => import("./WorkersView"));
 const DechargesView   = lazy(() => import("./DechargesView"));
+const QueueView       = lazy(() => import("./QueueView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -2361,7 +2362,7 @@ export default function AdminDashboard() {
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "office" ? (
-            view === "queue"     ? <ComingSoonView section="queue" /> :
+            view === "queue"     ? <QueueView /> :
             view === "returns"   ? <ComingSoonView section="returns" /> :
             view === "merchants" ? <ComingSoonView section="merchants" /> :
             view === "payouts"   ? <ComingSoonView section="payouts" /> :
@@ -2399,7 +2400,7 @@ export default function AdminDashboard() {
           ) : view === "office-dashboard" ? (
             <OfficeDashboardView onUnauth={unauth} isAdmin={true} />
           ) : view === "queue" ? (
-            <ComingSoonView section="queue" />
+            <QueueView />
           ) : view === "returns" ? (
             <ComingSoonView section="returns" />
           ) : view === "merchants" ? (

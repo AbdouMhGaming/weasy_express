@@ -49,6 +49,22 @@ export default function SettingsView() {
   const [posError, setPosError] = useState("");
   const [posOpen, setPosOpen] = useState(false);
 
+  // Ticket reasons
+  const [reasons, setReasons] = useState<string[]>([]);
+  const [reasonsLoading, setReasonsLoading] = useState(true);
+  const [newReason, setNewReason] = useState("");
+  const [reasonsSaving, setReasonsSaving] = useState(false);
+  const [reasonsError, setReasonsError] = useState("");
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+
+  // Support services
+  const [services, setServices] = useState<string[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [newService, setNewService] = useState("");
+  const [servicesSaving, setServicesSaving] = useState(false);
+  const [servicesError, setServicesError] = useState("");
+  const [servicesOpen, setServicesOpen] = useState(false);
+
   const fetchCats = useCallback(async () => {
     setLoading(true);
     try {
@@ -67,6 +83,24 @@ export default function SettingsView() {
         try { setPositions(JSON.parse(d.value)); } catch { setPositions([]); }
       }
     } catch { } finally { setPosLoading(false); }
+  }, []);
+
+  const fetchReasons = useCallback(async () => {
+    setReasonsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/settings/ticket_reasons`, { headers: adminHeaders() });
+      const d = await res.json();
+      if (d.ok && d.value) { try { setReasons(JSON.parse(d.value)); } catch { setReasons([]); } }
+    } catch { } finally { setReasonsLoading(false); }
+  }, []);
+
+  const fetchServices = useCallback(async () => {
+    setServicesLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/settings/support_services`, { headers: adminHeaders() });
+      const d = await res.json();
+      if (d.ok && d.value) { try { setServices(JSON.parse(d.value)); } catch { setServices([]); } }
+    } catch { } finally { setServicesLoading(false); }
   }, []);
 
   async function savePositions(updated: string[]) {
@@ -95,7 +129,42 @@ export default function SettingsView() {
     savePositions(positions.filter(p => p !== pos));
   }
 
-  useEffect(() => { fetchCats(); fetchPositions(); }, [fetchCats, fetchPositions]);
+  async function saveList(key: string, updated: string[], setter: (v: string[]) => void, setSaving: (v: boolean) => void, setError: (v: string) => void, errKey: string) {
+    setSaving(true); setError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/settings/${key}`, {
+        method: "PUT", headers: adminHeaders(),
+        body: JSON.stringify({ value: JSON.stringify(updated) }),
+      });
+      const d = await res.json();
+      if (!d.ok) setError(t(errKey));
+      else setter(updated);
+    } catch { setError(t(errKey)); } finally { setSaving(false); }
+  }
+
+  function addReason() {
+    const v = newReason.trim();
+    if (!v) return;
+    if (reasons.includes(v)) { setReasonsError(t("admin.settings.ticketReasons.duplicate")); return; }
+    setReasonsError(""); setNewReason("");
+    saveList("ticket_reasons", [...reasons, v], setReasons, setReasonsSaving, setReasonsError, "admin.settings.ticketReasons.saveError");
+  }
+  function removeReason(r: string) {
+    saveList("ticket_reasons", reasons.filter(x => x !== r), setReasons, setReasonsSaving, setReasonsError, "admin.settings.ticketReasons.saveError");
+  }
+
+  function addService() {
+    const v = newService.trim();
+    if (!v) return;
+    if (services.includes(v)) { setServicesError(t("admin.settings.supportServices.duplicate")); return; }
+    setServicesError(""); setNewService("");
+    saveList("support_services", [...services, v], setServices, setServicesSaving, setServicesError, "admin.settings.supportServices.saveError");
+  }
+  function removeService(s: string) {
+    saveList("support_services", services.filter(x => x !== s), setServices, setServicesSaving, setServicesError, "admin.settings.supportServices.saveError");
+  }
+
+  useEffect(() => { fetchCats(); fetchPositions(); fetchReasons(); fetchServices(); }, [fetchCats, fetchPositions, fetchReasons, fetchServices]);
 
   const parentCats = cats.filter(c => !c.parent_id);
 
@@ -406,6 +475,140 @@ export default function SettingsView() {
                       onClick={() => removePosition(pos)}
                       className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all ml-1 text-sm leading-none"
                       title={t("admin.settings.positions.remove")}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>}
+      </div>
+
+      {/* ── Ticket Reasons ─────────────────────────────── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <button
+          onClick={() => setReasonsOpen(o => !o)}
+          className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 text-base">{t("admin.settings.ticketReasons.title")}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.ticketReasons.subtitle")}{!reasonsOpen && reasons.length > 0 && <span className="ml-2 text-amber-600/80 font-semibold">{reasons.length}</span>}</p>
+            </div>
+          </div>
+          <svg className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${reasonsOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {reasonsOpen && <div className="p-6">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.settings.ticketReasons.newLabel")}</label>
+              <input
+                type="text"
+                value={newReason}
+                onChange={e => setNewReason(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addReason(); }}
+                placeholder={t("admin.settings.ticketReasons.placeholder")}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 shadow-sm"
+              />
+            </div>
+            <button
+              onClick={addReason}
+              disabled={reasonsSaving || !newReason.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-sm disabled:opacity-60 transition-all shrink-0"
+            >
+              {reasonsSaving ? <Spinner /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>}
+              {t("admin.settings.ticketReasons.add")}
+            </button>
+          </div>
+          {reasonsError && <p className="text-xs text-red-500 mt-2">{reasonsError}</p>}
+
+          <div className="mt-4">
+            {reasonsLoading ? (
+              <div className="py-8 flex items-center justify-center text-gray-400 text-sm gap-2"><Spinner />{t("admin.settings.loading")}</div>
+            ) : reasons.length === 0 ? (
+              <div className="py-8 text-center text-gray-400 text-sm">{t("admin.settings.ticketReasons.empty")}</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {reasons.map((r, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-full text-sm font-medium text-amber-800 group transition-colors">
+                    {r}
+                    <button
+                      onClick={() => removeReason(r)}
+                      className="text-amber-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all ml-1 text-sm leading-none"
+                      title={t("admin.settings.ticketReasons.remove")}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>}
+      </div>
+
+      {/* ── Support Services ───────────────────────────── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <button
+          onClick={() => setServicesOpen(o => !o)}
+          className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 text-base">{t("admin.settings.supportServices.title")}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{t("admin.settings.supportServices.subtitle")}{!servicesOpen && services.length > 0 && <span className="ml-2 text-blue-600/80 font-semibold">{services.length}</span>}</p>
+            </div>
+          </div>
+          <svg className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${servicesOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {servicesOpen && <div className="p-6">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.settings.supportServices.newLabel")}</label>
+              <input
+                type="text"
+                value={newService}
+                onChange={e => setNewService(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addService(); }}
+                placeholder={t("admin.settings.supportServices.placeholder")}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40 focus:border-blue-400 shadow-sm"
+              />
+            </div>
+            <button
+              onClick={addService}
+              disabled={servicesSaving || !newService.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm disabled:opacity-60 transition-all shrink-0"
+            >
+              {servicesSaving ? <Spinner /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>}
+              {t("admin.settings.supportServices.add")}
+            </button>
+          </div>
+          {servicesError && <p className="text-xs text-red-500 mt-2">{servicesError}</p>}
+
+          <div className="mt-4">
+            {servicesLoading ? (
+              <div className="py-8 flex items-center justify-center text-gray-400 text-sm gap-2"><Spinner />{t("admin.settings.loading")}</div>
+            ) : services.length === 0 ? (
+              <div className="py-8 text-center text-gray-400 text-sm">{t("admin.settings.supportServices.empty")}</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {services.map((s, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-full text-sm font-medium text-blue-800 group transition-colors">
+                    {s}
+                    <button
+                      onClick={() => removeService(s)}
+                      className="text-blue-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all ml-1 text-sm leading-none"
+                      title={t("admin.settings.supportServices.remove")}
                     >×</button>
                   </span>
                 ))}
