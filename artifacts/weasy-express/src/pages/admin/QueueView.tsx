@@ -138,6 +138,16 @@ export default function QueueView() {
   const [dirFilter, setDirFilter]           = useState("all");
   const [search, setSearch]                 = useState("");
 
+  // sorting
+  type SortCol = "ticket" | "createdAt" | "updatedAt";
+  const [sortCol, setSortCol]   = useState<SortCol>("createdAt");
+  const [sortDir, setSortDir]   = useState<"asc" | "desc">("desc");
+
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  }
+
   // new‑ticket modal
   const [showNew, setShowNew]               = useState(false);
   const [form, setForm]                     = useState({ ...DEFAULT_FORM });
@@ -218,6 +228,18 @@ export default function QueueView() {
     }
     return true;
   }), [tickets, statusFilter, dirFilter, search, isAdmin, username]);
+
+  const sorted = useMemo(() => {
+    const KEY_MAP: Record<SortCol, keyof Ticket> = {
+      ticket: "ticket_ref", createdAt: "created_at", updatedAt: "updated_at",
+    };
+    const key = KEY_MAP[sortCol];
+    return [...filtered].sort((a, b) => {
+      const av = String(a[key] ?? "");
+      const bv = String(b[key] ?? "");
+      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }, [filtered, sortCol, sortDir]);
 
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: tickets.length };
@@ -333,7 +355,7 @@ export default function QueueView() {
     } catch { } finally { setSendingComment(false); }
   }
 
-  const pag = usePagination(filtered, 20);
+  const pag = usePagination(sorted, 20);
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -430,11 +452,28 @@ export default function QueueView() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
-                    {["ticket","status","reason","destination","createdAt","updatedAt"].map(col => (
-                      <th key={col} className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                        {t(`admin.queue.cols.${col}`)}
-                      </th>
-                    ))}
+                    {(["ticket","status","reason","destination","createdAt","updatedAt"] as const).map(col => {
+                      const sortable = col === "ticket" || col === "createdAt" || col === "updatedAt";
+                      const active   = sortable && sortCol === col;
+                      return (
+                        <th
+                          key={col}
+                          onClick={sortable ? () => toggleSort(col as SortCol) : undefined}
+                          className={`text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide select-none ${
+                            sortable ? "cursor-pointer hover:text-gray-600" : ""
+                          } ${active ? "text-[#E10600]" : "text-gray-400"}`}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {t(`admin.queue.cols.${col}`)}
+                            {sortable && (
+                              <span className={`transition-opacity ${active ? "opacity-100" : "opacity-0 group-hover:opacity-50"}`}>
+                                {active && sortDir === "asc" ? "↑" : "↓"}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                      );
+                    })}
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
