@@ -2017,9 +2017,11 @@ function ExpediteursView({ onUnauth, lockedHub }: { onUnauth: () => void; locked
                       <button onClick={() => openEdit(e)} className="px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100 transition-colors">
                         {t("admin.expediteurs.edit")}
                       </button>
-                      <button onClick={() => deleteExp(e)} className="px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                        ✕
-                      </button>
+                      {!lockedHub && (
+                        <button onClick={() => deleteExp(e)} className="px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                          ✕
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
