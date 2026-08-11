@@ -1106,7 +1106,7 @@ export default function QueueView() {
               </div>
 
               {/* ── Comment input ── */}
-              {["resolved","closed"].includes(selected.status) ? (
+              {["resolved","closed","pending_accept"].includes(selected.status) ? (
                 <div className="bg-gray-50 border-t border-gray-100 px-4 py-3 text-center text-xs text-gray-400 shrink-0">
                   {t("admin.queue.detail.ticketLocked")}
                 </div>

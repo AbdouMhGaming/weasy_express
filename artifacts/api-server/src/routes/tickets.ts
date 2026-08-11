@@ -284,7 +284,7 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
     const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
 
-    if (["resolved", "closed"].includes(ticket.status)) {
+    if (["resolved", "closed", "pending_accept"].includes(ticket.status)) {
       return res.status(403).json({ ok: false, error: "ticket_locked" });
     }
 
