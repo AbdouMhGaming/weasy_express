@@ -122,6 +122,7 @@ export default function QueueView() {
   const { t } = useTranslation();
   const role  = localStorage.getItem("admin_role") ?? "";
   const username = localStorage.getItem("admin_username") ?? "";
+  const myHub = localStorage.getItem("admin_office_hub") ?? "";
   const isAdmin = role === "admin";
 
   // data
@@ -475,9 +476,9 @@ export default function QueueView() {
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(tk.created_at)}</td>
                         {/* Updated at */}
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{fmtDate(tk.updated_at)}</td>
-                        {/* Claim */}
+                        {/* Claim — hidden for ticket creator */}
                         <td className="px-4 py-3 text-right">
-                          {tk.status === "open" && (
+                          {tk.status === "open" && tk.created_by !== username && (
                             <button
                               onClick={e => claimTicket(tk, e)}
                               className="px-3 py-1.5 bg-[#E10600] hover:bg-[#C50500] text-white text-xs font-bold rounded-lg transition-all"
@@ -823,72 +824,151 @@ export default function QueueView() {
                   </p>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {selected.status === "open" && (
-                    <button
-                      onClick={() => claimTicket(selected)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {t("admin.queue.detail.claim")}
-                    </button>
-                  )}
-                  {["open","claimed","in_progress"].includes(selected.status) && (
-                    <button
-                      onClick={() => { updateStatus(selected, "resolved"); }}
-                      disabled={updatingStatus}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {t("admin.queue.detail.markResolved")}
-                    </button>
-                  )}
+                {/* Action buttons — role-based */}
+                {(() => {
+                  const isSender = selected.created_by === username;
+                  const isRecipient =
+                    isAdmin ||
+                    (role === "office" && selected.destination_type === "central_team") ||
+                    (role === "office" && selected.destination_type === "pickup_desk" && !!myHub && selected.recipient_office === myHub) ||
+                    (role === "expediteur" && selected.destination_type === "merchant" && selected.recipient_username === username);
+                  const st = selected.status;
 
-                  {/* More options */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowStatusMenu(v => !v)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-                      </svg>
-                    </button>
-                    {showStatusMenu && (
-                      <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1.5 text-xs">
-                        {["open","claimed"].includes(selected.status) && (
-                          <button onClick={() => { updateStatus(selected, "in_progress"); setShowStatusMenu(false); }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-amber-600 font-semibold">
-                            {t("admin.queue.detail.markInProgress")}
+                  // Sender-only view (not the recipient)
+                  if (isSender && !isRecipient) {
+                    return (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {["open","claimed","in_progress"].includes(st) && (
+                          <button
+                            onClick={() => updateStatus(selected, "pending_close")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.requestClose")}
                           </button>
                         )}
-                        {["open","claimed","in_progress","resolved"].includes(selected.status) && (
-                          <button onClick={() => { updateStatus(selected, "pending_close"); setShowStatusMenu(false); }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-orange-600 font-semibold">
-                            {t("admin.queue.filters.pending_close")}
+                        {["closed","resolved"].includes(st) && (
+                          <button
+                            onClick={() => updateStatus(selected, "pending_accept")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.requestReopen")}
                           </button>
                         )}
-                        {selected.status !== "closed" && (
-                          <button onClick={() => { updateStatus(selected, "closed"); setShowStatusMenu(false); }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-gray-500 font-semibold">
-                            {t("admin.queue.detail.markClosed")}
-                          </button>
-                        )}
-                        {selected.status !== "open" && (
-                          <button onClick={() => { updateStatus(selected, "open"); setShowStatusMenu(false); }}
-                            className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-blue-600 font-semibold border-t border-gray-100 mt-1 pt-2">
-                            Reopen
-                          </button>
+                        {["pending_close","pending_accept"].includes(st) && (
+                          <span className="text-xs text-gray-400 italic px-2">{t("admin.queue.detail.awaitingApproval")}</span>
                         )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    );
+                  }
+
+                  // Recipient / admin view
+                  return (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Accept pending_close → close it */}
+                      {st === "pending_close" && (
+                        <>
+                          <button
+                            onClick={() => updateStatus(selected, "closed")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-900 text-white text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.acceptClose")}
+                          </button>
+                          <button
+                            onClick={() => updateStatus(selected, "open")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.rejectClose")}
+                          </button>
+                        </>
+                      )}
+                      {/* Accept pending_accept → reopen */}
+                      {st === "pending_accept" && (
+                        <>
+                          <button
+                            onClick={() => updateStatus(selected, "open")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.acceptReopen")}
+                          </button>
+                          <button
+                            onClick={() => updateStatus(selected, "closed")}
+                            disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                          >
+                            {t("admin.queue.detail.rejectReopen")}
+                          </button>
+                        </>
+                      )}
+                      {/* Normal active statuses */}
+                      {!["pending_close","pending_accept"].includes(st) && (
+                        <>
+                          {/* Claim — only for non-creator recipients */}
+                          {st === "open" && !isSender && (
+                            <button
+                              onClick={() => claimTicket(selected)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-all"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              {t("admin.queue.detail.claim")}
+                            </button>
+                          )}
+                          {["open","claimed","in_progress"].includes(st) && (
+                            <button
+                              onClick={() => updateStatus(selected, "resolved")}
+                              disabled={updatingStatus}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-lg transition-all disabled:opacity-60"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              {t("admin.queue.detail.markResolved")}
+                            </button>
+                          )}
+                          {/* More options */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowStatusMenu(v => !v)}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                              </svg>
+                            </button>
+                            {showStatusMenu && (
+                              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1.5 text-xs">
+                                {["open","claimed"].includes(st) && (
+                                  <button onClick={() => { updateStatus(selected, "in_progress"); setShowStatusMenu(false); }}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-amber-600 font-semibold">
+                                    {t("admin.queue.detail.markInProgress")}
+                                  </button>
+                                )}
+                                {st !== "closed" && (
+                                  <button onClick={() => { updateStatus(selected, "closed"); setShowStatusMenu(false); }}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-gray-500 font-semibold">
+                                    {t("admin.queue.detail.markClosed")}
+                                  </button>
+                                )}
+                                {st !== "open" && (
+                                  <button onClick={() => { updateStatus(selected, "open"); setShowStatusMenu(false); }}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-gray-50 text-blue-600 font-semibold border-t border-gray-100 mt-1 pt-2">
+                                    {t("admin.queue.detail.requestReopen")}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ── Tag strip ── */}
@@ -1026,35 +1106,41 @@ export default function QueueView() {
               </div>
 
               {/* ── Comment input ── */}
-              <div className="bg-white border-t border-gray-100 px-4 py-3 flex items-end gap-3 shrink-0">
-                <textarea
-                  ref={commentRef}
-                  value={commentText}
-                  onChange={e => {
-                    setCommentText(e.target.value);
-                    e.target.style.height = "auto";
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                  }}
-                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment(); }}
-                  placeholder={t("admin.queue.detail.writeComment")}
-                  rows={1}
-                  className="flex-1 resize-none border border-gray-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-gray-50 transition-all leading-relaxed"
-                  style={{ minHeight: "42px", maxHeight: "120px" }}
-                />
-                <button
-                  onClick={sendComment}
-                  disabled={sendingComment || !commentText.trim()}
-                  className="w-9 h-9 bg-[#E10600] hover:bg-[#C50500] disabled:bg-gray-200 rounded-full flex items-center justify-center text-white transition-all shrink-0 mb-0.5"
-                >
-                  {sendingComment
-                    ? <Spinner />
-                    : (
-                      <svg className="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                    )}
-                </button>
-              </div>
+              {["resolved","closed"].includes(selected.status) ? (
+                <div className="bg-gray-50 border-t border-gray-100 px-4 py-3 text-center text-xs text-gray-400 shrink-0">
+                  {t("admin.queue.detail.ticketLocked")}
+                </div>
+              ) : (
+                <div className="bg-white border-t border-gray-100 px-4 py-3 flex items-end gap-3 shrink-0">
+                  <textarea
+                    ref={commentRef}
+                    value={commentText}
+                    onChange={e => {
+                      setCommentText(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                    }}
+                    onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment(); }}
+                    placeholder={t("admin.queue.detail.writeComment")}
+                    rows={1}
+                    className="flex-1 resize-none border border-gray-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-gray-50 transition-all leading-relaxed"
+                    style={{ minHeight: "42px", maxHeight: "120px" }}
+                  />
+                  <button
+                    onClick={sendComment}
+                    disabled={sendingComment || !commentText.trim()}
+                    className="w-9 h-9 bg-[#E10600] hover:bg-[#C50500] disabled:bg-gray-200 rounded-full flex items-center justify-center text-white transition-all shrink-0 mb-0.5"
+                  >
+                    {sendingComment
+                      ? <Spinner />
+                      : (
+                        <svg className="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                      )}
+                  </button>
+                </div>
+              )}
 
             </div>
           </div>

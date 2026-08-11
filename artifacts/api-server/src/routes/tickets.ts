@@ -182,13 +182,38 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
 
     const myHub = (role === "office") ? await getUserHub(conn, username) : null;
-    const allowed =
+
+    const isSender = ticket.created_by === username;
+    const isRecipient =
       role === "admin" ||
-      ticket.created_by === username ||
-      (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "office" && ticket.destination_type === "central_team") ||
+      (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
-    if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
+
+    // Recipients (admin/office/expediteur who receives the ticket) can freely change
+    // to normal statuses but cannot set pending_ states (those are sender-only).
+    // Senders can only request close (pending_close) or request reopen (pending_accept).
+    const RECIPIENT_STATUSES = ["open", "claimed", "in_progress", "resolved", "closed"];
+
+    if (isRecipient) {
+      if (!RECIPIENT_STATUSES.includes(status)) {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
+    } else if (isSender) {
+      if (status === "pending_close") {
+        if (!["open", "claimed", "in_progress"].includes(ticket.status)) {
+          return res.status(400).json({ ok: false, error: "Invalid transition" });
+        }
+      } else if (status === "pending_accept") {
+        if (!["closed", "resolved"].includes(ticket.status)) {
+          return res.status(400).json({ ok: false, error: "Invalid transition" });
+        }
+      } else {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
+    } else {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
 
     await conn.execute("UPDATE tickets SET status = ? WHERE id = ?", [status, id]);
     await logEvent(conn, id, "status_change", username, null, status);
@@ -258,6 +283,10 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
   try {
     const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
+
+    if (["resolved", "closed"].includes(ticket.status)) {
+      return res.status(403).json({ ok: false, error: "ticket_locked" });
+    }
 
     const username = req.adminUsername!;
     const [result]: any = await conn.execute(
