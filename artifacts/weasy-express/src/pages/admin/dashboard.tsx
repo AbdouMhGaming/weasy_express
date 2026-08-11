@@ -233,6 +233,9 @@ function SidebarInner({
           {navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           )}
+          {navItem("expediteurs", t("admin.expediteurs.title"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          )}
           {navItem("analytics", t("admin.sidebar.analytics"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
@@ -1875,7 +1878,7 @@ function OfficesView({ offices, loading, error, onRefresh, onUnauth }: {
 
 // ── Expediteurs view ───────────────────────────────────────────────────────────
 
-function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
+function ExpediteursView({ onUnauth, lockedHub }: { onUnauth: () => void; lockedHub?: string }) {
   const { t } = useTranslation();
   const [list, setList]         = useState<ExpéditeurUser[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -1887,7 +1890,7 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
   const [addPass, setAddPass]   = useState("");
   const [addPhone, setAddPhone] = useState("");
   const [addEmail, setAddEmail] = useState("");
-  const [addHub, setAddHub]     = useState("");
+  const [addHub, setAddHub]     = useState(lockedHub ?? "");
   const [saving, setSaving]     = useState(false);
   const [formErr, setFormErr]   = useState("");
 
@@ -1931,7 +1934,7 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
       if (r.status === 401) { onUnauth(); return; }
       const d = await r.json();
       if (d.ok) {
-        setShowAdd(false); setAddUser(""); setAddPass(""); setAddPhone(""); setAddEmail(""); setAddHub("");
+        setShowAdd(false); setAddUser(""); setAddPass(""); setAddPhone(""); setAddEmail(""); setAddHub(lockedHub ?? "");
         fetchList();
       } else setFormErr(d.error === "username_taken" ? t("admin.expediteurs.usernameTaken") : t("admin.expediteurs.saveError"));
     } finally { setSaving(false); }
@@ -1965,6 +1968,8 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
 
   const hubOptions = offices.map(o => `${o.wilaya}${o.commune ? ` — ${o.commune}` : ""}`);
   const roleColor = ROLE_COLOR.expediteur;
+  // Office agents only see expediteurs linked to their own hub
+  const visibleList = lockedHub ? list.filter(e => e.office_hub === lockedHub) : list;
 
   return (
     <>
@@ -1986,11 +1991,11 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {list.length === 0 ? (
+            {visibleList.length === 0 ? (
               <p className="text-center text-sm text-gray-400 py-12">{t("admin.expediteurs.empty")}</p>
             ) : (
               <div className="divide-y divide-gray-50">
-                {list.map(e => (
+                {visibleList.map(e => (
                   <div key={e.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/70 group transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs shrink-0">
@@ -2046,13 +2051,15 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
                 <input type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
-                <select value={addHub} onChange={e => setAddHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
-                  <option value="">—</option>
-                  {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {!lockedHub && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
+                  <select value={addHub} onChange={e => setAddHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
+                    <option value="">—</option>
+                    {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
               {formErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{formErr}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
@@ -2089,13 +2096,15 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
                 <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
-                <select value={editHub} onChange={e => setEditHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
-                  <option value="">—</option>
-                  {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {!lockedHub && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
+                  <select value={editHub} onChange={e => setEditHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
+                    <option value="">—</option>
+                    {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
               {editErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{editErr}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
@@ -2633,8 +2642,9 @@ export default function AdminDashboard() {
             view === "merchants" ? <ComingSoonView section="merchants" /> :
             view === "payouts"   ? <PayoutsRequestView onUnauth={unauth} /> :
             view === "messaging" ? <ComingSoonView section="messaging" /> :
-            view === "team"      ? <TeamView onUnauth={unauth} /> :
-            view === "analytics" ? <ComingSoonView section="analytics" /> :
+            view === "team"         ? <TeamView onUnauth={unauth} /> :
+            view === "expediteurs"  ? <ExpediteursView onUnauth={unauth} lockedHub={localStorage.getItem("admin_office_hub") ?? undefined} /> :
+            view === "analytics"    ? <ComingSoonView section="analytics" /> :
             <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
           ) : role === "finance" ? (
             view === "commissions" ? <CommissionsView /> :
