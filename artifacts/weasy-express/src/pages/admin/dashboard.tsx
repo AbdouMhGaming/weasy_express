@@ -1966,61 +1966,6 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
   const hubOptions = offices.map(o => `${o.wilaya}${o.commune ? ` — ${o.commune}` : ""}`);
   const roleColor = ROLE_COLOR.expediteur;
 
-  const ModalForm = ({ isEdit }: { isEdit?: boolean }) => {
-    const [user, setUser] = isEdit ? [editUser, setEditUser] : [addUser, setAddUser];
-    const [pass, setPass] = isEdit ? [editPass, setEditPass] : [addPass, setAddPass];
-    const [phone, setPhone] = isEdit ? [editPhone, setEditPhone] : [addPhone, setAddPhone];
-    const [email, setEmail] = isEdit ? [editEmail, setEditEmail] : [addEmail, setAddEmail];
-    const [hub, setHub] = isEdit ? [editHub, setEditHub] : [addHub, setAddHub];
-    const err = isEdit ? editErr : formErr;
-    const isSaving = isEdit ? editSaving : saving;
-    const onSubmit = isEdit ? updateExpediteur : createExpediteur;
-    const onClose = isEdit ? () => setShowEdit(false) : () => setShowAdd(false);
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-5">
-            {isEdit ? t("admin.expediteurs.editTitle") : t("admin.expediteurs.addTitle")}
-          </h2>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.username")}</label>
-              <input value={user} onChange={e => setUser(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="username" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{isEdit ? t("admin.admins.fields.newPassword") : t("admin.admins.fields.password")}</label>
-              <input type="password" value={pass} onChange={e => setPass(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder={isEdit ? t("admin.admins.fields.passwordHint") : "••••••••"} />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.phone")}</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="+213..." />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
-              <select value={hub} onChange={e => setHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
-                <option value="">—</option>
-                {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
-              </select>
-            </div>
-            {err && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{err}</p>}
-          </div>
-          <div className="flex justify-end gap-2 mt-6">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
-              {t("admin.expediteurs.cancel")}
-            </button>
-            <button onClick={onSubmit} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl transition-colors disabled:opacity-60">
-              {isSaving ? t("admin.expediteurs.saving") : t("admin.expediteurs.save")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
       <div className="p-3 sm:p-6 lg:p-8">
@@ -2079,8 +2024,91 @@ function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
         )}
       </div>
 
-      {showAdd && <ModalForm />}
-      {showEdit && <ModalForm isEdit />}
+      {/* Add modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-5">{t("admin.expediteurs.addTitle")}</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.username")}</label>
+                <input value={addUser} onChange={e => setAddUser(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="username" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.password")}</label>
+                <input type="password" value={addPass} onChange={e => setAddPass(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="••••••••" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.phone")}</label>
+                <input value={addPhone} onChange={e => setAddPhone(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="+213..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
+                <input type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
+                <select value={addHub} onChange={e => setAddHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
+                  <option value="">—</option>
+                  {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+              {formErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{formErr}</p>}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+                {t("admin.expediteurs.cancel")}
+              </button>
+              <button onClick={createExpediteur} disabled={saving} className="px-4 py-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl transition-colors disabled:opacity-60">
+                {saving ? t("admin.expediteurs.saving") : t("admin.expediteurs.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {showEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-5">{t("admin.expediteurs.editTitle")}</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.username")}</label>
+                <input value={editUser} onChange={e => setEditUser(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="username" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.newPassword")}</label>
+                <input type="password" value={editPass} onChange={e => setEditPass(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder={t("admin.admins.fields.passwordHint")} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.phone")}</label>
+                <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="+213..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
+                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
+                <select value={editHub} onChange={e => setEditHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
+                  <option value="">—</option>
+                  {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+              {editErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{editErr}</p>}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setShowEdit(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+                {t("admin.expediteurs.cancel")}
+              </button>
+              <button onClick={updateExpediteur} disabled={editSaving} className="px-4 py-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl transition-colors disabled:opacity-60">
+                {editSaving ? t("admin.expediteurs.saving") : t("admin.expediteurs.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
