@@ -10,6 +10,7 @@ interface Ticket {
   ticket_ref: string;
   destination_type: "merchant" | "central_team" | "pickup_desk";
   recipient_username: string | null;
+  recipient_office: string | null;
   support_service: string | null;
   reason: string;
   custom_reason: string | null;
@@ -63,6 +64,7 @@ const DIRECTION_TABS = ["all","incoming","outgoing"] as const;
 const DEFAULT_FORM = {
   destination: "merchant" as "merchant"|"central_team"|"pickup_desk",
   recipientUsername: "",
+  recipientOffice: "",
   supportService: "",
   reason: "",
   customReason: "",
@@ -125,8 +127,8 @@ export default function QueueView() {
   // data
   const [tickets, setTickets]               = useState<Ticket[]>([]);
   const [loading, setLoading]               = useState(true);
-  const [commercialUsers, setCommercialUsers] = useState<AdminUser[]>([]);
-  const [officeUsers, setOfficeUsers]       = useState<AdminUser[]>([]);
+  const [expediteurUsers, setExpediteurUsers] = useState<AdminUser[]>([]);
+  const [officesList, setOfficesList]         = useState<{ id: number; wilaya: string; commune: string | null }[]>([]);
   const [ticketReasons, setTicketReasons]   = useState<string[]>([]);
   const [supportServices, setSupportServices] = useState<string[]>([]);
 
@@ -168,15 +170,15 @@ export default function QueueView() {
 
   const fetchMeta = useCallback(async () => {
     try {
-      const [cu, ou, tr, ss] = await Promise.all([
-        fetch(`${API_BASE}/api/admin/users/commercial`, { headers: adminHeaders() }),
-        fetch(`${API_BASE}/api/admin/users/office`,     { headers: adminHeaders() }),
+      const [eu, ol, tr, ss] = await Promise.all([
+        fetch(`${API_BASE}/api/admin/users/expediteur`,           { headers: adminHeaders() }),
+        fetch(`${API_BASE}/api/admin/offices-simple`,             { headers: adminHeaders() }),
         fetch(`${API_BASE}/api/admin/settings/ticket_reasons`,   { headers: adminHeaders() }),
         fetch(`${API_BASE}/api/admin/settings/support_services`, { headers: adminHeaders() }),
       ]);
-      const [cd, od, td, sd] = await Promise.all([cu.json(), ou.json(), tr.json(), ss.json()]);
-      if (cd.ok) setCommercialUsers(cd.users ?? []);
-      if (od.ok) setOfficeUsers(od.users ?? []);
+      const [ed, od, td, sd] = await Promise.all([eu.json(), ol.json(), tr.json(), ss.json()]);
+      if (ed.ok) setExpediteurUsers(ed.users ?? []);
+      if (od.ok) setOfficesList(od.offices ?? []);
       if (td.ok && td.value) try { setTicketReasons(JSON.parse(td.value)); } catch { setTicketReasons([]); }
       if (sd.ok && sd.value) try { setSupportServices(JSON.parse(sd.value)); } catch { setSupportServices([]); }
     } catch { }
@@ -196,9 +198,10 @@ export default function QueueView() {
 
   // ── Filter ─────────────────────────────────────────────────────────────
 
+  const canFilterDir = isAdmin || role === "office" || role === "expediteur";
   const filtered = useMemo(() => tickets.filter(tk => {
     if (statusFilter !== "all" && tk.status !== statusFilter) return false;
-    if (isAdmin) {
+    if (canFilterDir) {
       if (dirFilter === "incoming" && tk.created_by === username) return false;
       if (dirFilter === "outgoing" && tk.created_by !== username) return false;
     }
@@ -218,18 +221,21 @@ export default function QueueView() {
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: tickets.length };
     tickets.forEach(tk => { m[tk.status] = (m[tk.status] ?? 0) + 1; });
-    if (isAdmin) {
+    if (canFilterDir) {
       m.incoming = tickets.filter(tk => tk.created_by !== username).length;
       m.outgoing = tickets.filter(tk => tk.created_by === username).length;
     }
     return m;
-  }, [tickets, isAdmin, username]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickets, canFilterDir, username]);
 
   // ── Actions ────────────────────────────────────────────────────────────
 
   async function submitTicket() {
     if (!form.reason) { setSubmitError(t("admin.queue.newModal.reasonRequired")); return; }
-    if (form.destination !== "central_team" && !form.recipientUsername)
+    if (form.destination === "merchant" && !form.recipientUsername)
+      { setSubmitError(t("admin.queue.newModal.recipientRequired")); return; }
+    if (form.destination === "pickup_desk" && !form.recipientOffice)
       { setSubmitError(t("admin.queue.newModal.recipientRequired")); return; }
     if (form.destination === "central_team" && !form.supportService)
       { setSubmitError(t("admin.queue.newModal.serviceRequired")); return; }
@@ -243,9 +249,10 @@ export default function QueueView() {
       const r = await fetch(`${API_BASE}/api/tickets`, {
         method: "POST", headers: adminHeaders(),
         body: JSON.stringify({
-          destination_type:    form.destination,
-          recipient_username:  form.recipientUsername || null,
-          support_service:     form.supportService || null,
+          destination_type:   form.destination,
+          recipient_username: form.destination === "merchant" ? (form.recipientUsername || null) : null,
+          recipient_office:   form.destination === "pickup_desk" ? (form.recipientOffice || null) : null,
+          support_service:    form.supportService || null,
           reason:              form.reason === "other" ? (form.customReason || "other") : form.reason,
           custom_reason:       form.reason === "other" ? form.customReason : null,
           comment:             form.comment || null,
@@ -341,9 +348,14 @@ export default function QueueView() {
           <h1 className="text-2xl font-bold text-gray-900">{t("admin.queue.title")}</h1>
           <p className="text-sm text-gray-400 mt-0.5">{t("admin.queue.subtitle")}</p>
         </div>
-        {isAdmin && (
+        {(isAdmin || role === "office" || role === "expediteur") && (
           <button
-            onClick={() => { setShowNew(true); setForm({ ...DEFAULT_FORM }); setSubmitError(""); setSubmitSuccess(""); }}
+            onClick={() => {
+              const defaultDest = role === "expediteur" ? "central_team" : "merchant";
+              setShowNew(true);
+              setForm({ ...DEFAULT_FORM, destination: defaultDest as typeof DEFAULT_FORM["destination"] });
+              setSubmitError(""); setSubmitSuccess("");
+            }}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#E10600] hover:bg-[#C50500] text-white text-sm font-bold rounded-xl shadow-sm transition-all"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,8 +366,8 @@ export default function QueueView() {
         )}
       </div>
 
-      {/* ── Direction filter (admin) ── */}
-      {isAdmin && (
+      {/* ── Direction filter ── */}
+      {(isAdmin || role === "office" || role === "expediteur") && (
         <div className="flex items-center gap-1 mb-3 flex-wrap">
           {DIRECTION_TABS.map(d => (
             <button key={d} onClick={() => setDirFilter(d)} className={filterTabCls(dirFilter === d)}>
@@ -453,6 +465,8 @@ export default function QueueView() {
                             <span className="text-sm text-gray-600 font-medium max-w-[120px] truncate">
                               {tk.destination_type === "central_team"
                                 ? (tk.support_service ?? t("admin.queue.newModal.centralTeam"))
+                                : tk.destination_type === "pickup_desk"
+                                ? (tk.recipient_office ?? tk.recipient_username ?? "—")
                                 : (tk.recipient_username ?? "—")}
                             </span>
                           </div>
@@ -497,7 +511,7 @@ export default function QueueView() {
                         <p className="text-xs text-gray-600 mb-0.5">{tk.custom_reason || tk.reason}</p>
                         <div className="flex items-center gap-2 text-xs text-gray-400">
                           <span className={`w-4 h-4 rounded flex items-center justify-center text-xs ${dest.color}`}>{dest.icon}</span>
-                          <span>{tk.recipient_username ?? tk.support_service ?? "—"}</span>
+                          <span>{tk.destination_type === "pickup_desk" ? (tk.recipient_office ?? tk.recipient_username ?? "—") : (tk.recipient_username ?? tk.support_service ?? "—")}</span>
                           <span>·</span>
                           <span>{fmtDate(tk.created_at)}</span>
                         </div>
@@ -548,29 +562,34 @@ export default function QueueView() {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">
                   {t("admin.queue.newModal.destination")}
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { key: "merchant",     icon: "🏪", label: t("admin.queue.newModal.merchant") },
-                    { key: "central_team", icon: "🎯", label: t("admin.queue.newModal.centralTeam") },
-                    { key: "pickup_desk",  icon: "🏢", label: t("admin.queue.newModal.pickupDesk") },
-                  ].map(dest => (
-                    <button
-                      key={dest.key} type="button"
-                      onClick={() => setForm(f => ({ ...f, destination: dest.key as any, recipientUsername: "", supportService: "" }))}
-                      className={`flex flex-col items-center gap-1.5 p-3.5 rounded-xl border-2 text-xs font-semibold transition-all ${
-                        form.destination === dest.key
-                          ? "border-[#E10600] bg-[#E10600]/5 text-[#E10600]"
-                          : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      <span className="text-2xl">{dest.icon}</span>
-                      <span className="text-center leading-tight">{dest.label}</span>
-                    </button>
-                  ))}
-                </div>
+                {(() => {
+                  const dests = [
+                    { key: "merchant",     icon: "🏪", label: t("admin.queue.newModal.merchant"),    hide: role === "expediteur" },
+                    { key: "central_team", icon: "🎯", label: t("admin.queue.newModal.centralTeam"), hide: false },
+                    { key: "pickup_desk",  icon: "🏢", label: t("admin.queue.newModal.pickupDesk"),  hide: false },
+                  ].filter(d => !d.hide);
+                  return (
+                    <div className={`grid gap-2 grid-cols-${dests.length}`}>
+                      {dests.map(dest => (
+                        <button
+                          key={dest.key} type="button"
+                          onClick={() => setForm(f => ({ ...f, destination: dest.key as typeof DEFAULT_FORM["destination"], recipientUsername: "", recipientOffice: "", supportService: "" }))}
+                          className={`flex flex-col items-center gap-1.5 p-3.5 rounded-xl border-2 text-xs font-semibold transition-all ${
+                            form.destination === dest.key
+                              ? "border-[#E10600] bg-[#E10600]/5 text-[#E10600]"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          <span className="text-2xl">{dest.icon}</span>
+                          <span className="text-center leading-tight">{dest.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Merchant select */}
+              {/* Expéditeur select */}
               {form.destination === "merchant" && (
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
@@ -582,7 +601,7 @@ export default function QueueView() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
                   >
                     <option value="">{t("admin.queue.newModal.selectMerchant")}</option>
-                    {commercialUsers.map(u => (
+                    {expediteurUsers.filter(u => u.username !== username).map(u => (
                       <option key={u.id} value={u.username}>
                         {u.username}{u.office_hub ? ` (${u.office_hub})` : ""}
                       </option>
@@ -591,23 +610,22 @@ export default function QueueView() {
                 </div>
               )}
 
-              {/* Office agent select */}
+              {/* Office (pickup desk) select */}
               {form.destination === "pickup_desk" && (
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                     {t("admin.queue.newModal.pickupDesk")}
                   </label>
                   <select
-                    value={form.recipientUsername}
-                    onChange={e => setForm(f => ({ ...f, recipientUsername: e.target.value }))}
+                    value={form.recipientOffice}
+                    onChange={e => setForm(f => ({ ...f, recipientOffice: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
                   >
                     <option value="">{t("admin.queue.newModal.selectOffice")}</option>
-                    {officeUsers.map(u => (
-                      <option key={u.id} value={u.username}>
-                        {u.username}{u.office_hub ? ` (${u.office_hub})` : ""}
-                      </option>
-                    ))}
+                    {officesList.map(o => {
+                      const label = `${o.wilaya}${o.commune ? ` — ${o.commune}` : ""}`;
+                      return <option key={o.id} value={label}>{label}</option>;
+                    })}
                   </select>
                 </div>
               )}

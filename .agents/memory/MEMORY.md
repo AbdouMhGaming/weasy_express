@@ -7,3 +7,4 @@
 - [DB migration env vars](db-migration-env.md) — migration scripts use DB_HOST/DB_NAME/DB_USER/DB_PASS (MySQL); DATABASE_URL is a Replit PostgreSQL URL and is unrelated to the app DB.
 - [Drizzle bypass for schema mismatch](drizzle-bypass.md) — when DB column type differs from Drizzle schema (e.g. wilaya_number VARCHAR vs int), use raw pool.getConnection() SQL for INSERT/UPDATE on those columns.
 - [Workers & Décharges sections](workers-decharges.md) — workers/decharges tables added; PDF generated client-side with jspdf+jsbarcode (dynamic import); worker_positions stored as JSON in app_settings; financeOrAdminOnly middleware guards all routes.
+- [Expediteur role & features](expediteur-features.md) — full Expediteur role, payouts, team sub-accounts, and ticket system overhaul; key decisions and file locations documented.

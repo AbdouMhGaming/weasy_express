@@ -8,7 +8,9 @@ const SettingsView    = lazy(() => import("./SettingsView"));
 const OfficeDashboardView = lazy(() => import("./OfficeDashboardView"));
 const WorkersView     = lazy(() => import("./WorkersView"));
 const DechargesView   = lazy(() => import("./DechargesView"));
-const QueueView       = lazy(() => import("./QueueView"));
+const QueueView              = lazy(() => import("./QueueView"));
+const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
+const TeamView               = lazy(() => import("./TeamView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -19,7 +21,7 @@ import { WILAYA_LIST } from "@/lib/wilayas";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type PartnerStatus = "pending" | "reviewing" | "approved" | "rejected";
-type AdminRole = "admin" | "office" | "finance" | "commercial";
+type AdminRole = "admin" | "office" | "finance" | "commercial" | "expediteur";
 type OrderStatus = "pending" | "in_transit" | "delivered" | "returned" | "failed" | "cancelled";
 
 interface Partner {
@@ -33,8 +35,12 @@ interface Office {
 }
 interface AdminUser {
   id: number; username: string; role: AdminRole; office_hub: string;
+  phone: string | null; email: string | null;
   allowed_partner_statuses: string | null; can_change_partner_status: number;
   createdAt: string;
+}
+interface ExpéditeurUser {
+  id: number; username: string; phone: string | null; email: string | null; office_hub: string | null; createdAt: string;
 }
 interface Order {
   id: number; trackingNumber: string | null; status: OrderStatus;
@@ -93,12 +99,13 @@ const ROLE_COLOR: Record<AdminRole, string> = {
   office: "bg-blue-100 text-blue-800",
   finance: "bg-emerald-100 text-emerald-800",
   commercial: "bg-orange-100 text-orange-800",
+  expediteur: "bg-amber-100 text-amber-800",
 };
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
+type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -155,6 +162,9 @@ function SidebarInner({
           )}
           {navItem("admins", t("admin.sidebar.admins"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+          )}
+          {navItem("expediteurs", t("admin.expediteurs.title"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
           {navItem("performance", t("admin.sidebar.performance"), 0,
@@ -246,6 +256,18 @@ function SidebarInner({
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItem("partners", t("admin.sidebar.partners"), partnerCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          )}
+        </nav>
+      ) : role === "expediteur" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItem("queue", t("admin.sidebar.queue"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+          )}
+          {navItem("payouts", t("admin.sidebar.payouts"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          )}
+          {navItem("team", t("admin.sidebar.team"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           )}
         </nav>
       ) : (
@@ -1851,6 +1873,218 @@ function OfficesView({ offices, loading, error, onRefresh, onUnauth }: {
   );
 }
 
+// ── Expediteurs view ───────────────────────────────────────────────────────────
+
+function ExpediteursView({ onUnauth }: { onUnauth: () => void }) {
+  const { t } = useTranslation();
+  const [list, setList]         = useState<ExpéditeurUser[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [offices, setOffices]   = useState<Office[]>([]);
+
+  // add form
+  const [showAdd, setShowAdd]   = useState(false);
+  const [addUser, setAddUser]   = useState("");
+  const [addPass, setAddPass]   = useState("");
+  const [addPhone, setAddPhone] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addHub, setAddHub]     = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [formErr, setFormErr]   = useState("");
+
+  // edit form
+  const [showEdit, setShowEdit]   = useState(false);
+  const [editId, setEditId]       = useState<number | null>(null);
+  const [editUser, setEditUser]   = useState("");
+  const [editPass, setEditPass]   = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editHub, setEditHub]     = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr]     = useState("");
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/expediteurs`, { headers: adminHeaders() });
+      if (r.status === 401) { onUnauth(); return; }
+      const d = await r.json();
+      if (d.ok) setList(d.expediteurs ?? []);
+    } finally { setLoading(false); }
+  }, [onUnauth]);
+
+  const fetchOffices = useCallback(async () => {
+    const r = await fetch(`${API_BASE}/api/admin/offices`, { headers: adminHeaders() });
+    const d = await r.json();
+    if (d.ok) setOffices(d.offices ?? []);
+  }, []);
+
+  useEffect(() => { fetchList(); fetchOffices(); }, [fetchList, fetchOffices]);
+
+  async function createExpediteur() {
+    if (!addUser.trim() || addPass.length < 8) { setFormErr(t("admin.expediteurs.formError")); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/admin/expediteurs`, {
+        method: "POST", headers: adminHeaders(),
+        body: JSON.stringify({ username: addUser.trim(), password: addPass, phone: addPhone, email: addEmail, office_hub: addHub }),
+      });
+      if (r.status === 401) { onUnauth(); return; }
+      const d = await r.json();
+      if (d.ok) {
+        setShowAdd(false); setAddUser(""); setAddPass(""); setAddPhone(""); setAddEmail(""); setAddHub("");
+        fetchList();
+      } else setFormErr(d.error === "username_taken" ? t("admin.expediteurs.usernameTaken") : t("admin.expediteurs.saveError"));
+    } finally { setSaving(false); }
+  }
+
+  function openEdit(e: ExpéditeurUser) {
+    setEditId(e.id); setEditUser(e.username); setEditPass(""); setEditPhone(e.phone ?? "");
+    setEditEmail(e.email ?? ""); setEditHub(e.office_hub ?? ""); setEditErr(""); setShowEdit(true);
+  }
+
+  async function updateExpediteur() {
+    if (!editUser.trim()) { setEditErr(t("admin.expediteurs.formError")); return; }
+    if (editPass && editPass.length < 8) { setEditErr(t("admin.expediteurs.formError")); return; }
+    setEditSaving(true);
+    try {
+      const body: Record<string, unknown> = { username: editUser.trim(), phone: editPhone, email: editEmail, office_hub: editHub };
+      if (editPass) body.password = editPass;
+      const r = await fetch(`${API_BASE}/api/admin/expediteurs/${editId}`, { method: "PUT", headers: adminHeaders(), body: JSON.stringify(body) });
+      if (r.status === 401) { onUnauth(); return; }
+      const d = await r.json();
+      if (d.ok) { setShowEdit(false); fetchList(); }
+      else setEditErr(d.error === "username_taken" ? t("admin.expediteurs.usernameTaken") : t("admin.expediteurs.saveError"));
+    } finally { setEditSaving(false); }
+  }
+
+  async function deleteExp(e: ExpéditeurUser) {
+    if (!confirm(t("admin.expediteurs.deleteConfirm"))) return;
+    await fetch(`${API_BASE}/api/admin/expediteurs/${e.id}`, { method: "DELETE", headers: adminHeaders() });
+    fetchList();
+  }
+
+  const hubOptions = offices.map(o => `${o.wilaya}${o.commune ? ` — ${o.commune}` : ""}`);
+  const roleColor = ROLE_COLOR.expediteur;
+
+  const ModalForm = ({ isEdit }: { isEdit?: boolean }) => {
+    const [user, setUser] = isEdit ? [editUser, setEditUser] : [addUser, setAddUser];
+    const [pass, setPass] = isEdit ? [editPass, setEditPass] : [addPass, setAddPass];
+    const [phone, setPhone] = isEdit ? [editPhone, setEditPhone] : [addPhone, setAddPhone];
+    const [email, setEmail] = isEdit ? [editEmail, setEditEmail] : [addEmail, setAddEmail];
+    const [hub, setHub] = isEdit ? [editHub, setEditHub] : [addHub, setAddHub];
+    const err = isEdit ? editErr : formErr;
+    const isSaving = isEdit ? editSaving : saving;
+    const onSubmit = isEdit ? updateExpediteur : createExpediteur;
+    const onClose = isEdit ? () => setShowEdit(false) : () => setShowAdd(false);
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-5">
+            {isEdit ? t("admin.expediteurs.editTitle") : t("admin.expediteurs.addTitle")}
+          </h2>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.admins.fields.username")}</label>
+              <input value={user} onChange={e => setUser(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="username" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{isEdit ? t("admin.admins.fields.newPassword") : t("admin.admins.fields.password")}</label>
+              <input type="password" value={pass} onChange={e => setPass(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder={isEdit ? t("admin.admins.fields.passwordHint") : "••••••••"} />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.phone")}</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="+213..." />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.email")}</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600]" placeholder="email@..." />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{t("admin.expediteurs.fields.officeHub")}</label>
+              <select value={hub} onChange={e => setHub(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#E10600] bg-white">
+                <option value="">—</option>
+                {hubOptions.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+            {err && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{err}</p>}
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+              {t("admin.expediteurs.cancel")}
+            </button>
+            <button onClick={onSubmit} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl transition-colors disabled:opacity-60">
+              {isSaving ? t("admin.expediteurs.saving") : t("admin.expediteurs.save")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="p-3 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t("admin.expediteurs.title")}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{t("admin.expediteurs.subtitle")}</p>
+          </div>
+          <button onClick={() => { setFormErr(""); setShowAdd(true); }} className="flex items-center gap-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white px-4 py-2.5 rounded-xl shadow-sm transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+            {t("admin.expediteurs.add")}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-gray-400 text-sm gap-2">
+            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {list.length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-12">{t("admin.expediteurs.empty")}</p>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {list.map(e => (
+                  <div key={e.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/70 group transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs shrink-0">
+                        {e.username.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-sm text-gray-900">{e.username}</p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${roleColor}`}>
+                            {t("admin.roles.expediteur")}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">
+                          {[e.phone, e.email, e.office_hub].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                      <button onClick={() => openEdit(e)} className="px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100 transition-colors">
+                        {t("admin.expediteurs.edit")}
+                      </button>
+                      <button onClick={() => deleteExp(e)} className="px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showAdd && <ModalForm />}
+      {showEdit && <ModalForm isEdit />}
+    </>
+  );
+}
+
 // ── Admins view ────────────────────────────────────────────────────────────────
 
 function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; onUnauth: () => void }) {
@@ -2280,7 +2514,7 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
-  const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : "dashboard";
+  const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : role === "expediteur" ? "queue" : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2361,13 +2595,17 @@ export default function AdminDashboard() {
       />
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
-          {role === "office" ? (
+          {role === "expediteur" ? (
+            view === "payouts" ? <PayoutsRequestView onUnauth={unauth} /> :
+            view === "team"    ? <TeamView onUnauth={unauth} /> :
+            <QueueView />
+          ) : role === "office" ? (
             view === "queue"     ? <QueueView /> :
             view === "returns"   ? <ComingSoonView section="returns" /> :
             view === "merchants" ? <ComingSoonView section="merchants" /> :
-            view === "payouts"   ? <ComingSoonView section="payouts" /> :
+            view === "payouts"   ? <PayoutsRequestView onUnauth={unauth} /> :
             view === "messaging" ? <ComingSoonView section="messaging" /> :
-            view === "team"      ? <ComingSoonView section="team" /> :
+            view === "team"      ? <TeamView onUnauth={unauth} /> :
             view === "analytics" ? <ComingSoonView section="analytics" /> :
             <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
           ) : role === "finance" ? (
@@ -2406,13 +2644,15 @@ export default function AdminDashboard() {
           ) : view === "merchants" ? (
             <ComingSoonView section="merchants" />
           ) : view === "payouts" ? (
-            <ComingSoonView section="payouts" />
+            <PayoutsRequestView onUnauth={unauth} />
           ) : view === "messaging" ? (
             <ComingSoonView section="messaging" />
           ) : view === "team" ? (
-            <ComingSoonView section="team" />
+            <TeamView onUnauth={unauth} />
           ) : view === "analytics" ? (
             <ComingSoonView section="analytics" />
+          ) : view === "expediteurs" ? (
+            <ExpediteursView onUnauth={unauth} />
           ) : (
             <AdminsView currentUsername={username} onUnauth={unauth} />
           )}

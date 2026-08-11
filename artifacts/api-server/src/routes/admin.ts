@@ -45,19 +45,28 @@ router.post("/admin/login", async (req, res) => {
     res.status(401).json({ ok: false, error: "invalid_credentials" }); return;
   }
   let commercialSettings: { allowedPartnerStatuses: string | null; canChangePartnerStatus: boolean } | null = null;
-  if (result.role === "commercial") {
+  let extraUserData: { officeHub?: string; isTeam?: boolean; permissions?: string[] } = {};
+  try {
+    const conn = await pool.getConnection();
     try {
-      const conn = await pool.getConnection();
-      try {
-        const [rows] = await conn.execute(
-          "SELECT allowed_partner_statuses, can_change_partner_status FROM admins WHERE username = ? LIMIT 1", [username]
-        );
-        const row = (rows as Array<{ allowed_partner_statuses: string | null; can_change_partner_status: number }>)[0];
-        if (row) commercialSettings = { allowedPartnerStatuses: row.allowed_partner_statuses, canChangePartnerStatus: row.can_change_partner_status === 1 };
-      } finally { conn.release(); }
-    } catch { /* non-fatal */ }
-  }
-  res.json({ ok: true, token: generateToken(username, result.role!), role: result.role, ...(commercialSettings ?? {}) });
+      const [rows] = await conn.execute(
+        "SELECT office_hub, parent_id, permissions, allowed_partner_statuses, can_change_partner_status FROM admins WHERE username = ? LIMIT 1",
+        [username]
+      ) as [Array<{ office_hub: string|null; parent_id: number|null; permissions: string|null; allowed_partner_statuses: string|null; can_change_partner_status: number }>, unknown];
+      const row = rows[0];
+      if (row) {
+        if (result.role === "commercial") {
+          commercialSettings = { allowedPartnerStatuses: row.allowed_partner_statuses, canChangePartnerStatus: row.can_change_partner_status === 1 };
+        }
+        if (row.office_hub) extraUserData.officeHub = row.office_hub;
+        if (row.parent_id) {
+          extraUserData.isTeam = true;
+          try { extraUserData.permissions = row.permissions ? JSON.parse(row.permissions) : []; } catch { extraUserData.permissions = []; }
+        }
+      }
+    } finally { conn.release(); }
+  } catch { /* non-fatal */ }
+  res.json({ ok: true, token: generateToken(username, result.role!), role: result.role, ...(commercialSettings ?? {}), ...extraUserData });
 });
 
 router.post("/admin/verify", adminAuth, (req, res) => {
@@ -95,7 +104,7 @@ router.get("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.execute(
-        "SELECT id, username, role, office_hub, allowed_partner_statuses, can_change_partner_status, created_at AS createdAt FROM admins ORDER BY created_at ASC"
+        "SELECT id, username, role, phone, email, office_hub, allowed_partner_statuses, can_change_partner_status, parent_id, created_at AS createdAt FROM admins WHERE parent_id IS NULL ORDER BY created_at ASC"
       );
       res.json({ ok: true, admins: rows });
     } finally { conn.release(); }
@@ -115,6 +124,8 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   if (!username || password.length < 8 || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
+  const phone = String(body.phone ?? "").trim().slice(0, 20);
+  const email = String(body.email ?? "").trim().slice(0, 100);
   try {
     const conn = await pool.getConnection();
     try {
@@ -126,8 +137,8 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
         : null;
       const canChangeStatus = role === "commercial" ? (body.can_change_partner_status === true ? 1 : 0) : 0;
       const [result] = await conn.execute(
-        "INSERT INTO admins (username, password_hash, role, office_hub, allowed_partner_statuses, can_change_partner_status) VALUES (?, ?, ?, ?, ?, ?)",
-        [username, hash, role, officeHub, allowedStatuses, canChangeStatus]
+        "INSERT INTO admins (username, password_hash, role, phone, email, office_hub, allowed_partner_statuses, can_change_partner_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [username, hash, role, phone || null, email || null, officeHub, allowedStatuses, canChangeStatus]
       );
       res.json({ ok: true, id: (result as { insertId: number }).insertId });
     } finally { conn.release(); }

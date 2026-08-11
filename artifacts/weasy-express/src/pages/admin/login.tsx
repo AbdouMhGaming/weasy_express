@@ -26,7 +26,7 @@ export default function AdminLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = (await res.json()) as { ok: boolean; token?: string; role?: string; allowedPartnerStatuses?: string | null; canChangePartnerStatus?: boolean };
+      const data = (await res.json()) as { ok: boolean; token?: string; role?: string; allowedPartnerStatuses?: string | null; canChangePartnerStatus?: boolean; officeHub?: string; isTeam?: boolean; permissions?: string[] };
       if (!res.ok || !data.ok || !data.token) {
         setError(t("admin.login.wrongCredentials"));
         return;
@@ -34,6 +34,15 @@ export default function AdminLogin() {
       localStorage.setItem("admin_token", data.token);
       localStorage.setItem("admin_role", data.role ?? "admin");
       localStorage.setItem("admin_username", username);
+      if (data.officeHub) localStorage.setItem("admin_office_hub", data.officeHub);
+      else localStorage.removeItem("admin_office_hub");
+      if (data.isTeam) {
+        localStorage.setItem("admin_is_team", "1");
+        localStorage.setItem("admin_permissions", JSON.stringify(data.permissions ?? []));
+      } else {
+        localStorage.removeItem("admin_is_team");
+        localStorage.removeItem("admin_permissions");
+      }
       if (data.role === "commercial") {
         localStorage.setItem("admin_allowed_statuses", data.allowedPartnerStatuses ?? "");
         localStorage.setItem("admin_can_change_status", data.canChangePartnerStatus ? "1" : "0");

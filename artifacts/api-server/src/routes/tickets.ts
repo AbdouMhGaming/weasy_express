@@ -6,6 +6,11 @@ const router = Router();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+async function getUserHub(conn: any, username: string): Promise<string | null> {
+  const [rows] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+  return rows[0]?.office_hub ?? null;
+}
+
 async function generateTicketRef(conn: Awaited<ReturnType<typeof pool.getConnection>>): Promise<string> {
   const [rows] = await conn.execute<any[]>(
     "SELECT setting_value FROM app_settings WHERE setting_key = 'ticket_counter' FOR UPDATE"
@@ -36,6 +41,12 @@ async function logEvent(
 const VALID_STATUSES = ["open", "claimed", "in_progress", "resolved", "pending_close", "pending_accept", "closed"];
 
 // ── GET /api/tickets — list tickets ────────────────────────────────────────
+//
+// Visibility rules:
+//   admin      → all tickets
+//   office     → tickets they created + pickup_desk for their office hub + all central_team
+//   expediteur → tickets they created + merchant tickets addressed to them
+//   commercial → merchant tickets addressed to them (legacy)
 
 router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
   const role = req.adminRole!;
@@ -46,9 +57,29 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     if (role === "admin") {
       [rows] = await conn.execute("SELECT * FROM tickets ORDER BY updated_at DESC") as any;
     } else if (role === "office") {
+      const myHub = await getUserHub(conn, username);
+      if (myHub) {
+        [rows] = await conn.execute(
+          `SELECT * FROM tickets
+           WHERE created_by = ?
+              OR (destination_type = 'pickup_desk' AND recipient_office = ?)
+              OR destination_type = 'central_team'
+           ORDER BY updated_at DESC`,
+          [username, myHub]
+        ) as any;
+      } else {
+        [rows] = await conn.execute(
+          "SELECT * FROM tickets WHERE created_by = ? OR destination_type = 'central_team' ORDER BY updated_at DESC",
+          [username]
+        ) as any;
+      }
+    } else if (role === "expediteur") {
       [rows] = await conn.execute(
-        "SELECT * FROM tickets WHERE destination_type = 'pickup_desk' AND recipient_username = ? ORDER BY updated_at DESC",
-        [username]
+        `SELECT * FROM tickets
+         WHERE created_by = ?
+            OR (destination_type = 'merchant' AND recipient_username = ?)
+         ORDER BY updated_at DESC`,
+        [username, username]
       ) as any;
     } else if (role === "commercial") {
       [rows] = await conn.execute(
@@ -67,23 +98,51 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
 // ── POST /api/tickets — create ticket ──────────────────────────────────────
 
 router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
-  const { destination_type, recipient_username, support_service, reason, custom_reason, comment, parcel_numbers } = req.body;
+  const role = req.adminRole!;
+  const username = req.adminUsername!;
+
+  // Only admin, office and expediteur can create tickets
+  if (!["admin", "office", "expediteur"].includes(role)) {
+    return res.status(403).json({ ok: false, error: "Forbidden" });
+  }
+
+  const { destination_type, recipient_username, recipient_office, support_service, reason, custom_reason, comment, parcel_numbers } = req.body;
   if (!destination_type || !reason) {
     return res.status(400).json({ ok: false, error: "Missing required fields" });
   }
 
+  // Expediteur cannot send merchant (to another expediteur)
+  if (role === "expediteur" && destination_type === "merchant") {
+    return res.status(400).json({ ok: false, error: "expediteur_cannot_send_merchant" });
+  }
+
   const conn = await pool.getConnection();
   try {
+    // Cannot send to self
+    if (destination_type === "pickup_desk" && recipient_office) {
+      const myHub = await getUserHub(conn, username);
+      if (role === "office" && myHub && myHub === recipient_office) {
+        conn.release();
+        return res.status(400).json({ ok: false, error: "cannot_send_to_self" });
+      }
+    }
+    if (destination_type === "merchant" && recipient_username === username) {
+      conn.release();
+      return res.status(400).json({ ok: false, error: "cannot_send_to_self" });
+    }
+
     await conn.beginTransaction();
     const ref = await generateTicketRef(conn);
     const [result]: any = await conn.execute(
       `INSERT INTO tickets
-         (ticket_ref, destination_type, recipient_username, support_service, reason, custom_reason, comment, parcel_numbers, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (ticket_ref, destination_type, recipient_username, recipient_office,
+          support_service, reason, custom_reason, comment, parcel_numbers, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ref,
         destination_type,
-        recipient_username ?? null,
+        destination_type === "merchant" ? (recipient_username ?? null) : null,
+        destination_type === "pickup_desk" ? (recipient_office ?? null) : null,
         support_service ?? null,
         reason,
         custom_reason ?? null,
@@ -91,11 +150,11 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
         Array.isArray(parcel_numbers) && parcel_numbers.length > 0
           ? JSON.stringify(parcel_numbers.filter(Boolean))
           : null,
-        req.adminUsername,
+        username,
       ]
     );
     const ticketId = result.insertId;
-    await logEvent(conn, ticketId, "status_change", req.adminUsername!, null, "open");
+    await logEvent(conn, ticketId, "status_change", username!, null, "open");
     await conn.commit();
     res.json({ ok: true, ref });
   } catch (err) {
@@ -115,17 +174,20 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     return res.status(400).json({ ok: false, error: "Invalid status" });
   }
 
+  const role = req.adminRole!;
+  const username = req.adminUsername!;
   const conn = await pool.getConnection();
   try {
     const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
 
-    const role = req.adminRole!;
-    const username = req.adminUsername!;
+    const myHub = (role === "office") ? await getUserHub(conn, username) : null;
     const allowed =
       role === "admin" ||
-      (role === "office" && ticket.destination_type === "pickup_desk" && ticket.recipient_username === username) ||
-      (role === "commercial" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
+      ticket.created_by === username ||
+      (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
+      (role === "office" && ticket.destination_type === "central_team") ||
+      (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
     if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     await conn.execute("UPDATE tickets SET status = ? WHERE id = ?", [status, id]);
@@ -140,16 +202,19 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
 
 router.put("/tickets/:id/claim", adminAuth, async (req: AuthedRequest, res) => {
   const { id } = req.params;
+  const role = req.adminRole!;
+  const username = req.adminUsername!;
   const conn = await pool.getConnection();
   try {
     const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
 
-    const role = req.adminRole!;
-    const username = req.adminUsername!;
+    const myHub = (role === "office") ? await getUserHub(conn, username) : null;
     const allowed =
       role === "admin" ||
-      (role === "office" && ticket.destination_type === "pickup_desk" && ticket.recipient_username === username);
+      (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
+      (role === "office" && ticket.destination_type === "central_team") ||
+      (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
     if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     await conn.execute(
@@ -223,7 +288,7 @@ router.delete("/tickets/:id", adminAuth, superAdminOnly, async (req, res) => {
   }
 });
 
-// ── GET /api/admin/users/commercial — list commercial users ────────────────
+// ── GET /api/admin/users/commercial — legacy commercial users ─────────────
 
 router.get("/admin/users/commercial", adminAuth, async (_req, res) => {
   const conn = await pool.getConnection();
@@ -237,7 +302,7 @@ router.get("/admin/users/commercial", adminAuth, async (_req, res) => {
   }
 });
 
-// ── GET /api/admin/users/office — list office agent users ─────────────────
+// ── GET /api/admin/users/office — office agent users ─────────────────────
 
 router.get("/admin/users/office", adminAuth, async (_req, res) => {
   const conn = await pool.getConnection();
