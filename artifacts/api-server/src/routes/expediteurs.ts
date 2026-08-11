@@ -91,6 +91,19 @@ router.put("/admin/expediteurs/:id", adminAuth, async (req: AuthedRequest, res) 
   } finally { conn.release(); }
 });
 
+// ── DELETE /api/expediteur/payouts/:id — delete payout (admin only) ──────────
+
+router.delete("/expediteur/payouts/:id", adminAuth, async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "admin") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) return res.status(400).json({ ok: false, error: "invalid_id" });
+  const conn = await pool.getConnection();
+  try {
+    await conn.execute("DELETE FROM expediteur_payouts WHERE id = ?", [id]);
+    res.json({ ok: true });
+  } finally { conn.release(); }
+});
+
 // ── DELETE /api/admin/expediteurs/:id (admin only) ───────────────────────────
 
 router.delete("/admin/expediteurs/:id", adminAuth, async (req: AuthedRequest, res) => {

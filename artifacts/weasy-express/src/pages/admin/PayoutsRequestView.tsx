@@ -82,6 +82,14 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
     } finally { setCreating(false); }
   }
 
+  async function deletePayout(id: number) {
+    if (!confirm("Supprimer ce virement ? Cette action est irréversible.")) return;
+    try {
+      await fetch(`${API_BASE}/api/expediteur/payouts/${id}`, { method: "DELETE", headers: adminHeaders() });
+      fetchPayouts();
+    } catch { }
+  }
+
   async function updateStatus() {
     if (!updateId) return;
     setUpdating(true);
@@ -247,14 +255,27 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                   {p.expediteur_notes && <p className="text-xs text-gray-600 mt-1.5 bg-gray-50 rounded-lg px-2.5 py-1.5">{p.expediteur_notes}</p>}
                   {p.admin_notes && <p className="text-xs text-blue-700 mt-1.5 bg-blue-50 rounded-lg px-2.5 py-1.5">{p.admin_notes}</p>}
                 </div>
-                {canUpdate && p.status !== "paid" && (
-                  <button
-                    onClick={() => { setUpdateId(p.id); setNewStatus("accepted"); setAdminNotes(p.admin_notes ?? ""); }}
-                    className="text-xs font-semibold text-[#E10600] hover:bg-red-50 px-3 py-1.5 rounded-lg border border-[#E10600]/30 transition-colors shrink-0"
-                  >
-                    {t("admin.payoutsRequest.action")}
-                  </button>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {canUpdate && p.status !== "paid" && (
+                    <button
+                      onClick={() => { setUpdateId(p.id); setNewStatus("accepted"); setAdminNotes(p.admin_notes ?? ""); }}
+                      className="text-xs font-semibold text-[#E10600] hover:bg-red-50 px-3 py-1.5 rounded-lg border border-[#E10600]/30 transition-colors"
+                    >
+                      {t("admin.payoutsRequest.action")}
+                    </button>
+                  )}
+                  {role === "admin" && (
+                    <button
+                      onClick={() => deletePayout(p.id)}
+                      className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Supprimer"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
