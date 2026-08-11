@@ -4,39 +4,60 @@ import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
 
 const router = Router();
 
-// ── GET /api/admin/expediteurs — list expediteurs (admin only) ──────────────
+// ── GET /api/admin/expediteurs — list expediteurs (admin or office) ─────────
 
 router.get("/admin/expediteurs", adminAuth, async (req: AuthedRequest, res) => {
   const role = req.adminRole!;
-  if (role !== "admin") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const username = req.adminUsername!;
+  if (role !== "admin" && role !== "office") return res.status(403).json({ ok: false, error: "Forbidden" });
   const conn = await pool.getConnection();
   try {
-    const [rows] = await conn.execute(
-      "SELECT id, username, phone, email, office_hub, created_at AS createdAt FROM admins WHERE role='expediteur' AND (parent_id IS NULL) ORDER BY created_at ASC"
-    ) as any;
-    res.json({ ok: true, expediteurs: rows });
+    if (role === "office") {
+      // Office agents only see expediteurs linked to their own hub
+      const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+      const hub = me[0]?.office_hub ?? null;
+      const [rows] = await conn.execute(
+        "SELECT id, username, phone, email, office_hub, created_at AS createdAt FROM admins WHERE role='expediteur' AND parent_id IS NULL AND office_hub = ? ORDER BY created_at ASC",
+        [hub]
+      ) as any;
+      res.json({ ok: true, expediteurs: rows });
+    } else {
+      const [rows] = await conn.execute(
+        "SELECT id, username, phone, email, office_hub, created_at AS createdAt FROM admins WHERE role='expediteur' AND (parent_id IS NULL) ORDER BY created_at ASC"
+      ) as any;
+      res.json({ ok: true, expediteurs: rows });
+    }
   } finally { conn.release(); }
 });
 
-// ── POST /api/admin/expediteurs — create expediteur (admin only) ────────────
+// ── POST /api/admin/expediteurs — create expediteur (admin or office) ────────
 
 router.post("/admin/expediteurs", adminAuth, async (req: AuthedRequest, res) => {
-  if (req.adminRole !== "admin") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const role = req.adminRole!;
+  const username = req.adminUsername!;
+  if (role !== "admin" && role !== "office") return res.status(403).json({ ok: false, error: "Forbidden" });
   const body = req.body ?? {};
-  const username = String(body.username ?? "").trim().slice(0, 100);
-  const password = String(body.password ?? "");
-  const phone    = String(body.phone ?? "").trim().slice(0, 20);
-  const email    = String(body.email ?? "").trim().slice(0, 100);
-  const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
-  if (!username || password.length < 8) return res.status(400).json({ ok: false, error: "invalid_fields" });
+  const newUsername = String(body.username ?? "").trim().slice(0, 100);
+  const password    = String(body.password ?? "");
+  const phone       = String(body.phone ?? "").trim().slice(0, 20);
+  const email       = String(body.email ?? "").trim().slice(0, 100);
+  if (!newUsername || password.length < 8) return res.status(400).json({ ok: false, error: "invalid_fields" });
   const conn = await pool.getConnection();
   try {
-    const [ex] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+    // Office agents: force office_hub to their own hub (ignore what the client sends)
+    let officeHub: string | null;
+    if (role === "office") {
+      const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+      officeHub = me[0]?.office_hub ?? null;
+    } else {
+      officeHub = String(body.office_hub ?? "").trim().slice(0, 200) || null;
+    }
+    const [ex] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [newUsername]) as any;
     if (ex.length > 0) return res.status(409).json({ ok: false, error: "username_taken" });
     const hash = await hashPassword(password);
     const [result] = await conn.execute(
       "INSERT INTO admins (username, password_hash, role, phone, email, office_hub) VALUES (?, ?, 'expediteur', ?, ?, ?)",
-      [username, hash, phone || null, email || null, officeHub || null]
+      [newUsername, hash, phone || null, email || null, officeHub]
     ) as any;
     res.json({ ok: true, id: result.insertId });
   } finally { conn.release(); }
