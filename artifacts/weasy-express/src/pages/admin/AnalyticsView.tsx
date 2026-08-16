@@ -136,6 +136,7 @@ export default function AnalyticsView({ onUnauth }: { onUnauth: () => void }) {
     try {
       const res = await fetch(`${API_BASE}/api/analytics`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = await res.json();
       if (data.ok) {
         setTickets(data.tickets);
