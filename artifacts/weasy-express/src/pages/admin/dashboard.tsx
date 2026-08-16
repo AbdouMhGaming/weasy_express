@@ -120,6 +120,14 @@ function SidebarInner({
   const { t } = useTranslation();
   const isAdmin = role === "admin";
 
+  // Team member permission filtering
+  const sidebarIsTeam = localStorage.getItem("admin_is_team") === "1";
+  const sidebarTeamPerms: string[] = sidebarIsTeam ? (() => { try { return JSON.parse(localStorage.getItem("admin_permissions") ?? "[]"); } catch { return []; } })() : [];
+  function expAllowed(section: SidebarView) {
+    if (role !== "expediteur" || !sidebarIsTeam) return true;
+    return sidebarTeamPerms.length === 0 || sidebarTeamPerms.includes(section);
+  }
+
   const navItem = (v: SidebarView, label: string, badge: number, icon: React.ReactNode) => (
     <button
       onClick={() => { setView(v); onClose(); }}
@@ -263,13 +271,13 @@ function SidebarInner({
         </nav>
       ) : role === "expediteur" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItem("queue", t("admin.sidebar.queue"), 0,
+          {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
           )}
-          {navItem("payouts", t("admin.sidebar.payouts"), 0,
+          {expAllowed("payouts") && navItem("payouts", t("admin.sidebar.payouts"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           )}
-          {navItem("team", t("admin.sidebar.team"), 0,
+          {expAllowed("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           )}
         </nav>
@@ -2553,7 +2561,23 @@ export default function AdminDashboard() {
   const [, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
-  const defaultView: SidebarView = role === "finance" ? "charges" : role === "commercial" ? "partners" : role === "expediteur" ? "queue" : "dashboard";
+  const isTeam = localStorage.getItem("admin_is_team") === "1";
+  const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem("admin_permissions") ?? "[]"); } catch { return []; } })() : [];
+
+  // For team sub-accounts, restrict allowed sections to what the parent granted
+  const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
+  const allowedSections: SidebarView[] = (role === "expediteur" && isTeam && teamPerms.length > 0)
+    ? EXPEDITEUR_SECTIONS.filter(s => teamPerms.includes(s))
+    : EXPEDITEUR_SECTIONS;
+
+  function expAllowed(section: SidebarView): boolean {
+    return role !== "expediteur" || !isTeam || allowedSections.includes(section);
+  }
+
+  const defaultView: SidebarView = role === "finance" ? "charges"
+    : role === "commercial" ? "partners"
+    : role === "expediteur" ? (allowedSections[0] ?? "queue")
+    : "dashboard";
   const [view, setView] = useState<SidebarView>(defaultView);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);

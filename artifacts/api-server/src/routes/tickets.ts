@@ -51,6 +51,7 @@ const VALID_STATUSES = ["open", "claimed", "in_progress", "resolved", "pending_c
 router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
   const role = req.adminRole!;
   const username = req.adminUsername!;
+  const dataUsername = req.adminDataUsername ?? username;
   const conn = await pool.getConnection();
   try {
     let rows: any[];
@@ -73,12 +74,13 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
         ) as any;
       }
     } else if (role === "expediteur") {
+      // Team sub-accounts see the parent's tickets (dataUsername = parent's username)
       [rows] = await conn.execute(
         `SELECT * FROM tickets
          WHERE created_by = ?
             OR (destination_type = 'merchant' AND recipient_username = ?)
          ORDER BY updated_at DESC`,
-        [username, username]
+        [dataUsername, dataUsername]
       ) as any;
     } else if (role === "commercial") {
       [rows] = await conn.execute(
@@ -149,11 +151,12 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
         Array.isArray(parcel_numbers) && parcel_numbers.length > 0
           ? JSON.stringify(parcel_numbers.filter(Boolean))
           : null,
-        username,
+        // Team sub-accounts create tickets on behalf of the parent
+        req.adminDataUsername ?? username,
       ]
     );
     const ticketId = result.insertId;
-    await logEvent(conn, ticketId, "status_change", username!, null, "open");
+    await logEvent(conn, ticketId, "status_change", req.adminDataUsername ?? username, null, "open");
     await conn.commit();
     res.json({ ok: true, ref });
   } catch (err) {

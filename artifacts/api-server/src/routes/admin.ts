@@ -62,11 +62,18 @@ router.post("/admin/login", async (req, res) => {
         if (row.parent_id) {
           extraUserData.isTeam = true;
           try { extraUserData.permissions = row.permissions ? JSON.parse(row.permissions) : []; } catch { extraUserData.permissions = []; }
+          // Resolve parent username so it can be embedded in the token for data scoping
+          const [parentRows] = await conn.execute(
+            "SELECT username FROM admins WHERE id = ? LIMIT 1",
+            [row.parent_id]
+          ) as [Array<{ username: string }>, unknown];
+          if (parentRows[0]) extraUserData.parentUsername = parentRows[0].username;
         }
       }
     } finally { conn.release(); }
   } catch { /* non-fatal */ }
-  res.json({ ok: true, token: generateToken(username, result.role!), role: result.role, ...(commercialSettings ?? {}), ...extraUserData });
+  const token = generateToken(username, result.role!, (extraUserData as any).parentUsername);
+  res.json({ ok: true, token, role: result.role, ...(commercialSettings ?? {}), ...extraUserData });
 });
 
 router.post("/admin/verify", adminAuth, (req, res) => {

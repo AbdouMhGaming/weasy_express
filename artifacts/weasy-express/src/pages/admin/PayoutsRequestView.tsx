@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 
 type PayoutStatus = "pending" | "accepted" | "refused" | "delayed" | "paid";
 
@@ -24,8 +25,6 @@ const STATUS_STYLES: Record<PayoutStatus, { pill: string; dot: string }> = {
   delayed:  { pill: "bg-orange-50 text-orange-700 ring-orange-200",dot: "bg-orange-400" },
   paid:     { pill: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-400" },
 };
-
-const PAGE_SIZES = [20, 50, 100] as const;
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -62,10 +61,6 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<PayoutStatus | "all">("all");
 
-  // Pagination
-  const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
-  const [page, setPage]         = useState(1);
-
   // Create form (expediteur only)
   const [showCreate, setShowCreate]   = useState(false);
   const [amount, setAmount]           = useState("");
@@ -93,16 +88,12 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
 
   useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
 
-  // Reset page when filter changes
-  useEffect(() => { setPage(1); }, [filterStatus, pageSize]);
-
   const filtered = useMemo(
     () => filterStatus === "all" ? payouts : payouts.filter((p) => p.status === filterStatus),
     [payouts, filterStatus]
   );
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged      = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pag = usePagination(filtered, 20);
 
   // Status counts for filter bar
   const counts = useMemo(() => {
@@ -349,31 +340,13 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
       ) : (
         <>
           {/* Summary bar */}
-          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div className="flex items-center mb-3">
             <p className="text-xs text-gray-500">
               <span className="font-semibold text-gray-700">{filtered.length}</span> demande{filtered.length !== 1 ? "s" : ""}
               {filterStatus !== "all" && (
                 <> · Total : <span className="font-semibold text-gray-700">{totalAmount.toLocaleString()} DZD</span></>
               )}
             </p>
-
-            {/* Page size picker */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400">Afficher :</span>
-              {PAGE_SIZES.map(n => (
-                <button
-                  key={n}
-                  onClick={() => setPageSize(n)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                    pageSize === n
-                      ? "bg-gray-900 text-white"
-                      : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Desktop table */}
@@ -393,7 +366,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {paged.map((p) => (
+                {pag.paged.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50/60 transition-colors group">
                     {(role === "admin" || role === "office") && (
                       <td className="px-5 py-3.5">
@@ -449,9 +422,9 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
             </table>
 
             {/* Note row */}
-            {paged.some(p => p.expediteur_notes) && (
+            {pag.paged.some(p => p.expediteur_notes) && (
               <div className="border-t border-gray-50 px-5 py-3 space-y-1.5">
-                {paged.filter(p => p.expediteur_notes).map(p => (
+                {pag.paged.filter(p => p.expediteur_notes).map(p => (
                   <p key={p.id} className="text-xs text-gray-500">
                     <span className="font-semibold text-gray-600">{p.expediteur_username}</span>
                     {" : "}{p.expediteur_notes}
@@ -463,7 +436,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
-            {paged.map((p) => (
+            {pag.paged.map((p) => (
               <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -514,69 +487,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
             ))}
           </div>
 
-          {/* ── Pagination ── */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-5 flex-wrap gap-3">
-              <p className="text-xs text-gray-400">
-                Page {page} / {totalPages} · {filtered.length} résultats
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage(1)}
-                  disabled={page === 1}
-                  className="px-2 py-1.5 rounded-lg text-xs font-semibold text-gray-500 border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-                >
-                  «
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-                >
-                  ‹ Préc.
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
-                  .reduce<(number | "…")[]>((acc, n, i, arr) => {
-                    if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push("…");
-                    acc.push(n);
-                    return acc;
-                  }, [])
-                  .map((item, i) =>
-                    item === "…"
-                      ? <span key={`e${i}`} className="px-1 text-xs text-gray-400">…</span>
-                      : (
-                        <button
-                          key={item}
-                          onClick={() => setPage(item as number)}
-                          className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${
-                            page === item
-                              ? "bg-gray-900 text-white"
-                              : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      )
-                  )
-                }
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-                >
-                  Suiv. ›
-                </button>
-                <button
-                  onClick={() => setPage(totalPages)}
-                  disabled={page === totalPages}
-                  className="px-2 py-1.5 rounded-lg text-xs font-semibold text-gray-500 border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition-colors"
-                >
-                  »
-                </button>
-              </div>
-            </div>
-          )}
+          <PaginationBar {...pag} />
         </>
       )}
     </div>

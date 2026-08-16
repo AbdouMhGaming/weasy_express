@@ -74,8 +74,10 @@ export async function updateAdminPassword(
 
 // ── HMAC session tokens ───────────────────────────────────────────────────────
 
-export function generateToken(username: string, role: string): string {
-  const payload = `${Date.now()}.${username}.${role}`;
+// dataUsername is the parent's username for team sub-accounts; equals username for root accounts.
+export function generateToken(username: string, role: string, dataUsername?: string): string {
+  const data = dataUsername && dataUsername !== username ? dataUsername : "";
+  const payload = `${Date.now()}.${username}.${role}.${data}`;
   const sig = crypto
     .createHmac("sha256", ADMIN_SECRET)
     .update(payload)
@@ -87,6 +89,7 @@ export function verifyToken(token: string): {
   valid: boolean;
   username?: string;
   role?: string;
+  dataUsername?: string;
 } {
   try {
     const decoded = Buffer.from(token, "base64url").toString("utf8");
@@ -98,7 +101,8 @@ export function verifyToken(token: string): {
     if (parts.length < 3) return { valid: false };
     const ts = Number(parts[0]);
     const username = parts[1];
-    const role = parts.slice(2).join(".");
+    const role = parts[2];                    // roles never contain dots
+    const dataUsername = parts[3] || undefined; // empty string → undefined (root account)
     const age = Date.now() - ts;
     if (isNaN(age) || age > TOKEN_TTL || age < 0) return { valid: false };
     const expected = crypto
@@ -110,15 +114,16 @@ export function verifyToken(token: string): {
       Buffer.from(sig, "hex"),
       Buffer.from(expected, "hex"),
     );
-    return ok ? { valid: true, username, role } : { valid: false };
+    return ok ? { valid: true, username, role, dataUsername } : { valid: false };
   } catch {
     return { valid: false };
   }
 }
 
 export type AuthedRequest = Request & {
-  adminUsername?: string;
+  adminUsername?: string;   // the logged-in account's own username
   adminRole?: string;
+  adminDataUsername?: string; // parent's username for team accounts (= adminUsername for root)
 };
 
 export function adminAuth(
@@ -133,8 +138,10 @@ export function adminAuth(
     res.status(401).json({ ok: false, error: "unauthorized" });
     return;
   }
-  (req as AuthedRequest).adminUsername = result.username;
-  (req as AuthedRequest).adminRole = result.role;
+  (req as AuthedRequest).adminUsername     = result.username;
+  (req as AuthedRequest).adminRole         = result.role;
+  // If a dataUsername was embedded (team member), use it; otherwise fall back to own username.
+  (req as AuthedRequest).adminDataUsername = result.dataUsername ?? result.username;
   next();
 }
 

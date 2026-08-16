@@ -147,19 +147,20 @@ router.get("/admin/offices-simple", adminAuth, async (_req, res) => {
 router.get("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) => {
   const role = req.adminRole!;
   const username = req.adminUsername!;
+  // For team sub-accounts, scope data to the parent expediteur's username
+  const dataUsername = req.adminDataUsername ?? username;
   const conn = await pool.getConnection();
   try {
     let rows: any[];
     if (role === "admin") {
       [rows] = await conn.execute("SELECT * FROM expediteur_payouts ORDER BY created_at DESC") as any;
     } else if (role === "office") {
-      // office sees payouts for their office hub
       const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
       const hub = me[0]?.office_hub;
       if (!hub) { rows = []; }
       else { [rows] = await conn.execute("SELECT * FROM expediteur_payouts WHERE office_hub = ? ORDER BY created_at DESC", [hub]) as any; }
     } else if (role === "expediteur") {
-      [rows] = await conn.execute("SELECT * FROM expediteur_payouts WHERE expediteur_username = ? ORDER BY created_at DESC", [username]) as any;
+      [rows] = await conn.execute("SELECT * FROM expediteur_payouts WHERE expediteur_username = ? ORDER BY created_at DESC", [dataUsername]) as any;
     } else {
       rows = [];
     }
@@ -172,6 +173,7 @@ router.get("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) => 
 router.post("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) => {
   const role = req.adminRole!;
   const username = req.adminUsername!;
+  const dataUsername = req.adminDataUsername ?? username;
   if (role !== "expediteur") return res.status(403).json({ ok: false, error: "Forbidden" });
   const body = req.body ?? {};
   const amount = parseInt(String(body.amount_dzd ?? "0"), 10);
@@ -180,12 +182,13 @@ router.post("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) =>
   if (!amount || amount <= 0 || !date) return res.status(400).json({ ok: false, error: "invalid_fields" });
   const conn = await pool.getConnection();
   try {
-    const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+    // Look up hub from the parent account (dataUsername) so team members inherit it
+    const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [dataUsername]) as any;
     const hub = me[0]?.office_hub;
     if (!hub) return res.status(400).json({ ok: false, error: "no_office_linked" });
     const [result] = await conn.execute(
       "INSERT INTO expediteur_payouts (expediteur_username, office_hub, amount_dzd, requested_date, expediteur_notes) VALUES (?, ?, ?, ?, ?)",
-      [username, hub, amount, date, notes || null]
+      [dataUsername, hub, amount, date, notes || null]
     ) as any;
     res.json({ ok: true, id: result.insertId });
   } finally { conn.release(); }
