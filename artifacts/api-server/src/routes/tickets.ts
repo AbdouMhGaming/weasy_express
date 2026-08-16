@@ -58,19 +58,20 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     if (role === "admin") {
       [rows] = await conn.execute("SELECT * FROM tickets ORDER BY updated_at DESC") as any;
     } else if (role === "office") {
-      const myHub = await getUserHub(conn, username);
+      // Team sub-accounts see the parent's tickets (dataUsername = parent's username)
+      const myHub = await getUserHub(conn, dataUsername);
       if (myHub) {
         [rows] = await conn.execute(
           `SELECT * FROM tickets
            WHERE created_by = ?
               OR (destination_type = 'pickup_desk' AND recipient_office = ?)
            ORDER BY updated_at DESC`,
-          [username, myHub]
+          [dataUsername, myHub]
         ) as any;
       } else {
         [rows] = await conn.execute(
           "SELECT * FROM tickets WHERE created_by = ? ORDER BY updated_at DESC",
-          [username]
+          [dataUsername]
         ) as any;
       }
     } else if (role === "expediteur") {

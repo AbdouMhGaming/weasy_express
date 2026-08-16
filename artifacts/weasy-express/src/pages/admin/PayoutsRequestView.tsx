@@ -394,7 +394,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                     <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap">{fmtDate(p.requested_date)}</td>
                     <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(p.created_at)}</td>
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 justify-end">
                         {canUpdate && p.status !== "paid" && (
                           <button
                             onClick={() => openUpdate(p)}

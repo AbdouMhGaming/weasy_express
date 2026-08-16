@@ -281,6 +281,36 @@ router.post("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
   } finally { conn.release(); }
 });
 
+// ── PUT /api/admin/team/:id — edit team sub-account (password + permissions) ──
+
+router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
+  const role = req.adminRole!;
+  const username = req.adminUsername!;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ ok: false, error: "invalid_id" });
+  const body = req.body ?? {};
+  const newPassword   = String(body.password ?? "").trim();
+  const permissions   = Array.isArray(body.permissions) ? body.permissions as string[] : null;
+  if (newPassword && newPassword.length < 8) return res.status(400).json({ ok: false, error: "password_too_short" });
+  const conn = await pool.getConnection();
+  try {
+    const [[target]] = await conn.execute("SELECT parent_id FROM admins WHERE id = ? LIMIT 1", [id]) as any;
+    if (!target || target.parent_id === null) return res.status(404).json({ ok: false, error: "not_found" });
+    if (role !== "admin") {
+      const [[me]] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+      if (!me || me.id !== target.parent_id) return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    if (newPassword) {
+      const hash = await hashPassword(newPassword);
+      await conn.execute("UPDATE admins SET password_hash = ? WHERE id = ?", [hash, id]);
+    }
+    if (permissions !== null) {
+      await conn.execute("UPDATE admins SET permissions = ? WHERE id = ?", [JSON.stringify(permissions), id]);
+    }
+    res.json({ ok: true });
+  } finally { conn.release(); }
+});
+
 // ── DELETE /api/admin/team/:id — delete team sub-account ─────────────────────
 
 router.delete("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
