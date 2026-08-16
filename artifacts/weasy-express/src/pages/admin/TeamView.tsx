@@ -483,14 +483,14 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
     } finally { setLoading(false); }
   }, [onUnauth]);
 
-  // For admin: also fetch all potential parent users
+  // For admin: fetch all potential parent users (offices + expediteurs)
   const fetchParents = useCallback(async () => {
     if (!isAdmin) return;
-    const res = await fetch(`${API_BASE}/api/admin/users`, { headers: adminHeaders() });
+    const res = await fetch(`${API_BASE}/api/admin/admins`, { headers: adminHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     if (data.ok) {
-      setAllParents((data.users ?? []).filter((u: ParentUser) =>
+      setAllParents((data.admins ?? []).filter((u: ParentUser) =>
         ["office", "expediteur"].includes(u.role)
       ));
     }

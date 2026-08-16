@@ -387,13 +387,15 @@ export default function AnalyticsView({ onUnauth }: { onUnauth: () => void }) {
     ticketDest: "", ticketStatus: "", payoutStatus: "",
   });
 
-  // Fetch dropdown options once
-  useEffect(() => {
+  // Fetch dropdown options — called on mount and on every manual refresh
+  const loadOptions = useCallback(() => {
     fetch(`${API_BASE}/api/analytics/options`, { headers: adminHeaders() })
       .then(r => r.json()).then(d => {
         if (d.ok) { setHubs(d.hubs ?? []); setExpediteurs(d.expediteurs ?? []); }
       }).catch(() => {});
   }, []);
+
+  useEffect(() => { loadOptions(); }, [loadOptions]);
 
   const load = useCallback(async (f: Filters) => {
     setLoading(true);
@@ -477,7 +479,7 @@ export default function AnalyticsView({ onUnauth }: { onUnauth: () => void }) {
           <p className="text-sm text-gray-400 mt-0.5">{t("admin.analytics.subtitle")}</p>
         </div>
         <button
-          onClick={() => load(filters)}
+          onClick={() => { load(filters); loadOptions(); }}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-60"
         >
