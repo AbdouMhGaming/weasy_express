@@ -63,13 +63,12 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
           `SELECT * FROM tickets
            WHERE created_by = ?
               OR (destination_type = 'pickup_desk' AND recipient_office = ?)
-              OR destination_type = 'central_team'
            ORDER BY updated_at DESC`,
           [username, myHub]
         ) as any;
       } else {
         [rows] = await conn.execute(
-          "SELECT * FROM tickets WHERE created_by = ? OR destination_type = 'central_team' ORDER BY updated_at DESC",
+          "SELECT * FROM tickets WHERE created_by = ? ORDER BY updated_at DESC",
           [username]
         ) as any;
       }
@@ -186,7 +185,6 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     const isSender = ticket.created_by === username;
     const isRecipient =
       role === "admin" ||
-      (role === "office" && ticket.destination_type === "central_team") ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
 
@@ -238,7 +236,6 @@ router.put("/tickets/:id/claim", adminAuth, async (req: AuthedRequest, res) => {
     const allowed =
       role === "admin" ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
-      (role === "office" && ticket.destination_type === "central_team") ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
     if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 

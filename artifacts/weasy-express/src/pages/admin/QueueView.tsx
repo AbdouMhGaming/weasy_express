@@ -884,7 +884,6 @@ export default function QueueView() {
                   const isSender = selected.created_by === username;
                   const isRecipient =
                     isAdmin ||
-                    (role === "office" && selected.destination_type === "central_team") ||
                     (role === "office" && selected.destination_type === "pickup_desk" && !!myHub && selected.recipient_office === myHub) ||
                     (role === "expediteur" && selected.destination_type === "merchant" && selected.recipient_username === username);
                   const st = selected.status;
