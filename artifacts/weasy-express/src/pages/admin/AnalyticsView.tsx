@@ -202,9 +202,12 @@ function FilterBar({
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-5 overflow-hidden">
       {/* Header */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50/50 transition-colors"
+        onKeyDown={e => e.key === "Enter" && setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50/50 transition-colors cursor-pointer select-none"
       >
         <div className="flex items-center gap-2.5">
           <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,18 +222,21 @@ function FilterBar({
         </div>
         <div className="flex items-center gap-2">
           {activeCount > 0 && (
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={e => { e.stopPropagation(); setFilters({ preset: "all", from: "", to: "", hub: "", expediteur: "", ticketDest: "", ticketStatus: "", payoutStatus: "" }); }}
-              className="text-xs text-[#E10600] font-semibold hover:underline"
+              onKeyDown={e => e.key === "Enter" && (e.stopPropagation(), setFilters({ preset: "all", from: "", to: "", hub: "", expediteur: "", ticketDest: "", ticketStatus: "", payoutStatus: "" }))}
+              className="text-xs text-[#E10600] font-semibold hover:underline cursor-pointer"
             >
               {t("admin.analytics.filters.clearAll")}
-            </button>
+            </span>
           )}
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-gray-50 px-5 py-4 space-y-4">

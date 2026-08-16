@@ -232,9 +232,14 @@ router.get("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
   try {
     let rows: any[];
     if (role === "admin") {
-      // super admin sees all team accounts
+      // super admin sees all team accounts with full parent info
       [rows] = await conn.execute(
-        "SELECT a.id, a.username, a.role, a.permissions, a.created_at AS createdAt, p.username AS parent_username FROM admins a LEFT JOIN admins p ON a.parent_id = p.id WHERE a.parent_id IS NOT NULL ORDER BY a.created_at DESC"
+        `SELECT a.id, a.username, a.role, a.permissions, a.created_at AS createdAt,
+                p.username AS parent_username, p.role AS parent_role, p.office_hub AS parent_hub
+         FROM admins a
+         LEFT JOIN admins p ON a.parent_id = p.id
+         WHERE a.parent_id IS NOT NULL
+         ORDER BY a.created_at DESC`
       ) as any;
     } else {
       // expediteur/office sees only their own sub-accounts
@@ -264,18 +269,37 @@ router.post("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
   if (!newUsername || password.length < 8) return res.status(400).json({ ok: false, error: "invalid_fields" });
   const conn = await pool.getConnection();
   try {
-    // find the creator's ID
-    const [[me]] = await conn.execute("SELECT id, office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
-    if (!me) return res.status(400).json({ ok: false, error: "creator_not_found" });
+    let parentId: number | null;
+    let insertRole: string;
+    let officeHub: string | null;
+
+    if (role === "admin") {
+      // admin must specify a parent_username to link the sub-account to
+      const parentUname = String(body.parent_username ?? "").trim();
+      if (!parentUname) return res.status(400).json({ ok: false, error: "parent_required" });
+      const [[parent]] = await conn.execute(
+        "SELECT id, role, office_hub FROM admins WHERE username = ? AND parent_id IS NULL LIMIT 1",
+        [parentUname]
+      ) as any;
+      if (!parent) return res.status(400).json({ ok: false, error: "parent_not_found" });
+      parentId   = parent.id;
+      insertRole = parent.role;
+      officeHub  = parent.office_hub ?? null;
+    } else {
+      const [[me]] = await conn.execute("SELECT id, office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
+      if (!me) return res.status(400).json({ ok: false, error: "creator_not_found" });
+      parentId   = me.id;
+      insertRole = role;
+      officeHub  = me.office_hub ?? null;
+    }
+
     // check username unique
     const [ex] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [newUsername]) as any;
     if (ex.length > 0) return res.status(409).json({ ok: false, error: "username_taken" });
     const hash = await hashPassword(password);
-    const parentId = role === "admin" ? null : me.id; // admin team accounts have no parent constraint
-    const officeHub = me.office_hub;
     const [result] = await conn.execute(
       "INSERT INTO admins (username, password_hash, role, office_hub, parent_id, permissions) VALUES (?, ?, ?, ?, ?, ?)",
-      [newUsername, hash, role, officeHub || null, parentId, JSON.stringify(permissions)]
+      [newUsername, hash, insertRole, officeHub, parentId, JSON.stringify(permissions)]
     ) as any;
     res.json({ ok: true, id: result.insertId });
   } finally { conn.release(); }
@@ -291,6 +315,7 @@ router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
   const body = req.body ?? {};
   const newPassword   = String(body.password ?? "").trim();
   const permissions   = Array.isArray(body.permissions) ? body.permissions as string[] : null;
+  const parentUname   = typeof body.parent_username === "string" ? body.parent_username.trim() : null;
   if (newPassword && newPassword.length < 8) return res.status(400).json({ ok: false, error: "password_too_short" });
   const conn = await pool.getConnection();
   try {
@@ -299,6 +324,18 @@ router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
     if (role !== "admin") {
       const [[me]] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]) as any;
       if (!me || me.id !== target.parent_id) return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    // Admin: optionally re-link to a different parent
+    if (role === "admin" && parentUname) {
+      const [[newParent]] = await conn.execute(
+        "SELECT id, role, office_hub FROM admins WHERE username = ? AND parent_id IS NULL LIMIT 1",
+        [parentUname]
+      ) as any;
+      if (!newParent) return res.status(400).json({ ok: false, error: "parent_not_found" });
+      await conn.execute(
+        "UPDATE admins SET parent_id = ?, role = ?, office_hub = ? WHERE id = ?",
+        [newParent.id, newParent.role, newParent.office_hub ?? null, id]
+      );
     }
     if (newPassword) {
       const hash = await hashPassword(newPassword);
