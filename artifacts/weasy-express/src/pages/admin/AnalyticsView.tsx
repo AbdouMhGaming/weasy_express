@@ -166,7 +166,7 @@ function FilterBar({
   loading: boolean;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   function set(patch: Partial<Filters>) { setFilters({ ...filters, ...patch }); }
 

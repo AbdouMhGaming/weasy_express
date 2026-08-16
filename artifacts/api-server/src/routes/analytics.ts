@@ -24,10 +24,19 @@ router.get("/analytics/options", adminAuth, async (req: AuthedRequest, res) => {
     let expediteurs: string[] = [];
 
     if (role === "admin") {
+      // Build hub list from the offices table (same format used everywhere: "wilaya — commune")
+      // then UNION with any office_hub values already in admins/payouts that may not be in offices
       const [hr] = await conn.execute(
-        "SELECT DISTINCT office_hub FROM admins WHERE office_hub IS NOT NULL AND office_hub != '' ORDER BY office_hub ASC"
+        `SELECT DISTINCT hub FROM (
+           SELECT CONCAT(wilaya, CASE WHEN commune IS NOT NULL AND commune != '' THEN CONCAT(' — ', commune) ELSE '' END) AS hub
+           FROM offices
+           UNION
+           SELECT office_hub AS hub FROM admins WHERE office_hub IS NOT NULL AND office_hub != ''
+           UNION
+           SELECT office_hub AS hub FROM expediteur_payouts WHERE office_hub IS NOT NULL AND office_hub != ''
+         ) t WHERE hub IS NOT NULL AND hub != '' ORDER BY hub ASC`
       ) as any;
-      hubs = hr.map((r: any) => r.office_hub);
+      hubs = hr.map((r: any) => r.hub);
 
       const [er] = await conn.execute(
         "SELECT username FROM admins WHERE role = 'expediteur' AND parent_id IS NULL ORDER BY username ASC"
