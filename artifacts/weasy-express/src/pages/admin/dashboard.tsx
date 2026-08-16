@@ -11,6 +11,7 @@ const DechargesView   = lazy(() => import("./DechargesView"));
 const QueueView              = lazy(() => import("./QueueView"));
 const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
 const TeamView               = lazy(() => import("./TeamView"));
+const AnalyticsView          = lazy(() => import("./AnalyticsView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -2663,8 +2664,9 @@ export default function AdminDashboard() {
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
-            view === "payouts" ? <PayoutsRequestView onUnauth={unauth} /> :
-            view === "team"    ? <TeamView onUnauth={unauth} /> :
+            view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :
+            view === "team"       ? <TeamView onUnauth={unauth} /> :
+            view === "analytics"  ? <AnalyticsView onUnauth={unauth} /> :
             <QueueView />
           ) : role === "office" ? (
             view === "queue"     ? <QueueView /> :
@@ -2674,7 +2676,7 @@ export default function AdminDashboard() {
             view === "messaging" ? <ComingSoonView section="messaging" /> :
             view === "team"         ? <TeamView onUnauth={unauth} /> :
             view === "expediteurs"  ? <ExpediteursView onUnauth={unauth} lockedHub={localStorage.getItem("admin_office_hub") ?? undefined} /> :
-            view === "analytics"    ? <ComingSoonView section="analytics" /> :
+            view === "analytics"    ? <AnalyticsView onUnauth={unauth} /> :
             <OfficeDashboardView onUnauth={unauth} isAdmin={false} />
           ) : role === "finance" ? (
             view === "commissions" ? <CommissionsView /> :
@@ -2718,7 +2720,7 @@ export default function AdminDashboard() {
           ) : view === "team" ? (
             <TeamView onUnauth={unauth} />
           ) : view === "analytics" ? (
-            <ComingSoonView section="analytics" />
+            <AnalyticsView onUnauth={unauth} />
           ) : view === "expediteurs" ? (
             <ExpediteursView onUnauth={unauth} />
           ) : (
