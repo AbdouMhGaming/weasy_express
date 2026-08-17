@@ -85,12 +85,9 @@ const pkgJson = {
     start: "node ./dist/index.mjs",
   },
   engines: { node: ">=20" },
-  // These packages are external in the esbuild bundle — Hostinger must install them.
-  // mysql2: externalized explicitly in build.mjs
-  // drizzle-orm: pulled in via @workspace/db and left unbundled by esbuild
+  // mysql2 is external in the esbuild bundle — Hostinger must install it
   dependencies: {
     "mysql2": "^3.22.4",
-    "drizzle-orm": "^0.45.2",
   },
 };
 fs.writeFileSync(
