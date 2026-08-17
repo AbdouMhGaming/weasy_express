@@ -72,3 +72,10 @@ id = "TzHbefZAveohEx4SO0nfB"
 uri = "file://hostinger-build.tar.gz"
 type = "unspecified"
 title = "Hostinger Build (API server + Frontend)"
+
+[[outputs]]
+id = "ZARKNdQRU1EisA89M7BYC"
+uri = "file://deploy/weasy-express-2026-08-17.zip"
+type = "unspecified"
+title = "weasy-express-2026-08-17.zip"
+description = "Hostinger production build — same structure as your old build (dist/, public/, uploads/, package.json). Upload contents to your Hostinger Node.js root and set the start command to: node ./dist/index.mjs"
