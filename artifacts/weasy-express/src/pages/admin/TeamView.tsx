@@ -30,7 +30,6 @@ const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
     { key: "queue",   label: "Queue" },
     { key: "payouts", label: "Payouts" },
     { key: "team",    label: "Team" },
-    { key: "analytics", label: "Analytics" },
   ],
   office: [
     { key: "office-dashboard", label: "Dashboard" },
