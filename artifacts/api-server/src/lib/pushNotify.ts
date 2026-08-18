@@ -1,122 +1,155 @@
 import webpush from "web-push";
 import { pool } from "@workspace/db";
 
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY ?? "";
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  ?? "";
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY ?? "";
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(
     "mailto:contact@48hrdz.com",
     VAPID_PUBLIC,
-    VAPID_PRIVATE
+    VAPID_PRIVATE,
   );
 }
 
+// ── Low-level send ────────────────────────────────────────────────────────────
+// Does NOT receive a DB connection — it acquires its own only when cleanup
+// is needed. This avoids holding a connection open during slow HTTP calls.
+
 async function doSendPush(
-  conn: any,
   endpoint: string,
   p256dh: string,
   auth: string,
-  payload: string
+  payload: string,
 ): Promise<void> {
   try {
-    await webpush.sendNotification(
-      { endpoint, keys: { p256dh, auth } },
-      payload
-    );
+    await webpush.sendNotification({ endpoint, keys: { p256dh, auth } }, payload);
   } catch (err: any) {
-    // 410 Gone / 404 Not Found = subscription expired — clean it up
-    if (err.statusCode === 410 || err.statusCode === 404) {
-      await conn.execute(
-        "DELETE FROM push_subscriptions WHERE endpoint = ?",
-        [endpoint]
-      );
+    const status: number = err.statusCode ?? err.status ?? 0;
+    // Log every failure so we can diagnose in server logs
+    console.error(
+      `[push] send failed endpoint=${endpoint.slice(0, 50)} status=${status} msg=${err.message ?? "unknown"}`,
+    );
+    // Expired / gone endpoint — delete it so it stops clogging the table
+    if (status === 410 || status === 404) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.execute(
+          "DELETE FROM push_subscriptions WHERE endpoint = ?",
+          [endpoint],
+        );
+        console.log(`[push] removed stale subscription: ${endpoint.slice(0, 50)}`);
+      } catch (dbErr) {
+        console.error("[push] failed to remove stale subscription:", dbErr);
+      } finally {
+        conn.release();
+      }
     }
-    // Other errors (network, push service down) are silently ignored
-    // so they never block the main ticket operations
   }
 }
 
+// ── Public helpers ────────────────────────────────────────────────────────────
+
 /**
- * Send a push notification to all subscriptions registered for a username.
+ * Send a push to all subscriptions registered for a username.
+ * The DB connection is released BEFORE making any HTTP calls so we never hold
+ * a pool slot during slow/timeout network operations.
  */
 export async function sendPushToUser(
   username: string,
   title: string,
   body: string,
-  url: string
+  url: string,
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+
+  // 1. Fetch subscriptions then immediately release the connection
+  let rows: { endpoint: string; p256dh: string; auth: string }[] = [];
   const conn = await pool.getConnection();
   try {
-    const [rows] = await conn.execute(
+    const [result] = await conn.execute(
       "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE username = ?",
-      [username]
+      [username],
     ) as any;
-    if (!rows.length) return;
-    const payload = JSON.stringify({ title, body, url });
-    await Promise.all(
-      (rows as any[]).map((r: any) =>
-        doSendPush(conn, r.endpoint, r.p256dh, r.auth, payload)
-      )
-    );
+    rows = result as typeof rows;
   } finally {
-    conn.release();
+    conn.release(); // released BEFORE any HTTP work
   }
+
+  if (!rows.length) return;
+
+  const payload = JSON.stringify({ title, body, url });
+  // 2. Send all pushes in parallel — no DB connection held during this
+  await Promise.all(rows.map(r => doSendPush(r.endpoint, r.p256dh, r.auth, payload)));
 }
 
 /**
- * Send a push notification to all users with a given role.
- * Releases the DB connection before sending so it isn't held across network calls.
+ * Send a push to all subscribed users with the given role.
+ * Skips `excludeUsername` (used to avoid notifying the ticket creator about
+ * their own action).
  */
 export async function sendPushToRole(
   role: string,
   title: string,
   body: string,
-  url: string
+  url: string,
+  excludeUsername?: string,
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
-  const conn = await pool.getConnection();
+
   let usernames: string[] = [];
+  const conn = await pool.getConnection();
   try {
     const [users] = await conn.execute(
       `SELECT DISTINCT a.username
        FROM admins a
        INNER JOIN push_subscriptions ps ON ps.username = a.username
        WHERE a.role = ?`,
-      [role]
+      [role],
     ) as any;
     usernames = (users as any[]).map((u: any) => u.username);
   } finally {
     conn.release();
   }
-  await Promise.all(usernames.map((u) => sendPushToUser(u, title, body, url)));
+
+  if (excludeUsername) {
+    usernames = usernames.filter(u => u !== excludeUsername);
+  }
+
+  await Promise.all(usernames.map(u => sendPushToUser(u, title, body, url)));
 }
 
 /**
- * Send a push notification to all office users in a given hub.
- * Releases the DB connection before sending so it isn't held across network calls.
+ * Send a push to all subscribed office users in a given hub.
+ * Skips `excludeUsername` when provided.
  */
 export async function sendPushToOfficeHub(
   hub: string,
   title: string,
   body: string,
-  url: string
+  url: string,
+  excludeUsername?: string,
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
-  const conn = await pool.getConnection();
+
   let usernames: string[] = [];
+  const conn = await pool.getConnection();
   try {
     const [users] = await conn.execute(
       `SELECT DISTINCT a.username
        FROM admins a
        INNER JOIN push_subscriptions ps ON ps.username = a.username
        WHERE a.role = 'office' AND a.office_hub = ?`,
-      [hub]
+      [hub],
     ) as any;
     usernames = (users as any[]).map((u: any) => u.username);
   } finally {
     conn.release();
   }
-  await Promise.all(usernames.map((u) => sendPushToUser(u, title, body, url)));
+
+  if (excludeUsername) {
+    usernames = usernames.filter(u => u !== excludeUsername);
+  }
+
+  await Promise.all(usernames.map(u => sendPushToUser(u, title, body, url)));
 }

@@ -180,16 +180,17 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     res.json({ ok: true, ref });
 
     // ── Push notifications (fire-and-forget, never block the response) ─────
+    const sender = req.adminDataUsername ?? username; // team sub-accounts use parent
     const notifTitle = `🎫 Ticket ${ref}`;
     const notifBody = custom_reason ?? reason;
     if (destination_type === "merchant" && recipient_username) {
       // Recipient is always an expediteur → land on /expediteurs
       sendPushToUser(recipient_username, notifTitle, notifBody, "/expediteurs").catch(() => {});
     } else if (destination_type === "pickup_desk" && recipient_office) {
-      sendPushToOfficeHub(recipient_office, notifTitle, notifBody, "/admin").catch(() => {});
+      sendPushToOfficeHub(recipient_office, notifTitle, notifBody, "/admin", sender).catch(() => {});
     } else if (destination_type === "central_team") {
-      sendPushToRole("admin", notifTitle, notifBody, "/admin").catch(() => {});
-      sendPushToRole("office", notifTitle, notifBody, "/admin").catch(() => {});
+      sendPushToRole("admin",  notifTitle, notifBody, "/admin", sender).catch(() => {});
+      sendPushToRole("office", notifTitle, notifBody, "/admin", sender).catch(() => {});
     }
   } catch (err) {
     await conn.rollback();
@@ -268,10 +269,10 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
       if (ticket.destination_type === "merchant" && ticket.recipient_username) {
         sendPushToUser(ticket.recipient_username, notifTitle2, notifBody2, "/expediteurs").catch(() => {});
       } else if (ticket.destination_type === "pickup_desk" && ticket.recipient_office) {
-        sendPushToOfficeHub(ticket.recipient_office, notifTitle2, notifBody2, "/admin").catch(() => {});
+        sendPushToOfficeHub(ticket.recipient_office, notifTitle2, notifBody2, "/admin", username).catch(() => {});
       } else if (ticket.destination_type === "central_team") {
-        sendPushToRole("admin",  notifTitle2, notifBody2, "/admin").catch(() => {});
-        sendPushToRole("office", notifTitle2, notifBody2, "/admin").catch(() => {});
+        sendPushToRole("admin",  notifTitle2, notifBody2, "/admin", username).catch(() => {});
+        sendPushToRole("office", notifTitle2, notifBody2, "/admin", username).catch(() => {});
       }
     }
   } finally {
@@ -360,15 +361,14 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
     const isSenderComment = username === ticket.created_by;
 
     if (isSenderComment) {
-      // Creator commented → notify recipient
+      // Creator commented → notify recipient(s), exclude the commenter
       if (ticket.destination_type === "merchant" && ticket.recipient_username) {
-        // Recipient is an expediteur → /expediteurs
         sendPushToUser(ticket.recipient_username, commentTitle, preview, "/expediteurs").catch(() => {});
       } else if (ticket.destination_type === "pickup_desk" && ticket.recipient_office) {
-        sendPushToOfficeHub(ticket.recipient_office, commentTitle, preview, "/admin").catch(() => {});
+        sendPushToOfficeHub(ticket.recipient_office, commentTitle, preview, "/admin", username).catch(() => {});
       } else if (ticket.destination_type === "central_team") {
-        sendPushToRole("admin", commentTitle, preview, "/admin").catch(() => {});
-        sendPushToRole("office", commentTitle, preview, "/admin").catch(() => {});
+        sendPushToRole("admin",  commentTitle, preview, "/admin", username).catch(() => {});
+        sendPushToRole("office", commentTitle, preview, "/admin", username).catch(() => {});
       }
     } else {
       // Recipient commented → notify creator (look up their role for correct URL)
