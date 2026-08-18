@@ -77,7 +77,8 @@ export async function updateAdminPassword(
 // dataUsername is the parent's username for team sub-accounts; equals username for root accounts.
 export function generateToken(username: string, role: string, dataUsername?: string): string {
   const data = dataUsername && dataUsername !== username ? dataUsername : "";
-  const payload = `${Date.now()}.${username}.${role}.${data}`;
+  // Use ";" as field separator — dots are valid in usernames and would break parsing
+  const payload = `${Date.now()};${username};${role};${data}`;
   const sig = crypto
     .createHmac("sha256", ADMIN_SECRET)
     .update(payload)
@@ -97,11 +98,14 @@ export function verifyToken(token: string): {
     if (pipeIdx === -1) return { valid: false };
     const payload = decoded.slice(0, pipeIdx);
     const sig = decoded.slice(pipeIdx + 1);
-    const parts = payload.split(".");
+    // Support both ";" (new) and "." (legacy) separators so tokens issued before
+    // this fix continue to work during the 24-hour TTL window.
+    const sep = payload.includes(";") ? ";" : ".";
+    const parts = payload.split(sep);
     if (parts.length < 3) return { valid: false };
     const ts = Number(parts[0]);
     const username = parts[1];
-    const role = parts[2];                    // roles never contain dots
+    const role = parts[2];
     const dataUsername = parts[3] || undefined; // empty string → undefined (root account)
     const age = Date.now() - ts;
     if (isNaN(age) || age > TOKEN_TTL || age < 0) return { valid: false };

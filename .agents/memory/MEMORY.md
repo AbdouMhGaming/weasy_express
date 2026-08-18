@@ -1,6 +1,7 @@
 - [MySQL setup](mysql-setup.md) — switched lib/db from PostgreSQL to MySQL2 for Hostinger shared hosting; drizzle-orm helpers must be re-exported from @workspace/db, not imported directly in api-server routes.
 - [Hostinger build externals](hostinger-build-externals.md) — production package.json must include both mysql2 AND drizzle-orm; drizzle-orm stays unbundled because @workspace/db uses it and esbuild leaves workspace-resolved imports as externals.
 - [Admin dashboard](admin-dashboard.md) — simple HMAC token auth (no JWT); admin pages at /admin and /admin/login live outside the Layout wrapper in App.tsx.
+- [Token separator bug](token-separator.md) — HMAC token payload used "." as field separator; usernames with dots (e.g. "first.last") broke role parsing. Fixed to ";" with legacy "." fallback.
 - [MySQL schema push quirk](mysql-schema-push.md) — drizzle-kit push fails; add tables via raw SQL Node script; script must live in lib/db/ and run with `cd lib/db && node add-tables.mjs` so mysql2 resolves correctly.
 - [Admin dashboard views](admin-dashboard-views.md) — PerformanceView, ChargesView, OfficeDashboardView are separate .tsx files in src/pages/admin/; imported into dashboard.tsx. Office role gets OfficeDashboardView directly; admin has Performance/Charges/Tableau Agence in sidebar.
 - [Office PDF parsing quirks](office-pdf-parsing.md) — Ecotrack PDF column merging causes phone/ref contamination; exact tracking pattern; per-type recipient extractors; sender bug.
