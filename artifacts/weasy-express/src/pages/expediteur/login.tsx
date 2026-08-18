@@ -39,19 +39,17 @@ export default function ExpediteurLogin() {
         setError(t("expediteur.login.accessDenied"));
         return;
       }
-      localStorage.setItem("admin_token", data.token);
-      localStorage.setItem("admin_role", data.role);
-      localStorage.setItem("admin_username", username);
-      localStorage.removeItem("admin_office_hub");
+      // Expediteur session uses separate keys so admin sessions are not overwritten
+      localStorage.setItem("exp_token", data.token);
+      localStorage.setItem("exp_role", data.role);
+      localStorage.setItem("exp_username", username);
       if (data.isTeam) {
-        localStorage.setItem("admin_is_team", "1");
-        localStorage.setItem("admin_permissions", JSON.stringify(data.permissions ?? []));
+        localStorage.setItem("exp_is_team", "1");
+        localStorage.setItem("exp_permissions", JSON.stringify(data.permissions ?? []));
       } else {
-        localStorage.removeItem("admin_is_team");
-        localStorage.removeItem("admin_permissions");
+        localStorage.removeItem("exp_is_team");
+        localStorage.removeItem("exp_permissions");
       }
-      localStorage.removeItem("admin_allowed_statuses");
-      localStorage.removeItem("admin_can_change_status");
       navigate("/expediteurs");
     } catch {
       setError(t("admin.login.networkError"));

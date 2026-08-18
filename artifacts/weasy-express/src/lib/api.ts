@@ -11,3 +11,11 @@ export function adminHeaders(): Record<string, string> {
     "Content-Type": "application/json",
   };
 }
+
+/** Returns auth headers using the expediteur session token (exp_token). */
+export function expediteurHeaders(): Record<string, string> {
+  return {
+    Authorization: `Bearer ${localStorage.getItem("exp_token") ?? ""}`,
+    "Content-Type": "application/json",
+  };
+}

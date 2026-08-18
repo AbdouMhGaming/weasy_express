@@ -135,6 +135,8 @@ function SidebarInner({
   // ── Push notification state ───────────────────────────────────────────────
   const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
   const [notifLoading, setNotifLoading] = useState(false);
+  // Pick the correct session token based on the user's role
+  const _pushToken = () => localStorage.getItem(role === "expediteur" ? "exp_token" : "admin_token") ?? "";
 
   async function toggleNotifications() {
     if (notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -148,7 +150,7 @@ function SidebarInner({
           if (sub) {
             await fetch(`${API_BASE}/api/push/unsubscribe`, {
               method: "DELETE",
-              headers: { ...adminHeaders(), "Content-Type": "application/json" },
+              headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
               body: JSON.stringify({ endpoint: sub.endpoint }),
             });
             await sub.unsubscribe();
@@ -165,7 +167,7 @@ function SidebarInner({
         const perm = await Notification.requestPermission();
         if (perm !== "granted") return;
         const reg = await navigator.serviceWorker.ready;
-        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: adminHeaders() });
+        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" } });
         const { key: vapidKey } = await vapidRes.json() as { key: string };
         if (!vapidKey) return;
         const sub = await reg.pushManager.subscribe({
@@ -174,7 +176,7 @@ function SidebarInner({
         });
         await fetch(`${API_BASE}/api/push/subscribe`, {
           method: "POST",
-          headers: { ...adminHeaders(), "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
           body: JSON.stringify(sub.toJSON()),
         });
         localStorage.setItem("push_enabled", "1");
@@ -187,9 +189,9 @@ function SidebarInner({
     }
   }
 
-  // Team member permission filtering
-  const sidebarIsTeam = localStorage.getItem("admin_is_team") === "1";
-  const sidebarTeamPerms: string[] = sidebarIsTeam ? (() => { try { return JSON.parse(localStorage.getItem("admin_permissions") ?? "[]"); } catch { return []; } })() : [];
+  // Team member permission filtering — use exp_* keys for expediteur sessions
+  const sidebarIsTeam = localStorage.getItem(role === "expediteur" ? "exp_is_team" : "admin_is_team") === "1";
+  const sidebarTeamPerms: string[] = sidebarIsTeam ? (() => { try { return JSON.parse(localStorage.getItem(role === "expediteur" ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
   function expAllowed(section: SidebarView) {
     if (role !== "expediteur" || !sidebarIsTeam) return true;
     return sidebarTeamPerms.length === 0 || sidebarTeamPerms.includes(section);
@@ -2557,7 +2559,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
 
 // ── Change-password modal ──────────────────────────────────────────────────────
 
-function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+function ChangePasswordModal({ onClose, role }: { onClose: () => void; role: string }) {
   const { t } = useTranslation();
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -2575,7 +2577,8 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/change-password`, {
-        method: "POST", headers: adminHeaders(),
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem(role === "expediteur" ? "exp_token" : "admin_token") ?? ""}`, "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
@@ -2647,7 +2650,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-function NotificationBanner() {
+function NotificationBanner({ role }: { role: string }) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState<boolean>(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
@@ -2675,7 +2678,8 @@ function NotificationBanner() {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") { dismiss(); return; }
       const reg = await navigator.serviceWorker.ready;
-      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: adminHeaders() });
+      const _tok = localStorage.getItem(role === "expediteur" ? "exp_token" : "admin_token") ?? "";
+      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: { Authorization: `Bearer ${_tok}`, "Content-Type": "application/json" } });
       const { key: vapidKey } = (await vapidRes.json()) as { key: string };
       if (!vapidKey) { dismiss(); return; }
       const sub = await reg.pushManager.subscribe({
@@ -2684,7 +2688,7 @@ function NotificationBanner() {
       });
       await fetch(`${API_BASE}/api/push/subscribe`, {
         method: "POST",
-        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${_tok}`, "Content-Type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
       });
       localStorage.setItem("push_enabled", "1");
@@ -2736,10 +2740,13 @@ function NotificationBanner() {
 
 export default function AdminDashboard() {
   const [location, navigate] = useLocation();
-  const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
-  const username = localStorage.getItem("admin_username") ?? "admin";
-  const isTeam = localStorage.getItem("admin_is_team") === "1";
-  const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem("admin_permissions") ?? "[]"); } catch { return []; } })() : [];
+  // Expediteur sessions use separate localStorage keys (exp_*) so admins can visit
+  // /expediteurs and log in as an expediteur without touching their admin session.
+  const isExpediteurPath = location === "/expediteurs";
+  const role = (localStorage.getItem(isExpediteurPath ? "exp_role" : "admin_role") ?? (isExpediteurPath ? "expediteur" : "admin")) as AdminRole;
+  const username = localStorage.getItem(isExpediteurPath ? "exp_username" : "admin_username") ?? "user";
+  const isTeam = localStorage.getItem(isExpediteurPath ? "exp_is_team" : "admin_is_team") === "1";
+  const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem(isExpediteurPath ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
   const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
@@ -2771,8 +2778,19 @@ export default function AdminDashboard() {
   const [officesError, setOfficesError] = useState("");
 
   function unauth() {
-    localStorage.removeItem("admin_token"); localStorage.removeItem("admin_role"); localStorage.removeItem("admin_username");
-    navigate(role === "expediteur" ? "/expediteurs/login" : "/admin/login");
+    if (isExpediteurPath) {
+      localStorage.removeItem("exp_token");
+      localStorage.removeItem("exp_role");
+      localStorage.removeItem("exp_username");
+      localStorage.removeItem("exp_is_team");
+      localStorage.removeItem("exp_permissions");
+      navigate("/expediteurs/login");
+    } else {
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_role");
+      localStorage.removeItem("admin_username");
+      navigate("/admin/login");
+    }
   }
 
   const fetchPartners = useCallback(async () => {
@@ -2799,18 +2817,15 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    const isExpediteurPath = location === "/expediteurs";
+    // Each path checks its own separate token — admin and expediteur sessions are independent
+    const token = localStorage.getItem(isExpediteurPath ? "exp_token" : "admin_token");
     if (!token) {
       navigate(isExpediteurPath ? "/expediteurs/login" : "/admin/login");
       return;
     }
-    // Cross-redirect: keep each role on its own path
-    if (role === "expediteur" && !isExpediteurPath) { navigate("/expediteurs"); return; }
-    if (role !== "expediteur" && isExpediteurPath) { navigate("/admin"); return; }
     if (role === "admin") { fetchPartners(); fetchOffices(); }
     else if (role === "commercial") { fetchPartners(); }
-  }, [fetchPartners, fetchOffices, navigate, role, location]);
+  }, [fetchPartners, fetchOffices, navigate, role, location, isExpediteurPath]);
 
   // Register service worker for push notifications
   useEffect(() => {
@@ -2851,7 +2866,7 @@ export default function AdminDashboard() {
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
       />
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
-        <NotificationBanner />
+        <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
             view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :
@@ -2918,7 +2933,7 @@ export default function AdminDashboard() {
           )}
         </Suspense>
       </main>
-      {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} />}
+      {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} role={role} />}
     </div>
   );
 }
