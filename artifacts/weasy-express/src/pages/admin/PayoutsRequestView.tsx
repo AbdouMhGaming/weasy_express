@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
@@ -56,7 +56,7 @@ function Spinner() {
 
 export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
-  const role     = localStorage.getItem("admin_role") ?? "expediteur";
+  const role     = getSessionRole();
 
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [loading, setLoading] = useState(true);

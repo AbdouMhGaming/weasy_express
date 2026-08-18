@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -465,7 +465,7 @@ function EditModal({
 
 export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
-  const role    = localStorage.getItem("admin_role") ?? "expediteur";
+  const role    = getSessionRole();
   const isAdmin = role === "admin";
 
   const [accounts, setAccounts]     = useState<TeamAccount[]>([]);

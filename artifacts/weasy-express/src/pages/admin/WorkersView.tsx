@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
@@ -41,7 +41,7 @@ function officeLabel(o: Office) {
 
 export default function WorkersView() {
   const { t } = useTranslation();
-  const role = localStorage.getItem("admin_role") ?? "";
+  const role = getSessionRole();
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [positions, setPositions] = useState<string[]>([]);

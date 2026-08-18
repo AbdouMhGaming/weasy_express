@@ -23,3 +23,22 @@ export function expediteurHeaders(): Record<string, string> {
     "Content-Type": "application/json",
   };
 }
+
+const _isExpPath = () =>
+  typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs");
+
+/**
+ * Returns the current session role.
+ * On /expediteurs reads exp_role; everywhere else reads admin_role.
+ */
+export function getSessionRole(): string {
+  return localStorage.getItem(_isExpPath() ? "exp_role" : "admin_role") ?? "";
+}
+
+/**
+ * Returns the current session username.
+ * On /expediteurs reads exp_username; everywhere else reads admin_username.
+ */
+export function getSessionUsername(): string {
+  return localStorage.getItem(_isExpPath() ? "exp_username" : "admin_username") ?? "";
+}

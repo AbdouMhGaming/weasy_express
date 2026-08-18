@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
@@ -39,7 +39,7 @@ function TrashIcon() {
 
 export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
-  const role = useMemo(() => localStorage.getItem("admin_role") ?? "", []);
+  const role = useMemo(() => getSessionRole(), []);
 
   const [cats, setCats] = useState<Category[]>([]);
   const [summary, setSummary] = useState<{ byCategory: Record<string, number>; totalCharges: number; totalIncome: number } | null>(null);

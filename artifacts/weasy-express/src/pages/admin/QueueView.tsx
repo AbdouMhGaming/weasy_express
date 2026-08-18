@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole, getSessionUsername } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
@@ -121,9 +121,9 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function QueueView() {
   const { t } = useTranslation();
-  const role  = localStorage.getItem("admin_role") ?? "";
-  const username = localStorage.getItem("admin_username") ?? "";
-  const myHub = localStorage.getItem("admin_office_hub") ?? "";
+  const role     = getSessionRole();
+  const username = getSessionUsername();
+  const myHub    = localStorage.getItem("admin_office_hub") ?? "";
   const isAdmin = role === "admin";
 
   // data
@@ -151,7 +151,8 @@ export default function QueueView() {
 
   // new‑ticket modal
   const [showNew, setShowNew]               = useState(false);
-  const [form, setForm]                     = useState({ ...DEFAULT_FORM });
+  const _defaultDest = role === "expediteur" ? "central_team" : "merchant";
+  const [form, setForm]                     = useState({ ...DEFAULT_FORM, destination: _defaultDest as typeof DEFAULT_FORM["destination"] });
   const [submitting, setSubmitting]         = useState(false);
   const [submitError, setSubmitError]       = useState("");
   const [submitSuccess, setSubmitSuccess]   = useState("");
@@ -299,7 +300,7 @@ export default function QueueView() {
         setSubmitSuccess(`${t("admin.queue.newModal.success")} ${d.ref}`);
         setTimeout(() => {
           setShowNew(false);
-          setForm({ ...DEFAULT_FORM });
+          setForm({ ...DEFAULT_FORM, destination: (role === "expediteur" ? "central_team" : "merchant") as typeof DEFAULT_FORM["destination"] });
           setSubmitSuccess("");
           fetchTickets();
         }, 1400);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -369,7 +369,7 @@ function FilterBar({
 
 export default function AnalyticsView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
-  const role = localStorage.getItem("admin_role") ?? "expediteur";
+  const role = getSessionRole();
 
   const [loading, setLoading]   = useState(true);
   const [tickets, setTickets]   = useState<TicketStats | null>(null);

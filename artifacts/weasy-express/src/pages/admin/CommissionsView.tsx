@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders } from "@/lib/api";
+import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 interface CommissionUpload {
@@ -128,7 +128,7 @@ function wilayaBadge(wilayaNumber: string | number): string {
 
 export default function CommissionsView() {
   const { t } = useTranslation();
-  const role = useMemo(() => localStorage.getItem("admin_role") ?? "", []);
+  const role = useMemo(() => getSessionRole(), []);
 
   const [tab, setTab] = useState<Tab>("offices");
 
