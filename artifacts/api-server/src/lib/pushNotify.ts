@@ -23,7 +23,14 @@ async function doSendPush(
   payload: string,
 ): Promise<void> {
   try {
-    await webpush.sendNotification({ endpoint, keys: { p256dh, auth } }, payload);
+    await webpush.sendNotification(
+      { endpoint, keys: { p256dh, auth } },
+      payload,
+      {
+        TTL: 3600,       // retain for 1 hour so offline/sleeping devices get it on wake
+        urgency: "high", // request immediate delivery from the push service
+      },
+    );
   } catch (err: any) {
     const status: number = err.statusCode ?? err.status ?? 0;
     // Log every failure so we can diagnose in server logs
