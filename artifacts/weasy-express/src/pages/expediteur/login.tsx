@@ -52,7 +52,7 @@ export default function ExpediteurLogin() {
       }
       localStorage.removeItem("admin_allowed_statuses");
       localStorage.removeItem("admin_can_change_status");
-      navigate("/admin");
+      navigate("/expediteurs");
     } catch {
       setError(t("admin.login.networkError"));
     } finally {

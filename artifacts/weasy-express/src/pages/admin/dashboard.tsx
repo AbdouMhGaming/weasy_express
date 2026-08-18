@@ -2560,7 +2560,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const role = (localStorage.getItem("admin_role") ?? "admin") as AdminRole;
   const username = localStorage.getItem("admin_username") ?? "admin";
   const isTeam = localStorage.getItem("admin_is_team") === "1";
@@ -2596,9 +2596,8 @@ export default function AdminDashboard() {
   const [officesError, setOfficesError] = useState("");
 
   function unauth() {
-    const wasExpediteur = localStorage.getItem("admin_role") === "expediteur";
     localStorage.removeItem("admin_token"); localStorage.removeItem("admin_role"); localStorage.removeItem("admin_username");
-    navigate(wasExpediteur ? "/expediteurs" : "/admin/login");
+    navigate(role === "expediteur" ? "/expediteurs/login" : "/admin/login");
   }
 
   const fetchPartners = useCallback(async () => {
@@ -2626,14 +2625,17 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
+    const isExpediteurPath = location === "/expediteurs";
     if (!token) {
-      const savedRole = localStorage.getItem("admin_role");
-      navigate(savedRole === "expediteur" ? "/expediteurs" : "/admin/login");
+      navigate(isExpediteurPath ? "/expediteurs/login" : "/admin/login");
       return;
     }
+    // Cross-redirect: keep each role on its own path
+    if (role === "expediteur" && !isExpediteurPath) { navigate("/expediteurs"); return; }
+    if (role !== "expediteur" && isExpediteurPath) { navigate("/admin"); return; }
     if (role === "admin") { fetchPartners(); fetchOffices(); }
     else if (role === "commercial") { fetchPartners(); }
-  }, [fetchPartners, fetchOffices, navigate, role]);
+  }, [fetchPartners, fetchOffices, navigate, role, location]);
 
   const isAdmin = role === "admin";
 

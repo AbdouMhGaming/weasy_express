@@ -313,6 +313,7 @@ const ar: Translations = {
       submitting: "جارٍ تسجيل الدخول…",
       wrongCredentials: "بيانات الاعتماد غير صحيحة. تحقق من اسم المستخدم وكلمة المرور.",
       networkError: "خطأ في الاتصال. تحقق من اتصالك بالإنترنت.",
+      expediteurBlocked: "هذه البوابة مخصصة للمسؤولين فقط. يجب على المرسلين تسجيل الدخول عبر /expediteurs.",
       footer: "Weasy Express · لوحة الإدارة",
     },
     sidebar: {

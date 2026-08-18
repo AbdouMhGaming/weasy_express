@@ -313,6 +313,7 @@ const en: Translations = {
       submitting: "Signing in…",
       wrongCredentials: "Incorrect credentials. Check your username and password.",
       networkError: "Connection error. Check your internet connection.",
+      expediteurBlocked: "This portal is for administrators only. Expediteurs must log in at /expediteurs.",
       footer: "Weasy Express · Admin Dashboard",
     },
     sidebar: {

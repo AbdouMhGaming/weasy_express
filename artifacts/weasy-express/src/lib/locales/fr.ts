@@ -311,6 +311,7 @@ const fr = {
       submitting: "Connexion en cours…",
       wrongCredentials: "Identifiants incorrects. Vérifiez votre nom d'utilisateur et mot de passe.",
       networkError: "Erreur de connexion. Vérifiez votre connexion internet.",
+      expediteurBlocked: "Ce portail est réservé aux administrateurs. Les expéditeurs doivent se connecter via /expediteurs.",
       footer: "Weasy Express · Tableau de bord administrateur",
     },
     sidebar: {

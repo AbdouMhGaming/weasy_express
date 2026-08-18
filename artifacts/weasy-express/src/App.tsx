@@ -23,7 +23,8 @@ function Router() {
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
-      <Route path="/expediteurs" component={ExpediteurLogin} />
+      <Route path="/expediteurs/login" component={ExpediteurLogin} />
+      <Route path="/expediteurs" component={AdminDashboard} />
       <Route>
         <Layout>
           <Switch>

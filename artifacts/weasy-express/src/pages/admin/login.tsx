@@ -31,6 +31,10 @@ export default function AdminLogin() {
         setError(t("admin.login.wrongCredentials"));
         return;
       }
+      if (data.role === "expediteur") {
+        setError(t("admin.login.expediteurBlocked"));
+        return;
+      }
       localStorage.setItem("admin_token", data.token);
       localStorage.setItem("admin_role", data.role ?? "admin");
       localStorage.setItem("admin_username", username);
