@@ -1,23 +1,15 @@
 ---
 name: MySQL schema push quirk
-description: How to add new tables to the DB — drizzle-kit push fails, use raw SQL via Node script instead.
+description: How to add new tables to the DB — drizzle-kit push is dangerous, use raw SQL Node scripts instead. Never run db push in post-merge.
 ---
 
-drizzle-kit push fails on int(11)→int or when PK already exists. To add new tables:
+**drizzle-kit push must never run in automated/post-merge contexts.** The DB has many tables not in the Drizzle schema (created via raw SQL scripts). drizzle-kit sees them as "extra" and prompts to DROP them — with stdin closed in post-merge, it hangs until timeout. The post-merge script runs only `pnpm install --frozen-lockfile`.
 
-1. Define the table in `lib/db/src/schema/index.ts` (drizzle schema, for TypeScript types)
-2. Run raw SQL via Node from workspace root using the pnpm-installed mysql2:
+**Why:** drizzle-kit introspects the live DB, generates a diff, and when it finds tables/columns not declared in the schema it offers to delete them. Since most tables in this project were added via raw SQL (not Drizzle schema), running push risks destroying data. Raw SQL scripts with `IF NOT EXISTS` are safe and idempotent.
 
-```bash
-node -e "
-const mysql = require('/home/runner/workspace/node_modules/.pnpm/mysql2@3.22.4_@types+node@25.3.5/node_modules/mysql2/promise');
-const pool = mysql.createPool({ host: process.env.DB_HOST, database: process.env.DB_NAME, user: process.env.DB_USER, password: process.env.DB_PASS || '', port: parseInt(process.env.DB_PORT || '3306') });
-(async () => { const conn = await pool.getConnection(); await conn.execute(\`CREATE TABLE IF NOT EXISTS ...\`); conn.release(); await pool.end(); })();
-"
-```
+**How to add new tables:**
+1. Define the table in `lib/db/src/schema/index.ts` for TypeScript types only.
+2. Create a `lib/db/add-<name>.mjs` migration script using mysql2/promise.
+3. Run it manually: `cd lib/db && node add-<name>.mjs`
 
-**Why:** drizzle-kit introspects the live DB and generates a diff; if column types or PK constraints differ even slightly from what drizzle generates, it errors or tries destructive ops. Raw SQL with `IF NOT EXISTS` is safe and idempotent.
-
-**How to apply:** Any time a new table is added to schema/index.ts, also run the raw SQL CREATE TABLE manually before restarting the API server.
-
-The mysql2 exact path may change with pnpm version upgrades — re-run `find /home/runner/workspace/node_modules -name "promise.js" -path "*/mysql2/*"` to confirm the path if it fails.
+**How to apply:** Never add `pnpm --filter db push` back to `scripts/post-merge.sh`. Any new table needs its own add-*.mjs script run manually after deploy.
