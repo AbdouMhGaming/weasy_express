@@ -12,6 +12,23 @@ async function getUserHub(conn: any, username: string): Promise<string | null> {
   return rows[0]?.office_hub ?? null;
 }
 
+/**
+ * Returns the correct push-notification landing URL for a username.
+ * Expediteurs land on /expediteurs; everyone else on /admin.
+ * Uses its own DB connection so it is safe to call fire-and-forget.
+ */
+async function pushUrlForUser(username: string): Promise<string> {
+  const conn = await pool.getConnection();
+  try {
+    const [[user]] = await conn.execute(
+      "SELECT role FROM admins WHERE username = ? LIMIT 1", [username]
+    ) as any;
+    return user?.role === "expediteur" ? "/expediteurs" : "/admin";
+  } finally {
+    conn.release();
+  }
+}
+
 async function generateTicketRef(conn: Awaited<ReturnType<typeof pool.getConnection>>): Promise<string> {
   const [rows] = await conn.execute<any[]>(
     "SELECT setting_value FROM app_settings WHERE setting_key = 'ticket_counter' FOR UPDATE"
@@ -166,7 +183,8 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     const notifTitle = `🎫 Ticket ${ref}`;
     const notifBody = custom_reason ?? reason;
     if (destination_type === "merchant" && recipient_username) {
-      sendPushToUser(recipient_username, notifTitle, notifBody, "/admin").catch(() => {});
+      // Recipient is always an expediteur → land on /expediteurs
+      sendPushToUser(recipient_username, notifTitle, notifBody, "/expediteurs").catch(() => {});
     } else if (destination_type === "pickup_desk" && recipient_office) {
       sendPushToOfficeHub(recipient_office, notifTitle, notifBody, "/admin").catch(() => {});
     } else if (destination_type === "central_team") {
@@ -236,11 +254,11 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     // ── Push: notify ticket creator that status changed ──────────────────
     if (ticket.created_by && ticket.created_by !== username) {
       const statusLabel = status.replace(/_/g, " ");
-      sendPushToUser(
-        ticket.created_by,
-        `Ticket ${ticket.ticket_ref} mis à jour`,
-        `Statut : ${statusLabel} (par ${username})`,
-        "/admin"
+      const creator = ticket.created_by;
+      const title   = `Ticket ${ticket.ticket_ref} mis à jour`;
+      const body2   = `Statut : ${statusLabel} (par ${username})`;
+      pushUrlForUser(creator).then(url =>
+        sendPushToUser(creator, title, body2, url).catch(() => {})
       ).catch(() => {});
     }
   } finally {
@@ -331,16 +349,20 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
     if (isSenderComment) {
       // Creator commented → notify recipient
       if (ticket.destination_type === "merchant" && ticket.recipient_username) {
-        sendPushToUser(ticket.recipient_username, commentTitle, preview, "/admin").catch(() => {});
+        // Recipient is an expediteur → /expediteurs
+        sendPushToUser(ticket.recipient_username, commentTitle, preview, "/expediteurs").catch(() => {});
       } else if (ticket.destination_type === "pickup_desk" && ticket.recipient_office) {
         sendPushToOfficeHub(ticket.recipient_office, commentTitle, preview, "/admin").catch(() => {});
       } else if (ticket.destination_type === "central_team") {
         sendPushToRole("admin", commentTitle, preview, "/admin").catch(() => {});
       }
     } else {
-      // Recipient commented → notify creator
+      // Recipient commented → notify creator (look up their role for correct URL)
       if (ticket.created_by) {
-        sendPushToUser(ticket.created_by, commentTitle, preview, "/admin").catch(() => {});
+        const creator = ticket.created_by;
+        pushUrlForUser(creator).then(url =>
+          sendPushToUser(creator, commentTitle, preview, url).catch(() => {})
+        ).catch(() => {});
       }
     }
   } finally {

@@ -2781,6 +2781,27 @@ export default function AdminDashboard() {
   const [officesError, setOfficesError] = useState("");
 
   function unauth() {
+    // Silently unsubscribe from push before clearing the session so the
+    // browser endpoint is removed from the DB and notifications stop immediately.
+    const pushToken = isExpediteurPath
+      ? localStorage.getItem("exp_token")
+      : localStorage.getItem("admin_token");
+    if (localStorage.getItem("push_enabled") === "1" && pushToken) {
+      navigator.serviceWorker?.getRegistration("/sw.js").then(reg => {
+        reg?.pushManager.getSubscription().then(sub => {
+          if (sub) {
+            fetch(`${API_BASE}/api/push/unsubscribe`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+            }).catch(() => {});
+            sub.unsubscribe().catch(() => {});
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+    localStorage.removeItem("push_enabled");
+
     if (isExpediteurPath) {
       localStorage.removeItem("exp_token");
       localStorage.removeItem("exp_role");
