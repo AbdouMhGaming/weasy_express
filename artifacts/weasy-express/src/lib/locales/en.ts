@@ -1025,14 +1025,19 @@ const en: Translations = {
       },
       ticketReasons: {
         title: "Ticket Reasons",
-        subtitle: "Manage the list of reasons available when creating a ticket",
+        subtitle: "Manage ticket reasons per destination",
         newLabel: "New reason",
         placeholder: "e.g. Delivery delay, Wrong address…",
         add: "Add",
-        empty: "No reasons defined yet",
+        empty: "No reasons defined for this destination",
         remove: "Remove",
         saveError: "Error saving reasons",
         duplicate: "This reason already exists",
+        destinations: {
+          merchant: "Expediteur",
+          central_team: "Central team",
+          pickup_desk: "Pickup desk",
+        },
       },
       supportServices: {
         title: "Support Services",

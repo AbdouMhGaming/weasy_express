@@ -1023,14 +1023,19 @@ const fr = {
       },
       ticketReasons: {
         title: "Raisons de ticket",
-        subtitle: "Gérez la liste des raisons disponibles lors de la création d'un ticket",
+        subtitle: "Gérez les raisons par destination de ticket",
         newLabel: "Nouvelle raison",
         placeholder: "Ex : Retard de livraison, Mauvaise adresse…",
         add: "Ajouter",
-        empty: "Aucune raison définie",
+        empty: "Aucune raison définie pour cette destination",
         remove: "Supprimer",
         saveError: "Erreur lors de la sauvegarde",
         duplicate: "Cette raison existe déjà",
+        destinations: {
+          merchant: "Expéditeur",
+          central_team: "Équipe centrale",
+          pickup_desk: "Bureau de retrait",
+        },
       },
       supportServices: {
         title: "Services de support",

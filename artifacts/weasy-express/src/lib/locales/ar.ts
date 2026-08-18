@@ -1025,14 +1025,19 @@ const ar: Translations = {
       },
       ticketReasons: {
         title: "أسباب التذاكر",
-        subtitle: "إدارة قائمة الأسباب المتاحة عند إنشاء تذكرة",
+        subtitle: "إدارة أسباب التذاكر حسب الوجهة",
         newLabel: "سبب جديد",
         placeholder: "مثال: تأخير توصيل، عنوان خاطئ…",
         add: "إضافة",
-        empty: "لم يتم تعريف أي سبب",
+        empty: "لم يتم تعريف أي سبب لهذه الوجهة",
         remove: "حذف",
         saveError: "خطأ في الحفظ",
         duplicate: "هذا السبب موجود بالفعل",
+        destinations: {
+          merchant: "المرسل",
+          central_team: "الفريق المركزي",
+          pickup_desk: "مكتب الاستلام",
+        },
       },
       supportServices: {
         title: "خدمات الدعم",

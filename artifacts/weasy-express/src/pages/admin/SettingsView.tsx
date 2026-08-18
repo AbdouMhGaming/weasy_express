@@ -144,7 +144,15 @@ export default function SettingsView() {
   const [posError, setPosError] = useState("");
 
   // ── Reasons ─────────────────────────────────────────────────────────────────
-  const [reasons, setReasons] = useState<string[]>([]);
+  type ReasonsDest = "merchant" | "central_team" | "pickup_desk";
+  const REASONS_DESTS: { key: ReasonsDest; icon: string; labelKey: string }[] = [
+    { key: "merchant",     icon: "🏪", labelKey: "admin.settings.ticketReasons.destinations.merchant" },
+    { key: "central_team", icon: "🎯", labelKey: "admin.settings.ticketReasons.destinations.central_team" },
+    { key: "pickup_desk",  icon: "🏢", labelKey: "admin.settings.ticketReasons.destinations.pickup_desk" },
+  ];
+  const EMPTY_REASONS: Record<ReasonsDest, string[]> = { merchant: [], central_team: [], pickup_desk: [] };
+  const [reasons, setReasons] = useState<Record<ReasonsDest, string[]>>(EMPTY_REASONS);
+  const [reasonsDest, setReasonsDest] = useState<ReasonsDest>("merchant");
   const [reasonsLoading, setReasonsLoading] = useState(true);
   const [newReason, setNewReason] = useState("");
   const [reasonsSaving, setReasonsSaving] = useState(false);
@@ -174,12 +182,31 @@ export default function SettingsView() {
     } finally { setLoad(false); }
   }, []);
 
+  const fetchReasons = useCallback(async () => {
+    setReasonsLoading(true);
+    try {
+      const d = await (await fetch(`${API_BASE}/api/admin/settings/ticket_reasons`, { headers: adminHeaders() })).json();
+      if (d.ok && d.value) {
+        try {
+          const parsed = JSON.parse(d.value);
+          if (Array.isArray(parsed)) {
+            // backward compat: old flat array — migrate as merchant reasons
+            setReasons({ merchant: parsed, central_team: [], pickup_desk: [] });
+          } else {
+            setReasons({ merchant: [], central_team: [], pickup_desk: [], ...parsed });
+          }
+        } catch { setReasons(EMPTY_REASONS); }
+      }
+    } finally { setReasonsLoading(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     fetchCats();
     fetchSetting("worker_positions", setPositions, setPosLoading);
-    fetchSetting("ticket_reasons", setReasons, setReasonsLoading);
+    fetchReasons();
     fetchSetting("support_services", setServices, setServicesLoading);
-  }, [fetchCats, fetchSetting]);
+  }, [fetchCats, fetchSetting, fetchReasons]);
 
   // ── Save list setting ────────────────────────────────────────────────────────
   async function saveList(
@@ -213,15 +240,26 @@ export default function SettingsView() {
   }
 
   // ── Reasons ──────────────────────────────────────────────────────────────────
+  async function saveReasons(updated: Record<ReasonsDest, string[]>) {
+    setReasonsSaving(true); setReasonsError("");
+    try {
+      const d = await (await fetch(`${API_BASE}/api/admin/settings/ticket_reasons`, {
+        method: "PUT", headers: adminHeaders(),
+        body: JSON.stringify({ value: JSON.stringify(updated) }),
+      })).json();
+      if (!d.ok) setReasonsError(t("admin.settings.ticketReasons.saveError"));
+      else setReasons(updated);
+    } catch { setReasonsError(t("admin.settings.ticketReasons.saveError")); } finally { setReasonsSaving(false); }
+  }
   function addReason() {
     const v = newReason.trim();
     if (!v) return;
-    if (reasons.includes(v)) { setReasonsError(t("admin.settings.ticketReasons.duplicate")); return; }
+    if (reasons[reasonsDest].includes(v)) { setReasonsError(t("admin.settings.ticketReasons.duplicate")); return; }
     setReasonsError(""); setNewReason("");
-    saveList("ticket_reasons", [...reasons, v], setReasons, setReasonsSaving, setReasonsError, "admin.settings.ticketReasons.saveError");
+    saveReasons({ ...reasons, [reasonsDest]: [...reasons[reasonsDest], v] });
   }
   function removeReason(r: string) {
-    saveList("ticket_reasons", reasons.filter(x => x !== r), setReasons, setReasonsSaving, setReasonsError, "admin.settings.ticketReasons.saveError");
+    saveReasons({ ...reasons, [reasonsDest]: reasons[reasonsDest].filter(x => x !== r) });
   }
 
   // ── Services ─────────────────────────────────────────────────────────────────
@@ -262,7 +300,7 @@ export default function SettingsView() {
   const counts: Record<Section, number> = {
     categories: cats.filter(c => !c.parent_id).length,
     positions:  positions.length,
-    reasons:    reasons.length,
+    reasons:    (reasons.merchant?.length ?? 0) + (reasons.central_team?.length ?? 0) + (reasons.pickup_desk?.length ?? 0),
     services:   services.length,
   };
 
@@ -496,16 +534,45 @@ export default function SettingsView() {
 
         {/* ─── Ticket Reasons ─── */}
         {active === "reasons" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <ChipEditor
-              items={reasons} loading={reasonsLoading} saving={reasonsSaving} error={reasonsError}
-              newVal={newReason} setNewVal={setNewReason}
-              onAdd={addReason} onRemove={removeReason}
-              addLabel={t("admin.settings.ticketReasons.add")}
-              placeholder={t("admin.settings.ticketReasons.placeholder")}
-              emptyText={t("admin.settings.ticketReasons.empty")}
-              color="bg-amber-50 text-amber-700 border-amber-100"
-            />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Destination tabs */}
+            <div className="flex border-b border-gray-100">
+              {REASONS_DESTS.map(({ key, icon, labelKey }) => {
+                const count = reasons[key]?.length ?? 0;
+                const isActive = reasonsDest === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => { setReasonsDest(key); setNewReason(""); setReasonsError(""); }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold transition-all border-b-2 ${
+                      isActive
+                        ? "border-amber-500 text-amber-700 bg-amber-50/50"
+                        : "border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span>{icon}</span>
+                    <span className="hidden sm:inline">{t(labelKey)}</span>
+                    {count > 0 && (
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${isActive ? "bg-amber-200 text-amber-800" : "bg-gray-100 text-gray-500"}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="p-6">
+              <ChipEditor
+                items={reasons[reasonsDest] ?? []}
+                loading={reasonsLoading} saving={reasonsSaving} error={reasonsError}
+                newVal={newReason} setNewVal={setNewReason}
+                onAdd={addReason} onRemove={removeReason}
+                addLabel={t("admin.settings.ticketReasons.add")}
+                placeholder={t("admin.settings.ticketReasons.placeholder")}
+                emptyText={t("admin.settings.ticketReasons.empty")}
+                color="bg-amber-50 text-amber-700 border-amber-100"
+              />
+            </div>
           </div>
         )}
 

@@ -130,7 +130,7 @@ export default function QueueView() {
   const [loading, setLoading]               = useState(true);
   const [expediteurUsers, setExpediteurUsers] = useState<AdminUser[]>([]);
   const [officesList, setOfficesList]         = useState<{ id: number; wilaya: string; commune: string | null }[]>([]);
-  const [ticketReasons, setTicketReasons]   = useState<string[]>([]);
+  const [ticketReasons, setTicketReasons]   = useState<Record<string, string[]>>({ merchant: [], central_team: [], pickup_desk: [] });
   const [supportServices, setSupportServices] = useState<string[]>([]);
 
   // filters
@@ -190,7 +190,16 @@ export default function QueueView() {
       const [ed, od, td, sd] = await Promise.all([eu.json(), ol.json(), tr.json(), ss.json()]);
       if (ed.ok) setExpediteurUsers(ed.users ?? []);
       if (od.ok) setOfficesList(od.offices ?? []);
-      if (td.ok && td.value) try { setTicketReasons(JSON.parse(td.value)); } catch { setTicketReasons([]); }
+      if (td.ok && td.value) {
+        try {
+          const parsed = JSON.parse(td.value);
+          if (Array.isArray(parsed)) {
+            setTicketReasons({ merchant: parsed, central_team: [], pickup_desk: [] });
+          } else {
+            setTicketReasons({ merchant: [], central_team: [], pickup_desk: [], ...parsed });
+          }
+        } catch { setTicketReasons({ merchant: [], central_team: [], pickup_desk: [] }); }
+      }
       if (sd.ok && sd.value) try { setSupportServices(JSON.parse(sd.value)); } catch { setSupportServices([]); }
     } catch { }
   }, []);
@@ -622,7 +631,7 @@ export default function QueueView() {
                       {dests.map(dest => (
                         <button
                           key={dest.key} type="button"
-                          onClick={() => setForm(f => ({ ...f, destination: dest.key as typeof DEFAULT_FORM["destination"], recipientUsername: "", recipientOffice: "", supportService: "" }))}
+                          onClick={() => setForm(f => ({ ...f, destination: dest.key as typeof DEFAULT_FORM["destination"], recipientUsername: "", recipientOffice: "", supportService: "", reason: "", customReason: "" }))}
                           className={`flex flex-col items-center gap-1.5 p-3.5 rounded-xl border-2 text-xs font-semibold transition-all ${
                             form.destination === dest.key
                               ? "border-[#E10600] bg-[#E10600]/5 text-[#E10600]"
@@ -707,7 +716,7 @@ export default function QueueView() {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                   {t("admin.queue.newModal.ticketReason")}
                 </label>
-                {ticketReasons.length === 0 ? (
+                {(ticketReasons[form.destination] ?? []).length === 0 ? (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
                     {t("admin.queue.newModal.noReasons")}
                   </p>
@@ -718,7 +727,7 @@ export default function QueueView() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white"
                   >
                     <option value="">{t("admin.queue.newModal.selectReason")}</option>
-                    {ticketReasons.map((r, i) => <option key={i} value={r}>{r}</option>)}
+                    {(ticketReasons[form.destination] ?? []).map((r, i) => <option key={i} value={r}>{r}</option>)}
                     <option value="other">{t("admin.queue.newModal.other")}</option>
                   </select>
                 )}
