@@ -545,6 +545,12 @@ const fr = {
         },
       },
     },
+    notifBanner: {
+      title: "Activez les notifications",
+      desc: "Recevez des alertes en temps réel pour les nouveaux tickets et mises à jour.",
+      enable: "Activer",
+      notNow: "Plus tard",
+    },
     emptyRole: {
       title: "Tableau de bord",
       subtitle: "Cette section sera disponible prochainement.",

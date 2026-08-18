@@ -547,6 +547,12 @@ const ar: Translations = {
         },
       },
     },
+    notifBanner: {
+      title: "فعّل الإشعارات",
+      desc: "استقبل تنبيهات فورية للتذاكر الجديدة والتحديثات.",
+      enable: "تفعيل",
+      notNow: "لاحقاً",
+    },
     emptyRole: {
       title: "لوحة التحكم",
       subtitle: "هذا القسم سيكون متاحاً قريباً.",

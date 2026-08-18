@@ -104,6 +104,17 @@ const ROLE_COLOR: Record<AdminRole, string> = {
 };
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
+// ── Shared push-notification helper ───────────────────────────────────────────
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const bytes = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) bytes[i] = rawData.charCodeAt(i);
+  return bytes;
+}
+
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
 type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
@@ -124,15 +135,6 @@ function SidebarInner({
   // ── Push notification state ───────────────────────────────────────────────
   const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
   const [notifLoading, setNotifLoading] = useState(false);
-
-  function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-    const rawData = atob(base64);
-    const bytes = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; i++) bytes[i] = rawData.charCodeAt(i);
-    return bytes;
-  }
 
   async function toggleNotifications() {
     if (notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -2641,6 +2643,95 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Notification prompt banner ─────────────────────────────────────────────────
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function NotificationBanner() {
+  const { t } = useTranslation();
+  const [visible, setVisible] = useState<boolean>(() => {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    if (localStorage.getItem("push_enabled") === "1") return false;
+    if (Notification.permission === "denied") return false;
+    const dismissedAt = localStorage.getItem("notif_prompted_at");
+    if (dismissedAt) {
+      const ms = Date.now() - parseInt(dismissedAt, 10);
+      if (ms < SEVEN_DAYS_MS) return false;
+    }
+    return true;
+  });
+  const [loading, setLoading] = useState(false);
+
+  function dismiss() {
+    localStorage.setItem("notif_prompted_at", String(Date.now()));
+    setVisible(false);
+  }
+
+  async function handleEnable() {
+    if (loading) return;
+    if (Notification.permission === "denied") { dismiss(); return; }
+    setLoading(true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { dismiss(); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: adminHeaders() });
+      const { key: vapidKey } = (await vapidRes.json()) as { key: string };
+      if (!vapidKey) { dismiss(); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+      await fetch(`${API_BASE}/api/push/subscribe`, {
+        method: "POST",
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      localStorage.setItem("push_enabled", "1");
+      localStorage.setItem("notif_prompted_at", String(Date.now()));
+      setVisible(false);
+    } catch (err) {
+      console.error("NotificationBanner enable error:", err);
+      dismiss();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!visible) return null;
+
+  return (
+    <div className="mx-4 mt-4 mb-0 md:mx-6 md:mt-5 flex items-start gap-3 bg-[#0F172A] text-white rounded-xl px-4 py-3 shadow-lg">
+      {/* Bell icon */}
+      <span className="mt-0.5 shrink-0 text-[#E10600]">
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+        </svg>
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold leading-snug">{t("admin.notifBanner.title")}</p>
+        <p className="text-xs text-white/60 mt-0.5 leading-snug">{t("admin.notifBanner.desc")}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 mt-0.5">
+        <button
+          onClick={handleEnable}
+          disabled={loading}
+          className="text-xs font-bold bg-[#E10600] hover:bg-[#C50500] text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60 flex items-center gap-1.5"
+        >
+          {loading && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          {t("admin.notifBanner.enable")}
+        </button>
+        <button
+          onClick={dismiss}
+          className="text-xs text-white/50 hover:text-white/80 px-2 py-1.5 rounded-lg transition-colors"
+        >
+          {t("admin.notifBanner.notNow")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -2760,6 +2851,7 @@ export default function AdminDashboard() {
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
       />
       <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
+        <NotificationBanner />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
             view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :

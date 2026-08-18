@@ -547,6 +547,12 @@ const en: Translations = {
         },
       },
     },
+    notifBanner: {
+      title: "Enable notifications",
+      desc: "Get real-time alerts for new tickets and updates.",
+      enable: "Enable",
+      notNow: "Not now",
+    },
     emptyRole: {
       title: "Dashboard",
       subtitle: "This section will be available soon.",
