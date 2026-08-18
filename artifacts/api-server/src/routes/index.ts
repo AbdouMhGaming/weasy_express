@@ -9,6 +9,7 @@ import publicLocationsRouter from "./public-locations";
 import ticketsRouter from "./tickets";
 import expediteursRouter from "./expediteurs";
 import analyticsRouter from "./analytics";
+import pushRouter from "./push";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(publicLocationsRouter);
 router.use(ticketsRouter);
 router.use(expediteursRouter);
 router.use(analyticsRouter);
+router.use(pushRouter);
 
 export default router;

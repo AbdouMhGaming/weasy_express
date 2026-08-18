@@ -121,6 +121,70 @@ function SidebarInner({
   const { t } = useTranslation();
   const isAdmin = role === "admin";
 
+  // ── Push notification state ───────────────────────────────────────────────
+  const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    const bytes = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) bytes[i] = rawData.charCodeAt(i);
+    return bytes;
+  }
+
+  async function toggleNotifications() {
+    if (notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    setNotifLoading(true);
+    try {
+      if (notifEnabled) {
+        // Disable
+        const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            await fetch(`${API_BASE}/api/push/unsubscribe`, {
+              method: "DELETE",
+              headers: { ...adminHeaders(), "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+            });
+            await sub.unsubscribe();
+          }
+        }
+        localStorage.removeItem("push_enabled");
+        setNotifEnabled(false);
+      } else {
+        // Enable
+        if (Notification.permission === "denied") {
+          alert(t("admin.sidebar.notificationsDenied"));
+          return;
+        }
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") return;
+        const reg = await navigator.serviceWorker.ready;
+        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: adminHeaders() });
+        const { key: vapidKey } = await vapidRes.json() as { key: string };
+        if (!vapidKey) return;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+        await fetch(`${API_BASE}/api/push/subscribe`, {
+          method: "POST",
+          headers: { ...adminHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+        localStorage.setItem("push_enabled", "1");
+        setNotifEnabled(true);
+      }
+    } catch (err) {
+      console.error("Push toggle error:", err);
+    } finally {
+      setNotifLoading(false);
+    }
+  }
+
   // Team member permission filtering
   const sidebarIsTeam = localStorage.getItem("admin_is_team") === "1";
   const sidebarTeamPerms: string[] = sidebarIsTeam ? (() => { try { return JSON.parse(localStorage.getItem("admin_permissions") ?? "[]"); } catch { return []; } })() : [];
@@ -301,6 +365,26 @@ function SidebarInner({
             </button>
           ))}
         </div>
+        {"Notification" in window && "serviceWorker" in navigator && (
+          <button
+            onClick={toggleNotifications}
+            disabled={notifLoading}
+            title={notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 ${
+              notifEnabled ? "text-[#E10600] hover:bg-white/5" : "text-white/50 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill={notifEnabled ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+              {notifEnabled ? (
+                <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              )}
+            </svg>
+            {notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+            {notifLoading && <span className="ml-auto w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+          </button>
+        )}
         <button onClick={onChangePassword} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all">
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
           {t("admin.sidebar.changePassword")}
@@ -2636,6 +2720,13 @@ export default function AdminDashboard() {
     if (role === "admin") { fetchPartners(); fetchOffices(); }
     else if (role === "commercial") { fetchPartners(); }
   }, [fetchPartners, fetchOffices, navigate, role, location]);
+
+  // Register service worker for push notifications
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {/* SW not critical */});
+    }
+  }, []);
 
   const isAdmin = role === "admin";
 

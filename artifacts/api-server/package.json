@@ -23,9 +23,11 @@
     "pino": "^9",
     "pino-http": "^10",
     "resend": "^6.12.2",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/web-push": "^3.6.4",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

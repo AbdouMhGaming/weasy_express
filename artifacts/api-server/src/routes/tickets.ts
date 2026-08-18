@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { adminAuth, superAdminOnly, type AuthedRequest } from "../lib/adminAuth";
+import { sendPushToUser, sendPushToRole, sendPushToOfficeHub } from "../lib/pushNotify";
 
 const router = Router();
 
@@ -160,6 +161,17 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     await logEvent(conn, ticketId, "status_change", req.adminDataUsername ?? username, null, "open");
     await conn.commit();
     res.json({ ok: true, ref });
+
+    // ── Push notifications (fire-and-forget, never block the response) ─────
+    const notifTitle = `🎫 Ticket ${ref}`;
+    const notifBody = custom_reason ?? reason;
+    if (destination_type === "merchant" && recipient_username) {
+      sendPushToUser(recipient_username, notifTitle, notifBody, "/admin").catch(() => {});
+    } else if (destination_type === "pickup_desk" && recipient_office) {
+      sendPushToOfficeHub(recipient_office, notifTitle, notifBody, "/admin").catch(() => {});
+    } else if (destination_type === "central_team") {
+      sendPushToRole("admin", notifTitle, notifBody, "/admin").catch(() => {});
+    }
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -220,6 +232,17 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     await conn.execute("UPDATE tickets SET status = ? WHERE id = ?", [status, id]);
     await logEvent(conn, id, "status_change", username, null, status);
     res.json({ ok: true });
+
+    // ── Push: notify ticket creator that status changed ──────────────────
+    if (ticket.created_by && ticket.created_by !== username) {
+      const statusLabel = status.replace(/_/g, " ");
+      sendPushToUser(
+        ticket.created_by,
+        `Ticket ${ticket.ticket_ref} mis à jour`,
+        `Statut : ${statusLabel} (par ${username})`,
+        "/admin"
+      ).catch(() => {});
+    }
   } finally {
     conn.release();
   }
@@ -299,6 +322,27 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
       [result.insertId]
     ) as any;
     res.json({ ok: true, event: rows[0] });
+
+    // ── Push: notify the other party about the new comment ───────────────
+    const preview = body.trim().slice(0, 80) + (body.trim().length > 80 ? "…" : "");
+    const commentTitle = `💬 Nouveau message (${ticket.ticket_ref})`;
+    const isSenderComment = username === ticket.created_by;
+
+    if (isSenderComment) {
+      // Creator commented → notify recipient
+      if (ticket.destination_type === "merchant" && ticket.recipient_username) {
+        sendPushToUser(ticket.recipient_username, commentTitle, preview, "/admin").catch(() => {});
+      } else if (ticket.destination_type === "pickup_desk" && ticket.recipient_office) {
+        sendPushToOfficeHub(ticket.recipient_office, commentTitle, preview, "/admin").catch(() => {});
+      } else if (ticket.destination_type === "central_team") {
+        sendPushToRole("admin", commentTitle, preview, "/admin").catch(() => {});
+      }
+    } else {
+      // Recipient commented → notify creator
+      if (ticket.created_by) {
+        sendPushToUser(ticket.created_by, commentTitle, preview, "/admin").catch(() => {});
+      }
+    }
   } finally {
     conn.release();
   }
