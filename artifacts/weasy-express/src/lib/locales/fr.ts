@@ -1325,6 +1325,15 @@ const fr = {
       },
     },
   },
+  expediteur: {
+    login: {
+      title: "Espace Expéditeur",
+      subtitle: "Connectez-vous à votre espace expéditeur",
+      usernamePh: "Nom d'utilisateur",
+      accessDenied: "Accès refusé. Ce portail est réservé aux expéditeurs.",
+      footer: "Weasy Express · Espace Expéditeur",
+    },
+  },
 };
 
 export default fr;

@@ -1327,6 +1327,15 @@ const en: Translations = {
       },
     },
   },
+  expediteur: {
+    login: {
+      title: "Expediteur Portal",
+      subtitle: "Sign in to your expediteur account",
+      usernamePh: "Username",
+      accessDenied: "Access denied. This portal is for expediteur accounts only.",
+      footer: "Weasy Express · Expediteur Portal",
+    },
+  },
 };
 
 export default en;

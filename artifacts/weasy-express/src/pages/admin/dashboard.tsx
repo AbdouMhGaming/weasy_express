@@ -2595,7 +2595,11 @@ export default function AdminDashboard() {
   const [officesLoading, setOfficesLoading] = useState(true);
   const [officesError, setOfficesError] = useState("");
 
-  function unauth() { localStorage.removeItem("admin_token"); localStorage.removeItem("admin_role"); localStorage.removeItem("admin_username"); navigate("/admin/login"); }
+  function unauth() {
+    const wasExpediteur = localStorage.getItem("admin_role") === "expediteur";
+    localStorage.removeItem("admin_token"); localStorage.removeItem("admin_role"); localStorage.removeItem("admin_username");
+    navigate(wasExpediteur ? "/expediteurs" : "/admin/login");
+  }
 
   const fetchPartners = useCallback(async () => {
     setPartnersLoading(true); setPartnersError("");
@@ -2622,7 +2626,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem("admin_token");
-    if (!token) { navigate("/admin/login"); return; }
+    if (!token) {
+      const savedRole = localStorage.getItem("admin_role");
+      navigate(savedRole === "expediteur" ? "/expediteurs" : "/admin/login");
+      return;
+    }
     if (role === "admin") { fetchPartners(); fetchOffices(); }
     else if (role === "commercial") { fetchPartners(); }
   }, [fetchPartners, fetchOffices, navigate, role]);

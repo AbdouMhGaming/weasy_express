@@ -14,6 +14,7 @@ import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
 import AdminLogin from "@/pages/admin/login";
 import AdminDashboard from "@/pages/admin/dashboard";
+import ExpediteurLogin from "@/pages/expediteur/login";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ function Router() {
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/expediteurs" component={ExpediteurLogin} />
       <Route>
         <Layout>
           <Switch>

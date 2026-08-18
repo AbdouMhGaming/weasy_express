@@ -1327,6 +1327,15 @@ const ar: Translations = {
       },
     },
   },
+  expediteur: {
+    login: {
+      title: "بوابة المرسل",
+      subtitle: "سجّل دخولك إلى حساب المرسل الخاص بك",
+      usernamePh: "اسم المستخدم",
+      accessDenied: "الوصول مرفوض. هذه البوابة مخصصة لحسابات المرسلين فقط.",
+      footer: "Weasy Express · بوابة المرسل",
+    },
+  },
 };
 
 export default ar;
