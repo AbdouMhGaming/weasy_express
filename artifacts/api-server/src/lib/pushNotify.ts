@@ -104,14 +104,14 @@ export async function sendPushToRole(
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
 
+  // Query admins only — no JOIN avoids the collation mismatch between the
+  // admins and push_subscriptions tables. sendPushToUser does its own
+  // single-table lookup which is collation-safe.
   let usernames: string[] = [];
   const conn = await pool.getConnection();
   try {
     const [users] = await conn.execute(
-      `SELECT DISTINCT a.username
-       FROM admins a
-       INNER JOIN push_subscriptions ps ON ps.username = a.username
-       WHERE a.role = ?`,
+      `SELECT username FROM admins WHERE role = ?`,
       [role],
     ) as any;
     usernames = (users as any[]).map((u: any) => u.username);
@@ -139,14 +139,12 @@ export async function sendPushToOfficeHub(
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
 
+  // Query admins only — no JOIN avoids the collation mismatch.
   let usernames: string[] = [];
   const conn = await pool.getConnection();
   try {
     const [users] = await conn.execute(
-      `SELECT DISTINCT a.username
-       FROM admins a
-       INNER JOIN push_subscriptions ps ON ps.username = a.username
-       WHERE a.role = 'office' AND a.office_hub = ?`,
+      `SELECT username FROM admins WHERE role = 'office' AND office_hub = ?`,
       [hub],
     ) as any;
     usernames = (users as any[]).map((u: any) => u.username);
