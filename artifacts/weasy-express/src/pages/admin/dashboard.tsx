@@ -2807,6 +2807,13 @@ export default function AdminDashboard() {
       }
     } catch { /* never block logout on push errors */ }
 
+    // Remember that push was on so we can re-subscribe after the next login.
+    if (localStorage.getItem("push_enabled") === "1") {
+      localStorage.setItem(
+        isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin",
+        "1",
+      );
+    }
     localStorage.removeItem("push_enabled");
 
     if (isExpediteurPath) {
@@ -2864,6 +2871,49 @@ export default function AdminDashboard() {
       navigator.serviceWorker.register("/sw.js").catch(() => {/* SW not critical */});
     }
   }, []);
+
+  // Auto-resubscribe if the user had notifications on before they logged out.
+  // The flag (push_was_enabled_exp / push_was_enabled_admin) is saved by unauth()
+  // so it survives the session wipe, then we consume it silently here after login.
+  useEffect(() => {
+    const flagKey = isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin";
+    if (localStorage.getItem(flagKey) !== "1") return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      // Permission was revoked — forget the preference
+      localStorage.removeItem(flagKey);
+      return;
+    }
+    // Consume the flag immediately so retries don't stack
+    localStorage.removeItem(flagKey);
+
+    const tok = localStorage.getItem(isExpediteurPath ? "exp_token" : "admin_token") ?? "";
+    if (!tok) return;
+
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, {
+          headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+        });
+        const { key: vapidKey } = (await vapidRes.json()) as { key: string };
+        if (!vapidKey) return;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+        await fetch(`${API_BASE}/api/push/subscribe`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+        localStorage.setItem("push_enabled", "1");
+      } catch (err) {
+        console.warn("Auto-resubscribe failed:", err);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExpediteurPath]);
 
   const isAdmin = role === "admin";
 
