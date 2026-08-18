@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -500,6 +501,7 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
     fetchAccounts();
     fetchParents();
   }, [fetchAccounts, fetchParents]);
+  useAutoRefresh(fetchAccounts, 30_000);
 
   function handleCreated() { setShowAdd(false); fetchAccounts(); }
   function handleSaved()   { setEditTarget(null); fetchAccounts(); }

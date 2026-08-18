@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type ChargeType = "outcome" | "income";
 
@@ -131,6 +132,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   }, [filterFrom, filterTo, onUnauth]);
 
   useEffect(() => { fetchCategories(); fetchAll(); }, [fetchCategories, fetchAll]);
+  useAutoRefresh(fetchAll, 30_000);
 
   function resetChgModal() {
     setChgAmt(""); setChgDesc(""); setChgFile(null); setChgFileErr(""); setChgSubCat("");

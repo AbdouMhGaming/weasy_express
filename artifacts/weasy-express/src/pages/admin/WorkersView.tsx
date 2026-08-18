@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 interface Worker {
   id: number;
@@ -90,6 +91,7 @@ export default function WorkersView() {
   }, []);
 
   useEffect(() => { fetchWorkers(); fetchPositions(); fetchOffices(); }, [fetchWorkers, fetchPositions, fetchOffices]);
+  useAutoRefresh(fetchWorkers, 30_000);
 
   function openAdd() {
     setEditWorker(null);

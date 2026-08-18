@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 interface PerfData {
   total: number; delivered: number; returned: number; in_transit: number;
@@ -70,6 +71,7 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
   }, [onUnauth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useAutoRefresh(fetchAll, 30_000);
 
   const Skeleton = ({ className = "" }: { className?: string }) => (
     <div className={`bg-gray-100 rounded animate-pulse ${className}`} />

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type PayoutStatus = "pending" | "accepted" | "refused" | "delayed" | "paid";
 
@@ -87,6 +88,8 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   }, [onUnauth]);
 
   useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
+  // Auto-refresh: new payout requests appear without a manual reload
+  useAutoRefresh(fetchPayouts, 20_000);
 
   const filtered = useMemo(
     () => filterStatus === "all" ? payouts : payouts.filter((p) => p.status === filterStatus),

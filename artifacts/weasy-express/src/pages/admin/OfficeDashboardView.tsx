@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 function formatSenderCompact(name: string | null, othersLabel: string, maxShow = 2): string {
   if (!name) return "—";
@@ -236,6 +237,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
   }, [onUnauth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useAutoRefresh(fetchAll, 30_000);
 
   async function handleUpload(file: File) {
     setUploading(true); setUploadMsg(null);

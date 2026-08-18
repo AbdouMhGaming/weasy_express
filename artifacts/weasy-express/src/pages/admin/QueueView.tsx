@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +206,8 @@ export default function QueueView() {
   }, []);
 
   useEffect(() => { fetchTickets(); fetchMeta(); }, [fetchTickets, fetchMeta]);
+  // Auto-refresh: new tickets appear without a manual reload (every 15 s + on tab focus)
+  useAutoRefresh(fetchTickets, 15_000);
 
   useEffect(() => {
     if (selected) {

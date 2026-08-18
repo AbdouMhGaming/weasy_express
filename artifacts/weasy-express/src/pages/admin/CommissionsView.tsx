@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 interface CommissionUpload {
   id: number;
@@ -443,6 +444,8 @@ export default function CommissionsView() {
   useEffect(() => { fetchReturnRate(); }, [fetchReturnRate]);
   useEffect(() => { fetchSp(); }, [fetchSp]);
   useEffect(() => { fetchSpRate(); }, [fetchSpRate]);
+  // Auto-refresh: commissions data updates without manual reload
+  useAutoRefresh(() => { fetchHistory(); fetchReturns(); fetchReturnRate(); fetchSp(); fetchSpRate(); }, 30_000);
 
   const officeUploads = useCallback(
     (name: string) => history.filter(h => h.period_label === name),

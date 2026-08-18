@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { WILAYA_LIST } from "@/lib/wilayas";
 
@@ -576,6 +577,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   }, []);
 
   useEffect(() => { fetchTopStats(); fetchOfficeReports(); }, [fetchTopStats, fetchOfficeReports]);
+  useAutoRefresh(fetchTopStats, 30_000);
 
   const dashboardMapSvg = useMemo(() => buildMapSvg(stats), [stats]);
 
@@ -597,6 +599,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   }, [onUnauth, timePreset, filterWilaya, filterFrom, filterTo, filterOffice]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+  useAutoRefresh(fetchStats, 30_000);
 
   const handleReprocessAll = useCallback(async () => {
     if (!window.confirm("Re-traiter tous les PDFs importés ?\n\nCela relit chaque fichier original et corrige les données extraites (expéditeurs, numéros de suivi, destinataires, etc.).")) return;
