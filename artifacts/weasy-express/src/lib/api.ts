@@ -6,8 +6,12 @@ export const API_BASE: string =
     : import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function adminHeaders(): Record<string, string> {
+  // When on the expediteur portal, use the separate expediteur session token
+  // so an admin session logged in simultaneously never leaks its privileges.
+  const isExpPath = typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs");
+  const token = localStorage.getItem(isExpPath ? "exp_token" : "admin_token") ?? "";
   return {
-    Authorization: `Bearer ${localStorage.getItem("admin_token") ?? ""}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
 }
