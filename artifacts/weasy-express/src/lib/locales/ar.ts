@@ -686,8 +686,8 @@ const ar: Translations = {
       newModal: {
         title: "تذكرة جديدة",
         destination: "الوجهة",
-        merchant: "مرسِل", centralTeam: "الفريق المركزي", pickupDesk: "مكتب الاستلام",
-        selectMerchant: "اختر مرسِلاً", selectOffice: "اختر مكتباً",
+        merchant: "تاجر", centralTeam: "الفريق المركزي", pickupDesk: "مكتب الاستلام",
+        selectMerchant: "اختر تاجراً", selectOffice: "اختر مكتباً",
         supportService: "خدمة الدعم", selectSupportService: "اختر نوع الدعم",
         ticketReason: "سبب التذكرة", selectReason: "اختر سبباً",
         other: "أخرى", otherReasonPh: "صِف السبب…",
@@ -1044,7 +1044,7 @@ const ar: Translations = {
         saveError: "خطأ في الحفظ",
         duplicate: "هذا السبب موجود بالفعل",
         destinations: {
-          merchant: "المرسل",
+          merchant: "تاجر",
           central_team: "الفريق المركزي",
           pickup_desk: "مكتب الاستلام",
         },

@@ -189,6 +189,7 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
       sendPushToOfficeHub(recipient_office, notifTitle, notifBody, "/admin").catch(() => {});
     } else if (destination_type === "central_team") {
       sendPushToRole("admin", notifTitle, notifBody, "/admin").catch(() => {});
+      sendPushToRole("office", notifTitle, notifBody, "/admin").catch(() => {});
     }
   } catch (err) {
     await conn.rollback();
@@ -251,15 +252,27 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     await logEvent(conn, id, "status_change", username, null, status);
     res.json({ ok: true });
 
-    // ── Push: notify ticket creator that status changed ──────────────────
-    if (ticket.created_by && ticket.created_by !== username) {
-      const statusLabel = status.replace(/_/g, " ");
+    // ── Push: notify the other party that status changed ─────────────────
+    const statusLabel = status.replace(/_/g, " ");
+    const notifTitle2 = `Ticket ${ticket.ticket_ref} mis à jour`;
+    const notifBody2  = `Statut : ${statusLabel} (par ${username})`;
+
+    if (isRecipient && ticket.created_by && ticket.created_by !== username) {
+      // Recipient changed status → notify the creator
       const creator = ticket.created_by;
-      const title   = `Ticket ${ticket.ticket_ref} mis à jour`;
-      const body2   = `Statut : ${statusLabel} (par ${username})`;
       pushUrlForUser(creator).then(url =>
-        sendPushToUser(creator, title, body2, url).catch(() => {})
+        sendPushToUser(creator, notifTitle2, notifBody2, url).catch(() => {})
       ).catch(() => {});
+    } else if (isSender && !isRecipient) {
+      // Creator changed status → notify the recipient(s)
+      if (ticket.destination_type === "merchant" && ticket.recipient_username) {
+        sendPushToUser(ticket.recipient_username, notifTitle2, notifBody2, "/expediteurs").catch(() => {});
+      } else if (ticket.destination_type === "pickup_desk" && ticket.recipient_office) {
+        sendPushToOfficeHub(ticket.recipient_office, notifTitle2, notifBody2, "/admin").catch(() => {});
+      } else if (ticket.destination_type === "central_team") {
+        sendPushToRole("admin",  notifTitle2, notifBody2, "/admin").catch(() => {});
+        sendPushToRole("office", notifTitle2, notifBody2, "/admin").catch(() => {});
+      }
     }
   } finally {
     conn.release();
@@ -355,6 +368,7 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
         sendPushToOfficeHub(ticket.recipient_office, commentTitle, preview, "/admin").catch(() => {});
       } else if (ticket.destination_type === "central_team") {
         sendPushToRole("admin", commentTitle, preview, "/admin").catch(() => {});
+        sendPushToRole("office", commentTitle, preview, "/admin").catch(() => {});
       }
     } else {
       // Recipient commented → notify creator (look up their role for correct URL)

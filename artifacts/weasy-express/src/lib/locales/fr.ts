@@ -684,8 +684,8 @@ const fr = {
       newModal: {
         title: "Nouveau ticket",
         destination: "Destination",
-        merchant: "Expéditeur", centralTeam: "Équipe centrale", pickupDesk: "Bureau de retrait",
-        selectMerchant: "Sélectionner un expéditeur", selectOffice: "Sélectionner un bureau",
+        merchant: "Marchand", centralTeam: "Équipe centrale", pickupDesk: "Bureau de retrait",
+        selectMerchant: "Sélectionner un marchand", selectOffice: "Sélectionner un bureau",
         supportService: "Service de support", selectSupportService: "Sélectionner le type",
         ticketReason: "Raison du ticket", selectReason: "Choisir une raison",
         other: "Autre", otherReasonPh: "Décrire la raison…",
@@ -1042,7 +1042,7 @@ const fr = {
         saveError: "Erreur lors de la sauvegarde",
         duplicate: "Cette raison existe déjà",
         destinations: {
-          merchant: "Expéditeur",
+          merchant: "Marchand",
           central_team: "Équipe centrale",
           pickup_desk: "Bureau de retrait",
         },

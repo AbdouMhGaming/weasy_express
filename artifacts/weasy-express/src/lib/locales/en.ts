@@ -686,8 +686,8 @@ const en: Translations = {
       newModal: {
         title: "New ticket",
         destination: "Destination",
-        merchant: "Expediteur", centralTeam: "Central team", pickupDesk: "Pickup desk",
-        selectMerchant: "Select an expediteur", selectOffice: "Select an office",
+        merchant: "Merchant", centralTeam: "Central team", pickupDesk: "Pickup desk",
+        selectMerchant: "Select a merchant", selectOffice: "Select an office",
         supportService: "Support service", selectSupportService: "Select support type",
         ticketReason: "Ticket reason", selectReason: "Select a reason",
         other: "Other", otherReasonPh: "Describe the reason…",
@@ -1044,7 +1044,7 @@ const en: Translations = {
         saveError: "Error saving reasons",
         duplicate: "This reason already exists",
         destinations: {
-          merchant: "Expediteur",
+          merchant: "Merchant",
           central_team: "Central team",
           pickup_desk: "Pickup desk",
         },
