@@ -79,3 +79,10 @@ uri = "file://deploy/weasy-express-2026-08-17.zip"
 type = "unspecified"
 title = "weasy-express-2026-08-17.zip"
 description = "Fixed Hostinger build — now includes drizzle-orm in package.json so npm install on Hostinger will resolve all runtime dependencies."
+
+[[outputs]]
+id = "XaJkWuopRabQS5TxOVRGZ"
+uri = "file://deploy/weasy-express-2026-08-18.zip"
+type = "unspecified"
+title = "Hostinger Build — 2026-08-18"
+description = "Production package (7.6 MB): dist/index.mjs + public SPA. Upload to Hostinger Node.js root and set env vars as per README.md inside the zip."
