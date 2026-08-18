@@ -1,5 +1,6 @@
 import {
   mysqlTable,
+  uniqueIndex,
   int,
   varchar,
   text,
@@ -121,6 +122,21 @@ export const officeReportsTable = mysqlTable("office_reports", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const pushSubscriptionsTable = mysqlTable(
+  "push_subscriptions",
+  {
+    id: int("id").primaryKey().autoincrement(),
+    username: varchar("username", { length: 100 }).notNull(),
+    // varchar(500) keeps the column indexable in MySQL (text requires a prefix index)
+    endpoint: varchar("endpoint", { length: 500 }).notNull(),
+    p256dh: varchar("p256dh", { length: 255 }).notNull(),
+    auth: varchar("auth", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("endpoint_key").on(table.endpoint)]
+);
+
 export type Charge = typeof chargesTable.$inferSelect;
 export type Payout = typeof payoutsTable.$inferSelect;
 export type OfficeReport = typeof officeReportsTable.$inferSelect;
+export type PushSubscription = typeof pushSubscriptionsTable.$inferSelect;

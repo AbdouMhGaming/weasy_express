@@ -32,7 +32,8 @@ async function doSendPush(
         [endpoint]
       );
     }
-    // Other errors (network, etc.) are silently ignored so they don't fail the main request
+    // Other errors (network, push service down) are silently ignored
+    // so they never block the main ticket operations
   }
 }
 
@@ -66,6 +67,7 @@ export async function sendPushToUser(
 
 /**
  * Send a push notification to all users with a given role.
+ * Releases the DB connection before sending so it isn't held across network calls.
  */
 export async function sendPushToRole(
   role: string,
@@ -75,24 +77,25 @@ export async function sendPushToRole(
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
   const conn = await pool.getConnection();
+  let usernames: string[] = [];
   try {
     const [users] = await conn.execute(
-      "SELECT DISTINCT a.username FROM admins a INNER JOIN push_subscriptions ps ON ps.username = a.username WHERE a.role = ?",
+      `SELECT DISTINCT a.username
+       FROM admins a
+       INNER JOIN push_subscriptions ps ON ps.username = a.username
+       WHERE a.role = ?`,
       [role]
     ) as any;
-    conn.release();
-    await Promise.all(
-      (users as any[]).map((u: any) =>
-        sendPushToUser(u.username, title, body, url)
-      )
-    );
-  } catch {
+    usernames = (users as any[]).map((u: any) => u.username);
+  } finally {
     conn.release();
   }
+  await Promise.all(usernames.map((u) => sendPushToUser(u, title, body, url)));
 }
 
 /**
  * Send a push notification to all office users in a given hub.
+ * Releases the DB connection before sending so it isn't held across network calls.
  */
 export async function sendPushToOfficeHub(
   hub: string,
@@ -102,6 +105,7 @@ export async function sendPushToOfficeHub(
 ): Promise<void> {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
   const conn = await pool.getConnection();
+  let usernames: string[] = [];
   try {
     const [users] = await conn.execute(
       `SELECT DISTINCT a.username
@@ -110,13 +114,9 @@ export async function sendPushToOfficeHub(
        WHERE a.role = 'office' AND a.office_hub = ?`,
       [hub]
     ) as any;
-    conn.release();
-    await Promise.all(
-      (users as any[]).map((u: any) =>
-        sendPushToUser(u.username, title, body, url)
-      )
-    );
-  } catch {
+    usernames = (users as any[]).map((u: any) => u.username);
+  } finally {
     conn.release();
   }
+  await Promise.all(usernames.map((u) => sendPushToUser(u, title, body, url)));
 }

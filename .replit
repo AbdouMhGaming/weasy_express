@@ -97,7 +97,7 @@ externalPort = 3000
 [userenv.shared]
 MAIL_FROM = "Weasy Express <noreply@weasydelivery.com>"
 MAIL_TO = "bigsabdou@gmail.com"
-VAPID_PUBLIC_KEY = "BJbOT5llQXfWXBePdo3NL_SnMFAnMhr0A9HKPVoxxQg_GBNbS8n0p25wI_ou4vfoEFnrryTU_gjPkMtWvB4g6CA"
+VAPID_PUBLIC_KEY = "BN_HwB99ZYCwYcYNZauYrn1fFRKpo2GtXyQHMsJFZmYZ-pLiz6W0vDaIcgJeMnqtDkFYLMv2QktIWHN-GbfA5Ro"
 
 [nix]
 channel = "stable-25_05"

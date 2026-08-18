@@ -1,29 +1,14 @@
 ---
 name: Web Push Notifications
-description: Architecture and key decisions for the push notification system added to api-server and weasy-express.
+description: Durable decisions for the web push notification system.
 ---
 
-# Web Push Notification System
+# Web Push Notifications — Durable Decisions
 
-## Architecture
-- **VAPID keys**: generated with Node.js `createECDH('prime256v1')`, stored as env vars `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (shared env). The private key should be moved to a Replit Secret for production.
-- **Service Worker**: `artifacts/weasy-express/public/sw.js` — handles `push` and `notificationclick` events. Registered in AdminDashboard's useEffect on mount.
-- **Backend helper**: `artifacts/api-server/src/lib/pushNotify.ts` — exports `sendPushToUser`, `sendPushToRole`, `sendPushToOfficeHub`. Calls `webpush.setVapidDetails` at module load time.
-- **Push route**: `artifacts/api-server/src/routes/push.ts` — mounted in `routes/index.ts`; provides `/api/push/vapid-public-key`, `/api/push/subscribe`, `/api/push/unsubscribe`.
-- **DB table**: `push_subscriptions` (id, username, endpoint, p256dh, auth, created_at), UNIQUE on `endpoint(255)`. Added via `lib/db/add-push-subscriptions-table.mjs`.
+**Fire-and-forget for ticket triggers.** Push sends hit external services and can take >1 s. Always use `.catch(() => {})` after trigger calls; never await them before the HTTP response.
 
-## Notification Triggers (in tickets.ts)
-- Ticket created → notify recipient (sendPushToUser for merchant, sendPushToOfficeHub for pickup_desk, sendPushToRole("admin") for central_team)
-- Status changed → notify created_by
-- Comment added → notify the OTHER party (creator commented → notify recipient; recipient commented → notify creator)
-- All triggers are fire-and-forget (`.catch(() => {})`) so they never block the HTTP response.
+**Connection must be released before network sends.** `sendPushToRole` / `sendPushToOfficeHub` query usernames, release the connection in `finally`, then call `sendPushToUser` after. Holding a connection across external push-service HTTP calls exhausts the MySQL pool under load.
 
-## Frontend Bell Icon
-- Lives inside `SidebarInner` in `dashboard.tsx` around line ~290 (before changePassword button).
-- State: `notifEnabled` (localStorage "push_enabled"==="1"), `notifLoading`.
-- Toggle calls `Notification.requestPermission()` → `reg.pushManager.subscribe(...)` → `POST /api/push/subscribe`.
-- Renders only when `"Notification" in window && "serviceWorker" in navigator`.
+**`endpoint` column is `varchar(500)`, not `text`.** MySQL requires a fixed-length column to create a full unique index without a prefix. `varchar(500)` in `utf8mb4` = 2000 bytes, within the 3072-byte `innodb_large_prefix` limit. The `text` type would require a prefix unique key, which Drizzle cannot express; changing to `text` again breaks the schema-managed unique constraint.
 
-**Why fire-and-forget for triggers:** Push sends are network calls to external push services (FCM, APNS) that can take >1s. Awaiting them would slow down every ticket operation.
-
-**How to apply:** When adding new ticket event types, import from `pushNotify.ts` and fire `.catch(() => {})` after the DB write, not before the HTTP response.
+**VAPID_PRIVATE_KEY is a Replit Secret, not an env var.** `VAPID_PUBLIC_KEY` is a shared env var (intentionally public). Never move the private key back to env vars — it would be committed to `.replit`.
