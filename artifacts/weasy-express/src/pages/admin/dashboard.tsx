@@ -144,18 +144,17 @@ function SidebarInner({
     setNotifLoading(true);
     try {
       if (notifEnabled) {
-        // Disable
-        const reg = await navigator.serviceWorker.getRegistration("/sw.js");
-        if (reg) {
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) {
-            await fetch(`${API_BASE}/api/push/unsubscribe`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ endpoint: sub.endpoint }),
-            });
-            await sub.unsubscribe();
-          }
+        // Disable — use .ready (guaranteed to find the active SW, unlike getRegistration)
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch(`${API_BASE}/api/push/unsubscribe`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+            keepalive: true,
+          });
+          await sub.unsubscribe();
         }
         localStorage.removeItem("push_enabled");
         setNotifEnabled(false);
@@ -2780,26 +2779,34 @@ export default function AdminDashboard() {
   const [officesLoading, setOfficesLoading] = useState(true);
   const [officesError, setOfficesError] = useState("");
 
-  function unauth() {
-    // Silently unsubscribe from push before clearing the session so the
-    // browser endpoint is removed from the DB and notifications stop immediately.
+  async function unauth() {
+    // Unsubscribe from push BEFORE clearing the session.
+    // We await it (with a 3-second safety timeout) so the fetch completes
+    // before navigate() is called — fire-and-forget was getting aborted.
     const pushToken = isExpediteurPath
       ? localStorage.getItem("exp_token")
       : localStorage.getItem("admin_token");
-    if (localStorage.getItem("push_enabled") === "1" && pushToken) {
-      navigator.serviceWorker?.getRegistration("/sw.js").then(reg => {
-        reg?.pushManager.getSubscription().then(sub => {
-          if (sub) {
-            fetch(`${API_BASE}/api/push/unsubscribe`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ endpoint: sub.endpoint }),
-            }).catch(() => {});
-            sub.unsubscribe().catch(() => {});
-          }
-        }).catch(() => {});
-      }).catch(() => {});
-    }
+    try {
+      if ("serviceWorker" in navigator && "PushManager" in window && pushToken) {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await Promise.race([
+            (async () => {
+              await fetch(`${API_BASE}/api/push/unsubscribe`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ endpoint: sub.endpoint }),
+                keepalive: true,   // survives navigation
+              });
+              await sub.unsubscribe(); // revoke browser endpoint
+            })(),
+            new Promise<void>(resolve => setTimeout(resolve, 3000)), // never block logout > 3 s
+          ]);
+        }
+      }
+    } catch { /* never block logout on push errors */ }
+
     localStorage.removeItem("push_enabled");
 
     if (isExpediteurPath) {
