@@ -1516,6 +1516,7 @@ const en: Translations = {
         },
         empty: "No orders found.",
         refreshing: "Refreshing orders...",
+        destinationUnavailable: "Destination unavailable",
         bulkModal: {
           title: "Add multiple orders",
           addRow: "Add row",

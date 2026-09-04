@@ -1514,6 +1514,7 @@ const fr = {
         },
         empty: "Aucune commande trouvée.",
         refreshing: "Actualisation des commandes...",
+        destinationUnavailable: "Destination indisponible",
         bulkModal: {
           title: "Ajouter plusieurs commandes",
           addRow: "Ajouter une ligne",

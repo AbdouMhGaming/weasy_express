@@ -31,6 +31,9 @@ import { useToast } from "@/hooks/use-toast";
 
 // Format numbers
 const formatDZD = (num: number) => new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(num);
+const readableLocation = (...values: unknown[]) => values
+  .map(value => String(value ?? "").trim())
+  .find(value => value.length > 0 && !/^\d+$/.test(value));
 
 export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const { t } = useTranslation();
@@ -212,6 +215,10 @@ function OrdersTab() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {ordersData?.data?.map((order: any) => (
+                  (() => {
+                    const wilayaName = wilayaNames.get(String(order.wilaya_id));
+                    const communeName = readableLocation(order.commune_name, order.commune);
+                    return (
                   <tr key={order.tracking} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-4 py-3">
                       <div className="font-mono font-bold text-slate-900">{order.tracking}</div>
@@ -224,9 +231,9 @@ function OrdersTab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="font-medium text-slate-700">{wilayaNames.get(String(order.wilaya_id)) || order.wilaya_id}</span>
+                        <span className="font-medium text-slate-700">{wilayaName || t("admin.ecotrackPortal.orders.destinationUnavailable")}</span>
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5 ml-5">{order.commune_id || '—'}</div>
+                      {communeName && <div className="text-xs text-slate-500 mt-0.5 ml-5">{communeName}</div>}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatDZD(order.montant || 0)}</td>
                     <td className="px-4 py-3 text-right">
@@ -249,6 +256,8 @@ function OrdersTab() {
                       </div>
                     </td>
                   </tr>
+                    );
+                  })()
                 ))}
               </tbody>
             </table>

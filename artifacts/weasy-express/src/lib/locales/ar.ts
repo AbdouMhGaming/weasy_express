@@ -1516,6 +1516,7 @@ const ar: Translations = {
         },
         empty: "لا توجد طلبات.",
         refreshing: "جارٍ تحديث الطلبات...",
+        destinationUnavailable: "الوجهة غير متاحة",
         bulkModal: {
           title: "إضافة طلبات متعددة",
           addRow: "إضافة صف",
