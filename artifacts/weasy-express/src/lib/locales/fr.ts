@@ -671,6 +671,8 @@ const fr = {
       search: "Rechercher des tickets…",
       loading: "Chargement…",
       noTickets: "Aucun ticket trouvé",
+      loadError: "Impossible de charger les tickets. Veuillez réessayer.",
+      retry: "Réessayer",
       claim: "Prendre en charge",
       filters: {
         all: "Tout", incoming: "Entrants", outgoing: "Sortants",

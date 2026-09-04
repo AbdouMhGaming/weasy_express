@@ -673,6 +673,8 @@ const ar: Translations = {
       search: "البحث في التذاكر…",
       loading: "جارٍ التحميل…",
       noTickets: "لا توجد تذاكر",
+      loadError: "تعذر تحميل التذاكر. يرجى المحاولة مرة أخرى.",
+      retry: "إعادة المحاولة",
       claim: "استلام",
       filters: {
         all: "الكل", incoming: "واردة", outgoing: "صادرة",

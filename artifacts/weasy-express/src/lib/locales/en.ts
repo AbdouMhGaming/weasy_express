@@ -673,6 +673,8 @@ const en: Translations = {
       search: "Search tickets…",
       loading: "Loading…",
       noTickets: "No tickets found",
+      loadError: "Tickets could not be loaded. Please try again.",
+      retry: "Try again",
       claim: "Claim",
       filters: {
         all: "All", incoming: "Incoming", outgoing: "Outgoing",

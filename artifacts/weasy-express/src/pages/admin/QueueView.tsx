@@ -130,6 +130,7 @@ export default function QueueView() {
   // data
   const [tickets, setTickets]               = useState<Ticket[]>([]);
   const [loading, setLoading]               = useState(true);
+  const [loadError, setLoadError]           = useState(false);
   const [expediteurUsers, setExpediteurUsers] = useState<AdminUser[]>([]);
   const [officesList, setOfficesList]         = useState<{ id: number; wilaya: string; commune: string | null }[]>([]);
   const [ticketReasons, setTicketReasons]   = useState<Record<string, string[]>>({ merchant: [], central_team: [], pickup_desk: [] });
@@ -175,11 +176,15 @@ export default function QueueView() {
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const r = await fetch(`${API_BASE}/api/tickets`, { headers: adminHeaders() });
       const d = await r.json();
-      if (d.ok) setTickets(d.tickets ?? []);
-    } catch { } finally { setLoading(false); }
+      if (r.ok && d.ok) setTickets(d.tickets ?? []);
+      else setLoadError(true);
+    } catch {
+      setLoadError(true);
+    } finally { setLoading(false); }
   }, []);
 
   const fetchMeta = useCallback(async () => {
@@ -458,6 +463,13 @@ export default function QueueView() {
         {loading ? (
           <div className="flex items-center justify-center py-24 gap-2 text-gray-400 text-sm">
             <Spinner />{t("admin.queue.loading")}
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
+            <p className="text-red-600 text-sm font-medium">{t("admin.queue.loadError")}</p>
+            <button onClick={fetchTickets} className="mt-3 px-4 py-2 bg-[#E10600] hover:bg-[#C50500] text-white text-sm font-bold rounded-xl">
+              {t("admin.queue.retry")}
+            </button>
           </div>
         ) : pag.paged.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
