@@ -12,3 +12,4 @@
 - [Expediteur role & features](expediteur-features.md) — full Expediteur role, payouts, team sub-accounts, and ticket system overhaul; key decisions and file locations documented.
 - [Push notifications](push-notifications.md) — Web Push via web-push + VAPID; service worker in public/sw.js; bell icon in SidebarInner; fire-and-forget triggers in tickets.ts.
 - [Ecotrack API behavior](ecotrack-api-behavior.md) — production invalid-token responses differ from the docs; treat HTTP 401 “Unauthenticated.” as an invalid credential.
+- [Ecotrack translation audit](ecotrack-translation-audit.md) — every Ecotrack UI change must verify all referenced keys resolve in EN/FR/AR; never rely on a successful Vite build.
