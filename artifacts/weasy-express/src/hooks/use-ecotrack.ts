@@ -12,7 +12,25 @@ export function useEcotrackDashboard() {
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
-      return body;
+      const infoEnvelope = body.info?.data ?? body.info ?? {};
+      const info = infoEnvelope[tracking] ?? infoEnvelope;
+      const updatesEnvelope = body.updates?.data ?? body.updates ?? {};
+      const updates = updatesEnvelope[tracking] ?? updatesEnvelope;
+      const activity = [info?.activity, updates?.activity].find(Array.isArray) ?? [];
+      return {
+        ...body,
+        info,
+        updates,
+        events: activity.map((event: any) => ({
+          status: event.status ?? event.activity ?? event.reason ?? "",
+          date: event.date ?? "",
+          time: event.time ?? "",
+          station: event.station ?? event.scanLocation ?? "",
+          reason: event.reason ?? "",
+          details: event.details ?? "",
+          postponedTo: event.postponed_to ?? null,
+        })),
+      };
     },
   });
 }

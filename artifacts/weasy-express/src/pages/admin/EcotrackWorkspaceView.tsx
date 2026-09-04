@@ -36,6 +36,52 @@ const readableLocation = (...values: unknown[]) => values
   .map(value => String(value ?? "").trim())
   .find(value => value.length > 0 && !/^\d+$/.test(value));
 
+const ECOTRACK_STATUS_KEYS: Record<string, string> = {
+  pret_a_expedier: "readyToShip",
+  pret_a_preparer: "readyToPrepare",
+  en_ramassage: "pickingUp",
+  stock_en_preparation: "stockPreparing",
+  vers_hub: "toHub",
+  en_hub: "atHub",
+  vers_wilaya: "toWilaya",
+  en_preparation: "preparing",
+  en_livraison: "outForDelivery",
+  suspendu: "suspended",
+  suspendus: "suspended",
+  retour_chez_livreur: "returnWithDriver",
+  retour_en_traitement: "returnProcessing",
+  retour_en_transit: "returnInTransit",
+  retour_en_stock: "returnInStock",
+  livré_non_encaissé: "deliveredNotCollected",
+  livre_non_encaisse: "deliveredNotCollected",
+  encaissé_non_payé: "collectedNotPaid",
+  encaisse_non_paye: "collectedNotPaid",
+  paiement_prêt: "paymentReady",
+  paiement_pret: "paymentReady",
+  paiement_archivé: "paymentArchived",
+  paiement_archive: "paymentArchived",
+  order_information_received_by_carrier: "registered",
+  picked: "picked",
+  accepted_by_carrier: "acceptedAtStation",
+  dispatched_to_driver: "dispatchedToDriver",
+  attempt_delivery: "deliveryAttempt",
+  return_asked: "returnRequested",
+  return_received: "returnReceived",
+  livred: "delivered",
+  encaissed: "collected",
+  payed: "paid",
+};
+
+function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
+  const raw = String(status ?? "").trim();
+  if (!raw || /^\d+$/.test(raw)) return t("admin.ecotrackPortal.tracking.statusLabels.unknown");
+  const normalized = raw.toLocaleLowerCase().replace(/[\s-]+/g, "_");
+  const key = ECOTRACK_STATUS_KEYS[normalized];
+  if (key) return t(`admin.ecotrackPortal.tracking.statusLabels.${key}`);
+  const words = raw.replaceAll("_", " ");
+  return words.charAt(0).toLocaleUpperCase() + words.slice(1);
+}
+
 export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -330,7 +376,7 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
                   statusFilter === status ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 shadow-sm"
                 }`}
               >
-                {status === "all" ? t("admin.ecotrackPortal.common.all") : status}
+                {status === "all" ? t("admin.ecotrackPortal.common.all") : humanizeEcotrackStatus(status, t)}
                 {statInfo && statInfo.count > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === status ? "bg-white/20" : "bg-slate-100"}`}>{statInfo.count}</span>}
               </button>
             );
@@ -374,7 +420,7 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
                       <div className="text-xs text-slate-400 mt-0.5">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={order.process_state_id || order.status} />
+                       <StatusBadge status={order.status || order.global_status || order.process_state_id} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{order.client}</div>
@@ -925,10 +971,13 @@ function TrackingDetailModal({ tracking, onClose }: { tracking: string; onClose:
                       </div>
                       <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-slate-900 text-sm">{ev.status}</span>
-                          <span className="text-xs font-medium text-slate-400">{new Date(ev.created_at).toLocaleString()}</span>
+                          <span className="font-bold text-slate-900 text-sm">{humanizeEcotrackStatus(ev.status, t)}</span>
+                          <span className="text-xs font-medium text-slate-400">{[ev.date, ev.time].filter(Boolean).join(" ")}</span>
                         </div>
-                        {ev.note && <p className="text-sm text-slate-600 mt-2">{ev.note}</p>}
+                        {ev.station && <p className="text-xs font-medium text-slate-500 mt-2">{ev.station}</p>}
+                        {ev.reason && ev.reason !== ev.status && <p className="text-sm text-slate-700 mt-2">{ev.reason}</p>}
+                        {ev.details && <p className="text-sm text-slate-600 mt-1">{ev.details}</p>}
+                        {ev.postponedTo && <p className="text-xs text-amber-700 mt-2">{t("admin.ecotrackPortal.tracking.postponedTo")}: {ev.postponedTo}</p>}
                       </div>
                     </div>
                   ))}
@@ -986,6 +1035,7 @@ function AddNoteModal({ tracking, onClose }: { tracking: string; onClose: () => 
 }
 
 function StatusBadge({ status }: { status: string | number }) {
+  const { t } = useTranslation();
   if (status === undefined || status === null) return null;
   const s = status.toString().toLowerCase();
   let bg = "bg-slate-100 text-slate-700 border-slate-200";
@@ -1000,7 +1050,7 @@ function StatusBadge({ status }: { status: string | number }) {
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold border whitespace-nowrap ${bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      {status}
+      {humanizeEcotrackStatus(status, t)}
     </span>
   );
 }
