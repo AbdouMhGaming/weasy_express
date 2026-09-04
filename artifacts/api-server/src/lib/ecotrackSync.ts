@@ -49,7 +49,7 @@ export async function withEcotrackAccountLock<T>(
   }
 }
 
-async function cacheOrders(expediteurId: number, orders: any[]) {
+export async function cacheOrders(expediteurId: number, orders: any[]) {
   if (!orders.length) return;
   const rows = orders.flatMap((order) => {
     const id = tracking(order?.tracking);

@@ -252,9 +252,11 @@ export function useCreateEcotrackOrder() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+      ]);
     },
   });
 }
@@ -273,9 +275,11 @@ export function useBulkCreateEcotrackOrders() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+      ]);
     },
   });
 }
@@ -294,8 +298,12 @@ export function useUpdateEcotrackOrder() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
+    onSuccess: async (_, vars) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", vars.tracking] }),
+      ]);
     },
   });
 }
@@ -313,9 +321,12 @@ export function useDeleteEcotrackOrder() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] });
+    onSuccess: async (_, tracking) => {
+      queryClient.removeQueries({ queryKey: ["ecotrack", "order", tracking] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+      ]);
     },
   });
 }
@@ -334,8 +345,12 @@ export function useValidateEcotrackOrder() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
+    onSuccess: async (_, vars) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", vars.tracking] }),
+      ]);
     },
   });
 }
@@ -374,8 +389,12 @@ export function useRequestReturnEcotrackOrder() {
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] });
+    onSuccess: async (_, tracking) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", tracking] }),
+      ]);
     },
   });
 }

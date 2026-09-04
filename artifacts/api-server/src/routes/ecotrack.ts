@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
 import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
-import { syncEcotrackAccount } from "../lib/ecotrackSync";
+import { cacheOrders, syncEcotrackAccount } from "../lib/ecotrackSync";
 import {
   ecotrackReferenceCache as references,
   ecotrackResolvedCommuneCache as resolvedCommunes,
@@ -187,17 +187,168 @@ router.get("/expediteur/ecotrack/orders/:tracking/commune", async (req: AuthedRe
 async function mutation(req: AuthedRequest, res: any, path: string, method: string, params: any, body?: any) {
   try { const { token } = await upstream(req); const result = await ecotrackRequest(token, path, { method, params, body }); return res.json({ ok: true, result: result.body }); } catch (e) { return error(res, e); }
 }
-router.post("/expediteur/ecotrack/create/order", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/create/order", "POST", compact(req.body, createFields)));
-router.post("/expediteur/ecotrack/create/orders", (req: AuthedRequest, res) => {
+function createdTracking(body: any) {
+  return tracking(body?.tracking ?? body?.data?.tracking ?? body?.order?.tracking ?? body?.result?.tracking);
+}
+function cachedCreatedOrder(item: any, id: string) {
+  return {
+    tracking: id,
+    reference: item.reference ?? null,
+    client: item.nom_client ?? null,
+    phone: item.telephone ?? null,
+    phone_2: item.telephone_2 ?? null,
+    adresse: item.adresse ?? null,
+    wilaya_id: item.code_wilaya ?? null,
+    commune_name: item.commune ?? null,
+    montant: item.montant ?? null,
+    products: item.produit ?? null,
+    weight: item.weight ?? null,
+    remarque: item.remarque ?? null,
+    type_id: item.type ?? null,
+    stop_desk: item.stop_desk ?? 0,
+    fragile: item.fragile ?? 0,
+    status: "en_preparation",
+    created_at: new Date().toISOString(),
+    last_updated_at: new Date().toISOString(),
+  };
+}
+async function patchCachedOrder(expediteurId: number, id: string, changes: any) {
+  const conn = await pool.getConnection();
+  try {
+    const [[row]] = await conn.execute(
+      "SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=? LIMIT 1",
+      [expediteurId, id],
+    ) as any;
+    if (!row) return;
+    const current = JSON.parse(row.raw_order);
+    await cacheOrders(expediteurId, [{
+      ...current,
+      reference: changes.reference ?? current.reference,
+      client: changes.client ?? current.client,
+      phone: changes.tel ?? current.phone,
+      phone_2: changes.tel2 ?? current.phone_2,
+      adresse: changes.adresse ?? current.adresse,
+      wilaya_id: changes.wilaya ?? current.wilaya_id,
+      commune_name: changes.commune ?? current.commune_name,
+      montant: changes.montant ?? current.montant,
+      products: changes.product ?? current.products,
+      weight: changes.weight ?? current.weight,
+      remarque: changes.remarque ?? current.remarque,
+      type_id: changes.type ?? current.type_id,
+      stop_desk: changes.stop_desk ?? current.stop_desk,
+      fragile: changes.fragile ?? current.fragile,
+      last_updated_at: new Date().toISOString(),
+    }]);
+  } finally {
+    conn.release();
+  }
+}
+async function refreshCachedOrder(expediteurId: number, token: string, id: string) {
+  const result = await ecotrackRequest(token, "/api/v1/get/orders", {
+    params: {
+      tracking: id,
+      start_date: "2020-01-01",
+      end_date: new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
+    },
+  });
+  const body = result.body ?? {};
+  const order = Array.isArray(body.data) ? body.data.find((item: any) => tracking(item?.tracking) === id) : null;
+  if (order) await cacheOrders(expediteurId, [order]);
+}
+router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const item = compact(req.body, createFields);
+    const result = await ecotrackRequest(token, "/api/v1/create/order", { method: "POST", body: item });
+    const id = createdTracking(result.body);
+    if (id) await cacheOrders(expediteurId, [cachedCreatedOrder(item, id)]);
+    return res.json({ ok: true, result: result.body, tracking: id });
+  } catch (e) { return error(res, e); }
+});
+router.post("/expediteur/ecotrack/create/orders", async (req: AuthedRequest, res) => {
   const items = Array.isArray(req.body?.orders) ? req.body.orders : Object.values(req.body?.orders ?? {});
   if (!items.length || items.length > 100) return res.status(400).json({ ok: false, error: "orders_must_contain_1_to_100_items" });
-  return mutation(req, res, "/api/v1/create/orders", "POST", {}, { orders: Object.fromEntries(items.map((item: any, i: number) => [i, compact(item, createFields)])) });
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const usedReferences = new Set<string>();
+    const submitted = items.map((item: any, index: number) => {
+      const order = compact(item, createFields);
+      const original = String(order.reference ?? "").trim();
+      let reference = original || `WEASY-${Date.now()}-${index + 1}`;
+      let suffix = 2;
+      while (usedReferences.has(reference.toLocaleLowerCase())) reference = `${original || reference}-${suffix++}`;
+      usedReferences.add(reference.toLocaleLowerCase());
+      return { ...order, reference };
+    });
+    const result = await ecotrackRequest(token, "/api/v1/create/orders", {
+      method: "POST",
+      body: { orders: Object.fromEntries(submitted.map((item, index) => [index, item])) },
+    });
+    const results = result.body?.results && typeof result.body.results === "object" ? result.body.results : {};
+    const created = submitted.flatMap((item) => {
+      const id = createdTracking(results[item.reference]);
+      return id ? [cachedCreatedOrder(item, id)] : [];
+    });
+    if (created.length) await cacheOrders(expediteurId, created);
+    const failures = submitted
+      .filter((item) => !createdTracking(results[item.reference]))
+      .map((item) => ({ reference: item.reference, details: results[item.reference] ?? "missing_result" }));
+    return res.json({
+      ok: created.length > 0 && failures.length === 0,
+      ...(failures.length ? { error: "some_orders_failed" } : {}),
+      result: result.body,
+      created: created.map((item) => item.tracking),
+      failures,
+    });
+  } catch (e) { return error(res, e); }
 });
-router.put("/expediteur/ecotrack/update/order", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/update/order", "POST", compact(req.body, updateFields)));
-router.delete("/expediteur/ecotrack/order", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/delete/order", "DELETE", { tracking: tracking(req.body?.tracking ?? req.query.tracking) }));
-router.post("/expediteur/ecotrack/validate", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/valid/order", "POST", compact(req.body, ["tracking", "ask_collection"])));
+router.put("/expediteur/ecotrack/update/order", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const changes = compact(req.body, updateFields);
+    const id = tracking(changes.tracking);
+    if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+    const result = await ecotrackRequest(token, "/api/v1/update/order", { method: "POST", body: changes });
+    await patchCachedOrder(expediteurId, id, changes);
+    return res.json({ ok: true, result: result.body });
+  } catch (e) { return error(res, e); }
+});
+router.delete("/expediteur/ecotrack/order", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const id = tracking(req.body?.tracking ?? req.query.tracking);
+    if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+    const result = await ecotrackRequest(token, "/api/v1/delete/order", { method: "DELETE", params: { tracking: id } });
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=?", [expediteurId, id]);
+    } finally { conn.release(); }
+    return res.json({ ok: true, result: result.body });
+  } catch (e) { return error(res, e); }
+});
+router.post("/expediteur/ecotrack/validate", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const payload = compact(req.body, ["tracking", "ask_collection"]);
+    const id = tracking(payload.tracking);
+    if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+    const result = await ecotrackRequest(token, "/api/v1/valid/order", { method: "POST", body: payload });
+    await refreshCachedOrder(expediteurId, token, id);
+    return res.json({ ok: true, result: result.body });
+  } catch (e) { return error(res, e); }
+});
 router.post("/expediteur/ecotrack/note", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/add/maj", "POST", compact(req.body, ["tracking", "content"])));
-router.post("/expediteur/ecotrack/return-request", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/ask/for/order/return", "POST", compact(req.body, ["tracking"])));
+router.post("/expediteur/ecotrack/return-request", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const payload = compact(req.body, ["tracking"]);
+    const id = tracking(payload.tracking);
+    if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+    const result = await ecotrackRequest(token, "/api/v1/ask/for/order/return", { method: "POST", body: payload });
+    await refreshCachedOrder(expediteurId, token, id);
+    return res.json({ ok: true, result: result.body });
+  } catch (e) { return error(res, e); }
+});
 
 router.get("/expediteur/ecotrack/orders/:tracking/label", async (req: AuthedRequest, res) => {
   const id = tracking(req.params.tracking); if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });

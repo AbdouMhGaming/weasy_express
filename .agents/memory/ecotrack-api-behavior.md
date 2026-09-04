@@ -50,3 +50,9 @@ Ecotrack `/get/orders` silently defaults to non-archived orders created in the l
 **Why:** A current API returned 63 orders and one `vers_wilaya` with default parameters, but 68 orders and two `vers_wilaya` when the documented historical date range was supplied.
 
 **How to apply:** Every full order sync must send explicit `start_date` and `end_date`. Treat `next_page=1` as complete only when `last_page` and `last_synced_at` are also present.
+
+Successful Ecotrack mutations must update the local order cache before responding; browser invalidation alone only rereads stale MySQL data. Bulk-create references must be unique, including generated references for blank values.
+
+**Why:** Waiting for the background cycle hid create/update/delete results after refresh, and Ecotrack keys bulk-create results by reference, so blank or repeated references collide and can associate multiple rows with one tracking/label.
+
+**How to apply:** Cache creates and edits synchronously, delete cached rows synchronously, then await browser list/dashboard invalidation. Correlate each bulk result through its unique submitted reference.
