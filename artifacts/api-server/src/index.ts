@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startEcotrackLiveSync } from "./lib/ecotrackSync";
 
 const rawPort = process.env["PORT"];
 const parsed = rawPort ? Number(rawPort) : NaN;
@@ -16,6 +17,7 @@ process.on("unhandledRejection", (err) => {
 
 const server = app.listen(port, host, () => {
   logger.info({ port, host }, "Server listening");
+  startEcotrackLiveSync();
 });
 
 server.on("error", (err) => {

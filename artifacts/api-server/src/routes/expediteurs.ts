@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
 import { encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
 import { clearEcotrackRuntimeCache } from "../lib/ecotrackRuntimeCache";
+import { queueEcotrackFullSync, withEcotrackAccountLock } from "../lib/ecotrackSync";
 
 const router = Router();
 // Scope the guard to this router's non-admin prefix. /admin routes are already
@@ -85,39 +86,36 @@ router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
   }
 
   const encrypted = encryptEcotrackToken(token);
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.execute(
-      `INSERT INTO expediteur_ecotrack_credentials
-       (expediteur_id, token_ciphertext, token_iv, token_auth_tag, token_hint, connection_status, last_validated_at)
-       VALUES (?, ?, ?, ?, ?, 'connected', NOW())
-       ON DUPLICATE KEY UPDATE
-         token_ciphertext = VALUES(token_ciphertext),
-         token_iv = VALUES(token_iv),
-         token_auth_tag = VALUES(token_auth_tag),
-         token_hint = VALUES(token_hint),
-         connection_status = 'connected',
-         last_validated_at = NOW()`,
-      [account.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag, encrypted.hint],
-    );
-    await conn.execute(
-      "DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?",
-      [account.id],
-    );
-    await conn.execute(
-      "DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?",
-      [account.id],
-    );
-    await conn.commit();
-    clearEcotrackRuntimeCache(account.id);
-    res.json({ ok: true, connected: true, tokenHint: encrypted.hint });
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    conn.release();
-  }
+  await withEcotrackAccountLock(account.id, async () => {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `INSERT INTO expediteur_ecotrack_credentials
+         (expediteur_id, token_ciphertext, token_iv, token_auth_tag, token_hint, connection_status, last_validated_at)
+         VALUES (?, ?, ?, ?, ?, 'connected', NOW())
+         ON DUPLICATE KEY UPDATE
+           token_ciphertext = VALUES(token_ciphertext),
+           token_iv = VALUES(token_iv),
+           token_auth_tag = VALUES(token_auth_tag),
+           token_hint = VALUES(token_hint),
+           connection_status = 'connected',
+           last_validated_at = NOW()`,
+        [account.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag, encrypted.hint],
+      );
+      await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?", [account.id]);
+      await conn.execute("DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?", [account.id]);
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  });
+  clearEcotrackRuntimeCache(account.id);
+  queueEcotrackFullSync(account.id, token);
+  res.json({ ok: true, connected: true, tokenHint: encrypted.hint });
 });
 
 router.delete("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest, res) => {
@@ -131,30 +129,23 @@ router.delete("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequ
   if (!account || account.parent_id) {
     return res.status(403).json({ ok: false, error: "root_account_required" });
   }
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.execute(
-      "DELETE FROM expediteur_ecotrack_credentials WHERE expediteur_id = ?",
-      [account.id],
-    );
-    await conn.execute(
-      "DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?",
-      [account.id],
-    );
-    await conn.execute(
-      "DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?",
-      [account.id],
-    );
-    await conn.commit();
-    clearEcotrackRuntimeCache(account.id);
-    res.json({ ok: true });
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    conn.release();
-  }
+  await withEcotrackAccountLock(account.id, async () => {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute("DELETE FROM expediteur_ecotrack_credentials WHERE expediteur_id = ?", [account.id]);
+      await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?", [account.id]);
+      await conn.execute("DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?", [account.id]);
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  });
+  clearEcotrackRuntimeCache(account.id);
+  res.json({ ok: true });
 });
 
 // ── GET /api/admin/expediteurs — list expediteurs (admin or office) ─────────

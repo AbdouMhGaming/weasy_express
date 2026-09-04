@@ -38,3 +38,9 @@ Ecotrack tracking details are split across endpoints: `/get/tracking/info` retur
 **Why:** Reading only `info.activity`, or expecting `maj.activity`, silently hides delivery-attempt notes even though Ecotrack shows them in its own interface.
 
 **How to apply:** Merge both sources by their complete date/time, retain unmatched rows, and preserve unknown non-empty fields for display so new upstream detail fields do not disappear.
+
+Ecotrack order synchronization is server-driven: saving a token and API startup trigger a full import, then complete background cycles continue automatically while the UI polls the local cache.
+
+**Why:** Browser-triggered partial syncs left most pages unloaded and stopped when the user closed the page. Ecotrack also rate-limits bursts with short 429 retry windows.
+
+**How to apply:** Pace order-list requests at roughly one per second, honor `Retry-After`, bulk-upsert each page, serialize each account with a MySQL advisory lock, and only reconcile deletions after a complete cycle.

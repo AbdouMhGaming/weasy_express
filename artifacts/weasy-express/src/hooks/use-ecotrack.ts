@@ -14,6 +14,7 @@ export function useEcotrackDashboard() {
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return body;
     },
+    refetchInterval: 30_000,
   });
 }
 
@@ -49,6 +50,7 @@ export function useEcotrackOrders(params: { page: number; search: string; status
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return body;
     },
+    refetchInterval: 30_000,
   });
 }
 
@@ -142,6 +144,7 @@ export function useEcotrackOrderDetail(tracking: string) {
       };
     },
     enabled: !!tracking,
+    refetchInterval: 30_000,
   });
 }
 
