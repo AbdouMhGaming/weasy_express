@@ -54,6 +54,8 @@ export default function EcotrackSettingsView() {
       if (!response.ok || !body.ok) {
         const key = body.error === "ecotrack_not_allowed"
           ? "notAllowed"
+          : body.error === "root_account_required" || response.status === 403
+            ? "rootAccountRequired"
           : body.error === "ecotrack_unavailable"
             ? "unavailable"
             : "invalid";

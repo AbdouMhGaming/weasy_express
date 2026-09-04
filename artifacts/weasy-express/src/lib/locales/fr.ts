@@ -1099,6 +1099,7 @@ const fr = {
       validating: "Validation…",
       saved: "Le token Ecotrack a été validé et enregistré en toute sécurité.",
       invalid: "Le token est invalide. Vérifiez-le dans votre compte Ecotrack puis réessayez.",
+      rootAccountRequired: "Seul le compte Expéditeur principal peut connecter ou remplacer le token Ecotrack. Connectez-vous avec le compte principal.",
       notAllowed: "L’accès à l’API publique est désactivé pour ce compte Ecotrack.",
       unavailable: "Ecotrack est momentanément inaccessible. Veuillez réessayer plus tard.",
       loadError: "Impossible de charger les paramètres de connexion Ecotrack.",

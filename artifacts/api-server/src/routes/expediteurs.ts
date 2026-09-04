@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
-import { encryptEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
+import { encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
 
 const router = Router();
 // Scope the guard to this router's non-admin prefix. /admin routes are already
@@ -71,8 +71,8 @@ router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
   if (!account || account.parent_id) {
     return res.status(403).json({ ok: false, error: "root_account_required" });
   }
-  // Accept pasted Authorization values without ever persisting the Bearer scheme.
-  const token = String(req.body?.token ?? "").trim().replace(/^Bearer\s+/i, "").trim();
+  // Accept common copied token formats without persisting wrappers or URL text.
+  const token = normalizeEcotrackToken(req.body?.token);
   if (token.length < 10 || token.length > 2000) {
     return res.status(400).json({ ok: false, error: "invalid_token_format" });
   }

@@ -1101,6 +1101,7 @@ const en: Translations = {
       validating: "Validating…",
       saved: "Ecotrack token validated and saved securely.",
       invalid: "The token is invalid. Check it in your Ecotrack account and try again.",
+      rootAccountRequired: "Only the main Expediteur account can connect or replace the Ecotrack token. Sign in with the main account.",
       notAllowed: "Public API access is disabled for this Ecotrack account.",
       unavailable: "Ecotrack could not be reached. Please try again later.",
       loadError: "Unable to load Ecotrack connection settings.",

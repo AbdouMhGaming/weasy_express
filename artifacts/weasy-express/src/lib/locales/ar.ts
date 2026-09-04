@@ -1101,6 +1101,7 @@ const ar: Translations = {
       validating: "جارٍ التحقق…",
       saved: "تم التحقق من رمز Ecotrack وحفظه بأمان.",
       invalid: "الرمز غير صالح. تحقق منه في حساب Ecotrack ثم حاول مرة أخرى.",
+      rootAccountRequired: "يمكن لحساب المرسل الرئيسي فقط ربط رمز Ecotrack أو استبداله. سجّل الدخول بالحساب الرئيسي.",
       notAllowed: "الوصول إلى واجهة API العامة معطل لهذا الحساب في Ecotrack.",
       unavailable: "تعذر الاتصال بـ Ecotrack. يرجى المحاولة لاحقًا.",
       loadError: "تعذر تحميل إعدادات اتصال Ecotrack.",

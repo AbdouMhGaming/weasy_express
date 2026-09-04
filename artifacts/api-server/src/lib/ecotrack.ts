@@ -43,6 +43,27 @@ export function decryptEcotrackToken(ciphertext: string, iv: string, authTag: st
   ]).toString("utf8");
 }
 
+export function normalizeEcotrackToken(input: unknown): string {
+  let value = String(input ?? "").trim();
+  value = value.replace(/^Bearer\s+/i, "").trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  try {
+    const parsed = new URL(value);
+    value = parsed.searchParams.get("api_token")?.trim() || value;
+  } catch {
+    const match = value.match(/(?:^|[?&])api_token=([^&\s]+)/i);
+    if (match) {
+      try { value = decodeURIComponent(match[1]).trim(); } catch { value = match[1].trim(); }
+    }
+  }
+  return value.replace(/^Bearer\s+/i, "").trim();
+}
+
 export async function validateEcotrackToken(token: string): Promise<{
   valid: boolean;
   reason?: "invalid" | "not_allowed" | "unavailable";

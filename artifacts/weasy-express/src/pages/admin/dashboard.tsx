@@ -2766,9 +2766,12 @@ export default function AdminDashboard() {
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
   const EXPEDITEUR_SECTIONS: SidebarView[] = ["ecotrack", "queue", "payouts", "team", "ecotrack-settings"];
+  const EXPEDITEUR_TEAM_SECTIONS: SidebarView[] = ["ecotrack", "queue", "payouts", "team"];
   const OFFICE_SECTIONS: SidebarView[] = ["office-dashboard", "queue", "returns", "merchants", "payouts", "messaging", "team", "analytics"];
-  const allowedSections: SidebarView[] = (role === "expediteur" && isTeam && teamPerms.length > 0)
-    ? EXPEDITEUR_SECTIONS.filter(s => teamPerms.includes(s))
+  const allowedSections: SidebarView[] = (role === "expediteur" && isTeam)
+    ? (teamPerms.length > 0
+      ? EXPEDITEUR_TEAM_SECTIONS.filter(s => teamPerms.includes(s))
+      : EXPEDITEUR_TEAM_SECTIONS)
     : role === "office" && isTeam && teamPerms.length > 0
     ? OFFICE_SECTIONS.filter(s => teamPerms.includes(s))
     : role === "office" ? OFFICE_SECTIONS : EXPEDITEUR_SECTIONS;
