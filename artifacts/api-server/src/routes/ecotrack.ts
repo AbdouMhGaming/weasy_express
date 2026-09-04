@@ -3,12 +3,14 @@ import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
 import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
+import {
+  ecotrackReferenceCache as references,
+  ecotrackResolvedCommuneCache as resolvedCommunes,
+} from "../lib/ecotrackRuntimeCache";
 
 const router = Router();
 const PAGE_SIZE = 40;
 const MAX_SYNC_PAGES = 10;
-const references = new Map<string, { until: number; value: unknown }>();
-const resolvedCommunes = new Map<string, { until: number; value: string }>();
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 

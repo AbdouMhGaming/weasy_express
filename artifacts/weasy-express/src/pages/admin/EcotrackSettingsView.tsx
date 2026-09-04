@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { API_BASE, expediteurHeaders } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ type ConnectionState = {
 
 export default function EcotrackSettingsView() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -63,6 +65,7 @@ export default function EcotrackSettingsView() {
       }
       setToken("");
       setShowToken(false);
+      queryClient.removeQueries({ queryKey: ["ecotrack"] });
       setMessage({ type: "success", text: t("admin.ecotrack.saved") });
       await load();
     } catch (error) {
@@ -83,6 +86,7 @@ export default function EcotrackSettingsView() {
         headers: expediteurHeaders(),
       });
       if (!response.ok) throw new Error();
+      queryClient.removeQueries({ queryKey: ["ecotrack"] });
       setConnection({ connected: false, tokenHint: null, status: "disconnected", lastValidatedAt: null });
       setMessage({ type: "success", text: t("admin.ecotrack.disconnected") });
     } catch {

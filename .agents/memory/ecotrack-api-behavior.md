@@ -26,3 +26,9 @@ The numeric keys returned by `/api/v1/get/communes` are array positions, not the
 **Why:** Every array position from 0 through 1541 exists, so an incorrect key lookup appears successful while silently assigning the wrong real-world commune.
 
 **How to apply:** For an existing order, resolve the commune from the order's own Ecotrack label, restricted to commune names belonging to its known wilaya. Prefer the longest printed name when one candidate is a substring of another, and cache the result to protect API limits.
+
+Replacing or disconnecting an Ecotrack credential is an account-boundary event: clear that Expediteur's persisted order cache, synchronization state, server reference caches, and browser Ecotrack queries before loading the new account.
+
+**Why:** Cache keys scoped only to the root Expediteur remain the same when its token changes. Without coordinated invalidation, orders and statistics from the previous Ecotrack account appear beside data from the newly connected account.
+
+**How to apply:** Validate the new token first, then replace the credential and delete account-scoped database caches in one transaction. After commit, clear runtime caches and remove all browser queries under the Ecotrack query-key prefix.
