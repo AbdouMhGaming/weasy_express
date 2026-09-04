@@ -30,6 +30,13 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 Multilingual (FR/EN/AR) logistics website for Algeria.
 
+### Standing implementation requirements
+
+- Any new or modified interface must follow the main website's existing visual theme, colors, typography, spacing, and component patterns.
+- Every user-facing addition or change must support all three languages: French, English, and Arabic. Add or update translation keys in every locale and preserve proper RTL behavior for Arabic.
+- When a feature requires persistent data, include the necessary database table, columns, relationships, and safe migration/setup script as part of the same implementation. Do not leave database setup as an implicit manual step.
+- The production application uses the existing MySQL database. Never use `drizzle-kit push` because the database contains tables outside the Drizzle schema; use explicit, safe SQL migration scripts instead.
+
 ### Tracking integration
 
 - The tracking system proxies the public Ecotrack page (`https://suivi.ecotrack.dz/{lang}/suivi/{number}`) through the API server.
