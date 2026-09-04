@@ -1515,11 +1515,13 @@ const ar: Translations = {
           actions: "إجراءات",
         },
         empty: "لا توجد طلبات.",
+        refreshing: "جارٍ تحديث الطلبات...",
         bulkModal: {
           title: "إضافة طلبات متعددة",
           addRow: "إضافة صف",
           submit: "تأكيد الطلبات",
           clear: "انقر على إضافة صف للبدء",
+          required: "أكمل جميع الحقول المطلوبة لكل طلب.",
         }
       },
       tracking: {
@@ -1547,6 +1549,12 @@ const ar: Translations = {
         empty: "لا توجد منتجات.",
         name: "الاسم",
         reference: "المرجع",
+        weight: "وزن المنتج (كغ)",
+        operationType: "نوع العملية",
+        delivery: "توصيل",
+        exchange: "تبديل",
+        chooseWilaya: "اختر ولاية",
+        chooseCommune: "اختر بلدية",
         available: "المخزون المتاح",
         reserved: "المخزون المحجوز",
       },
@@ -1558,6 +1566,7 @@ const ar: Translations = {
         success: "تمت العملية بنجاح",
         all: "الكل",
         code: "الرمز",
+        loading: "جارٍ التحميل...",
       },
       forms: {
         client: "اسم العميل",

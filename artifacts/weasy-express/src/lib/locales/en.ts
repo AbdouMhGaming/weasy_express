@@ -1515,11 +1515,13 @@ const en: Translations = {
           actions: "Actions",
         },
         empty: "No orders found.",
+        refreshing: "Refreshing orders...",
         bulkModal: {
           title: "Add multiple orders",
           addRow: "Add row",
           submit: "Submit orders",
           clear: "Click Add row to start",
+          required: "Complete all required fields in every order.",
         }
       },
       tracking: {
@@ -1547,6 +1549,12 @@ const en: Translations = {
         empty: "No products found.",
         name: "Name",
         reference: "Reference",
+        weight: "Product weight (kg)",
+        operationType: "Operation type",
+        delivery: "Delivery",
+        exchange: "Exchange",
+        chooseWilaya: "Choose a wilaya",
+        chooseCommune: "Choose a commune",
         available: "Available stock",
         reserved: "Reserved stock",
       },
@@ -1558,6 +1566,7 @@ const en: Translations = {
         success: "Action successful",
         all: "All",
         code: "Code",
+        loading: "Loading...",
       },
       forms: {
         client: "Client Name",

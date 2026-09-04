@@ -1513,11 +1513,13 @@ const fr = {
           actions: "Actions",
         },
         empty: "Aucune commande trouvée.",
+        refreshing: "Actualisation des commandes...",
         bulkModal: {
           title: "Ajouter plusieurs commandes",
           addRow: "Ajouter une ligne",
           submit: "Soumettre les commandes",
           clear: "Cliquez sur Ajouter une ligne pour commencer",
+          required: "Complétez tous les champs obligatoires de chaque commande.",
         }
       },
       tracking: {
@@ -1545,6 +1547,12 @@ const fr = {
         empty: "Aucun produit trouvé.",
         name: "Nom",
         reference: "Référence",
+        weight: "Poids du produit (kg)",
+        operationType: "Type d'opération",
+        delivery: "Livraison",
+        exchange: "Échange",
+        chooseWilaya: "Choisir une wilaya",
+        chooseCommune: "Choisir une commune",
         available: "Stock disponible",
         reserved: "Stock réservé",
       },
@@ -1556,6 +1564,7 @@ const fr = {
         success: "Action réussie",
         all: "Tous",
         code: "Code",
+        loading: "Chargement...",
       },
       forms: {
         client: "Nom du client",

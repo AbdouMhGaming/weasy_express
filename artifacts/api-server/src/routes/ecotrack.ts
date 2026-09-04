@@ -69,7 +69,7 @@ function compact(body: any, allowed: string[]) {
   return result;
 }
 const createFields = ["reference", "nom_client", "telephone", "telephone_2", "adresse", "code_postal", "commune", "code_wilaya", "montant", "remarque", "produit", "stock", "quantite", "produit_a_recuperer", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
-const updateFields = ["tracking", "reference", "client", "tel", "tel2", "adresse", "code_postal", "commune", "wilaya", "montant", "remarque", "product", "boutique", "type", "stop_desk", "fragile", "gps_link"];
+const updateFields = ["tracking", "reference", "client", "tel", "tel2", "adresse", "code_postal", "commune", "wilaya", "montant", "remarque", "product", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
 
 async function cacheOrders(expediteurId: number, orders: any[]) {
   if (!orders.length) return;

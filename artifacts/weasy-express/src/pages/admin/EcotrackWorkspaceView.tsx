@@ -123,6 +123,11 @@ function OrdersTab() {
   const [pageSize, setPageSize] = useState(20);
 
   const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: "", status: "all" });
+  const { data: wilayas = [] } = useEcotrackWilayas();
+  const wilayaNames = useMemo(
+    () => new Map(wilayas.map((wilaya: any) => [String(wilaya.wilaya_id), wilaya.wilaya_name])),
+    [wilayas],
+  );
 
   const deleteMutation = useDeleteEcotrackOrder();
   const validateMutation = useValidateEcotrackOrder();
@@ -162,7 +167,7 @@ function OrdersTab() {
 
   return (
     <div className="flex flex-col h-full p-6">
-      <div className="flex gap-3 mb-4 shrink-0">
+      <div className="flex items-center gap-3 mb-4 shrink-0">
         <Button onClick={() => { setSelectedParcel(null); setIsModalOpen(true); }} className="bg-[#1a237e] hover:bg-[#11185b] text-white shadow-sm">
           <Plus className="h-4 w-4 mr-2" />
           {t("admin.ecotrackPortal.orders.addOne")}
@@ -171,6 +176,12 @@ function OrdersTab() {
           <ListPlus className="h-4 w-4 mr-2" />
           {t("admin.ecotrackPortal.orders.addMultiple")}
         </Button>
+        {isFetching && !isLoading && (
+          <span className="ms-auto inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin text-[#E10600]" />
+            {t("admin.ecotrackPortal.orders.refreshing")}
+          </span>
+        )}
       </div>
 
       <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
@@ -199,12 +210,7 @@ function OrdersTab() {
                   <th className="px-4 py-3 font-semibold text-slate-700 text-right">{t("admin.ecotrackPortal.orders.table.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 relative">
-                {isFetching && (
-                  <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-20">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#E10600]" />
-                  </div>
-                )}
+              <tbody className="divide-y divide-slate-100">
                 {ordersData?.data?.map((order: any) => (
                   <tr key={order.tracking} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-4 py-3">
@@ -218,7 +224,7 @@ function OrdersTab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="font-medium text-slate-700">{order.wilaya_id}</span>
+                        <span className="font-medium text-slate-700">{wilayaNames.get(String(order.wilaya_id)) || order.wilaya_id}</span>
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5 ml-5">{order.commune_id || '—'}</div>
                     </td>
@@ -580,9 +586,19 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
   const updateMutation = useUpdateEcotrackOrder();
   const { data: wilayas } = useEcotrackWilayas();
   
-  const [formData, setFormData] = useState<any>(
-    parcel || { reference: "", client: "", phone: "", phone_2: "", adresse: "", wilaya_id: "", commune_name: "", montant: 0, products: "", stop_desk: false, fragile: false, remarque: "", type: "1" }
-  );
+  const [formData, setFormData] = useState<any>(() => parcel ? {
+    ...parcel,
+    commune_name: parcel.commune_name || "",
+    products: parcel.products || "",
+    weight: parcel.weight || "",
+    type: String(parcel.type_id || parcel.type || "1"),
+    stop_desk: Boolean(parcel.stop_desk),
+    fragile: Boolean(parcel.fragile),
+  } : {
+    reference: "", client: "", phone: "", phone_2: "", adresse: "", wilaya_id: "",
+    commune_name: "", montant: "", products: "", weight: "", stop_desk: false,
+    fragile: false, remarque: "", type: "1",
+  });
 
   useEffect(() => {
     if (parcel && parcel.commune_id && !formData.commune_name) setFormData((f: any) => ({ ...f, commune_name: parcel.commune_id }));
@@ -598,7 +614,7 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
       const payload = {
         tracking: parcel.tracking, client: formData.client, tel: formData.phone, tel2: formData.phone_2,
         adresse: formData.adresse, commune: communeVal, wilaya: formData.wilaya_id, montant: formData.montant,
-        remarque: formData.remarque, product: formData.products, type: formData.type || 1,
+        remarque: formData.remarque, product: formData.products, weight: formData.weight, type: Number(formData.type || 1),
         stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
       };
       updateMutation.mutate(payload, {
@@ -609,8 +625,8 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
       const payload = {
         nom_client: formData.client, telephone: formData.phone, telephone_2: formData.phone_2,
         adresse: formData.adresse, commune: communeVal, code_wilaya: formData.wilaya_id, montant: formData.montant,
-        type: formData.type || 1, reference: formData.reference, remarque: formData.remarque,
-        produit: formData.products, stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
+        type: Number(formData.type || 1), reference: formData.reference, remarque: formData.remarque,
+        produit: formData.products, weight: formData.weight, stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
       };
       createMutation.mutate(payload, {
         onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
@@ -655,7 +671,7 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.wilaya")}</label>
               <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.wilaya_id} onChange={e => setFormData({ ...formData, wilaya_id: e.target.value, commune_name: "" })}>
                 <option value="">{t("admin.ecotrackPortal.forms.wilaya")}</option>
-                {wilayas?.map((w: any) => <option key={w.code} value={w.code}>{w.nom}</option>)}
+                 {wilayas?.map((w: any) => <option key={w.wilaya_id} value={w.wilaya_id}>{w.wilaya_name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
@@ -673,6 +689,17 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.products")}</label>
               <Input value={formData.products} onChange={e => setFormData({ ...formData, products: e.target.value })} />
             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.weight")}</label>
+               <Input type="number" min="0" step="0.01" value={formData.weight} onChange={e => setFormData({ ...formData, weight: e.target.value })} />
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.operationType")}</label>
+               <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
+                 <option value="1">{t("admin.ecotrackPortal.forms.delivery")}</option>
+                 <option value="2">{t("admin.ecotrackPortal.forms.exchange")}</option>
+               </select>
+             </div>
             <div className="col-span-2 space-y-1">
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.remark")}</label>
               <Input value={formData.remarque} onChange={e => setFormData({ ...formData, remarque: e.target.value })} />
@@ -706,16 +733,30 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const { toast } = useToast();
   const [rows, setRows] = useState<any[]>([]);
   const mutation = useBulkCreateEcotrackOrders();
+  const { data: wilayas = [] } = useEcotrackWilayas();
 
   const addRow = () => {
     if (rows.length >= 100) return;
-    setRows(prev => [...prev, { id: Date.now(), reference: '', nom_client: '', telephone: '', adresse: '', code_wilaya: '', commune: '', montant: '', type: '1' }]);
+    setRows(prev => [...prev, {
+      id: Date.now() + prev.length, reference: "", nom_client: "", telephone: "", telephone_2: "",
+      adresse: "", code_wilaya: "", commune: "", montant: "", produit: "", weight: "", type: "1",
+      remarque: "", stop_desk: 0, fragile: 0,
+    }]);
   };
   const removeRow = (id: number) => setRows(prev => prev.filter(r => r.id !== id));
-  const updateRow = (id: number, field: string, value: string) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const updateRow = (id: number, field: string, value: string | number) => setRows(prev => prev.map(r => r.id === id ? {
+    ...r,
+    [field]: value,
+    ...(field === "code_wilaya" ? { commune: "" } : {}),
+  } : r));
 
   const submit = () => {
     if (rows.length === 0) return;
+    const incomplete = rows.some(row => !row.nom_client || !row.telephone || !row.adresse || !row.code_wilaya || !row.commune || row.montant === "");
+    if (incomplete) {
+      toast({ title: t("admin.ecotrackPortal.orders.bulkModal.required"), variant: "destructive" });
+      return;
+    }
     const orders = rows.map(({ id, ...rest }) => rest);
     mutation.mutate(orders, {
       onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
@@ -726,7 +767,7 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-xl w-[96vw] max-w-[96vw] max-h-[92vh] overflow-hidden flex flex-col">
         <div className="flex justify-between items-center p-5 border-b border-slate-100">
           <h2 className="text-xl font-bold">{t("admin.ecotrackPortal.orders.bulkModal.title")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
@@ -740,32 +781,31 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               {t("admin.ecotrackPortal.orders.bulkModal.clear")}
             </div>
           ) : (
-            <table className="w-full text-sm text-left">
+            <table className="min-w-[2100px] w-full text-xs text-left">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
+                   <th className="px-2 py-2">#</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.reference")}</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.client")}*</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.phone")}*</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.phone2")}</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.wilaya")}*</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.commune")}*</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.address")}*</th>
                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.amount")}*</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.products")}</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.weight")}</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.operationType")}*</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.remark")}</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.stopDesk")}</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.fragile")}</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map(r => (
-                  <tr key={r.id}>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs" value={r.reference} onChange={e => updateRow(r.id, 'reference', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs" value={r.nom_client} onChange={e => updateRow(r.id, 'nom_client', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs" value={r.telephone} onChange={e => updateRow(r.id, 'telephone', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs w-16" value={r.code_wilaya} onChange={e => updateRow(r.id, 'code_wilaya', e.target.value)} placeholder="ID" /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs" value={r.commune} onChange={e => updateRow(r.id, 'commune', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs" value={r.adresse} onChange={e => updateRow(r.id, 'adresse', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Input className="h-8 text-xs w-24" type="number" value={r.montant} onChange={e => updateRow(r.id, 'montant', e.target.value)} /></td>
-                    <td className="px-2 py-2"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeRow(r.id)}><Trash2 className="w-4 h-4"/></Button></td>
-                  </tr>
-                ))}
+                 {rows.map((row, index) => (
+                   <BulkOrderRow key={row.id} row={row} index={index} wilayas={wilayas} updateRow={updateRow} removeRow={removeRow} />
+                 ))}
               </tbody>
             </table>
           )}
@@ -779,6 +819,56 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
         </div>
       </div>
     </div>
+  );
+}
+
+function BulkOrderRow({ row, index, wilayas, updateRow, removeRow }: {
+  row: any;
+  index: number;
+  wilayas: any[];
+  updateRow: (id: number, field: string, value: string | number) => void;
+  removeRow: (id: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: communes = [], isLoading: communesLoading } = useEcotrackCommunes(row.code_wilaya);
+  const cellInput = (field: string, options: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    <Input {...options} className="h-8 min-w-28 text-xs" value={row[field]} onChange={event => updateRow(row.id, field, event.target.value)} />
+  );
+
+  return (
+    <tr className="align-top odd:bg-white even:bg-slate-50/60">
+      <td className="px-2 py-2 font-bold text-slate-500">{index + 1}</td>
+      <td className="px-2 py-2">{cellInput("reference")}</td>
+      <td className="px-2 py-2">{cellInput("nom_client", { required: true })}</td>
+      <td className="px-2 py-2">{cellInput("telephone", { required: true })}</td>
+      <td className="px-2 py-2">{cellInput("telephone_2")}</td>
+      <td className="px-2 py-2">
+        <select required className="h-8 min-w-40 rounded-md border border-input bg-white px-2 text-xs" value={row.code_wilaya} onChange={event => updateRow(row.id, "code_wilaya", event.target.value)}>
+          <option value="">{t("admin.ecotrackPortal.forms.chooseWilaya")}</option>
+          {wilayas.map((wilaya: any) => <option key={wilaya.wilaya_id} value={wilaya.wilaya_id}>{wilaya.wilaya_name}</option>)}
+        </select>
+      </td>
+      <td className="px-2 py-2">
+        <select required disabled={!row.code_wilaya || communesLoading} className="h-8 min-w-40 rounded-md border border-input bg-white px-2 text-xs disabled:bg-slate-100" value={row.commune} onChange={event => updateRow(row.id, "commune", event.target.value)}>
+          <option value="">{communesLoading ? t("admin.ecotrackPortal.common.loading") : t("admin.ecotrackPortal.forms.chooseCommune")}</option>
+          {communes.map((commune: any, communeIndex: number) => <option key={`${commune.nom}-${communeIndex}`} value={commune.nom}>{commune.nom}</option>)}
+        </select>
+      </td>
+      <td className="px-2 py-2">{cellInput("adresse", { required: true })}</td>
+      <td className="px-2 py-2">{cellInput("montant", { required: true, type: "number", min: 0 })}</td>
+      <td className="px-2 py-2">{cellInput("produit")}</td>
+      <td className="px-2 py-2">{cellInput("weight", { type: "number", min: 0, step: 0.01 })}</td>
+      <td className="px-2 py-2">
+        <select className="h-8 min-w-32 rounded-md border border-input bg-white px-2 text-xs" value={row.type} onChange={event => updateRow(row.id, "type", event.target.value)}>
+          <option value="1">{t("admin.ecotrackPortal.forms.delivery")}</option>
+          <option value="2">{t("admin.ecotrackPortal.forms.exchange")}</option>
+        </select>
+      </td>
+      <td className="px-2 py-2">{cellInput("remarque")}</td>
+      <td className="px-2 py-2 text-center"><input type="checkbox" checked={Boolean(row.stop_desk)} onChange={event => updateRow(row.id, "stop_desk", event.target.checked ? 1 : 0)} /></td>
+      <td className="px-2 py-2 text-center"><input type="checkbox" checked={Boolean(row.fragile)} onChange={event => updateRow(row.id, "fragile", event.target.checked ? 1 : 0)} /></td>
+      <td className="px-2 py-2"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeRow(row.id)}><Trash2 className="w-4 h-4"/></Button></td>
+    </tr>
   );
 }
 
