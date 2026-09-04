@@ -7,6 +7,13 @@ import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse/lib/pdf-parse.js");
 
 const router = Router();
+// Central ticket handlers have no office-report or operational-data access.
+router.use(adminAuth, (req, res, next) => {
+  if ((req as AuthedRequest).adminRole === "ticket_manager") {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  next();
+});
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ─── Ligature normalisation ───────────────────────────────────────────────────

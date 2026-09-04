@@ -73,7 +73,7 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
   const conn = await pool.getConnection();
   try {
     let rows: any[];
-    if (role === "admin") {
+    if (role === "admin" || role === "ticket_manager") {
       [rows] = await conn.execute("SELECT * FROM tickets ORDER BY updated_at DESC") as any;
     } else if (role === "office") {
       // Team sub-accounts see the parent's tickets (dataUsername = parent's username)
@@ -191,6 +191,7 @@ router.post("/tickets", adminAuth, async (req: AuthedRequest, res) => {
     } else if (destination_type === "central_team") {
       sendPushToRole("admin",  notifTitle, notifBody, "/admin", sender).catch(() => {});
       sendPushToRole("office", notifTitle, notifBody, "/admin", sender).catch(() => {});
+      sendPushToRole("ticket_manager", notifTitle, notifBody, "/admin", sender).catch(() => {});
     }
   } catch (err) {
     await conn.rollback();
@@ -221,6 +222,7 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
     const isSender = ticket.created_by === username;
     const isRecipient =
       role === "admin" ||
+      role === "ticket_manager" ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
 
@@ -273,6 +275,7 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
       } else if (ticket.destination_type === "central_team") {
         sendPushToRole("admin",  notifTitle2, notifBody2, "/admin", username).catch(() => {});
         sendPushToRole("office", notifTitle2, notifBody2, "/admin", username).catch(() => {});
+        sendPushToRole("ticket_manager", notifTitle2, notifBody2, "/admin", username).catch(() => {});
       }
     }
   } finally {
@@ -294,6 +297,7 @@ router.put("/tickets/:id/claim", adminAuth, async (req: AuthedRequest, res) => {
     const myHub = (role === "office") ? await getUserHub(conn, username) : null;
     const allowed =
       role === "admin" ||
+      role === "ticket_manager" ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
     if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
@@ -315,8 +319,17 @@ router.get("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) => 
   const { id } = req.params;
   const conn = await pool.getConnection();
   try {
-    const [[ticket]] = await conn.execute("SELECT id FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
+    const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
+    const role = req.adminRole!;
+    const username = req.adminUsername!;
+    const hub = role === "office" ? await getUserHub(conn, username) : null;
+    const allowed = role === "admin" || role === "ticket_manager" ||
+      ticket.created_by === (req.adminDataUsername ?? username) ||
+      (role === "office" && ticket.destination_type === "pickup_desk" && hub === ticket.recipient_office) ||
+      (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === (req.adminDataUsername ?? username)) ||
+      (role === "commercial" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
+    if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const [rows] = await conn.execute(
       "SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC",
@@ -339,12 +352,20 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
   try {
     const [[ticket]] = await conn.execute("SELECT * FROM tickets WHERE id = ? LIMIT 1", [id]) as any;
     if (!ticket) return res.status(404).json({ ok: false, error: "Not found" });
+    const role = req.adminRole!;
+    const username = req.adminUsername!;
+    const hub = role === "office" ? await getUserHub(conn, username) : null;
+    const allowed = role === "admin" || role === "ticket_manager" ||
+      ticket.created_by === (req.adminDataUsername ?? username) ||
+      (role === "office" && ticket.destination_type === "pickup_desk" && hub === ticket.recipient_office) ||
+      (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === (req.adminDataUsername ?? username)) ||
+      (role === "commercial" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
+    if (!allowed) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     if (["resolved", "closed", "pending_accept"].includes(ticket.status)) {
       return res.status(403).json({ ok: false, error: "ticket_locked" });
     }
 
-    const username = req.adminUsername!;
     const [result]: any = await conn.execute(
       "INSERT INTO ticket_events (ticket_id, event_type, actor, body) VALUES (?, 'comment', ?, ?)",
       [id, username, body.trim()]
@@ -369,6 +390,7 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
       } else if (ticket.destination_type === "central_team") {
         sendPushToRole("admin",  commentTitle, preview, "/admin", username).catch(() => {});
         sendPushToRole("office", commentTitle, preview, "/admin", username).catch(() => {});
+        sendPushToRole("ticket_manager", commentTitle, preview, "/admin", username).catch(() => {});
       }
     } else {
       // Recipient commented → notify creator (look up their role for correct URL)

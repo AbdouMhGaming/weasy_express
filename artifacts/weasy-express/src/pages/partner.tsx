@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { WILAYA_LIST } from "@/lib/wilayas";
 
 function getPasswordStrength(password: string): { score: number } {
   let score = 0;
@@ -48,7 +49,7 @@ export default function PartnerPage() {
     confirmPassword: "",
     phone: "",
     address: "",
-    city: "",
+    wilayaCode: "",
     parcelsPerMonth: "",
   });
 
@@ -78,7 +79,7 @@ export default function PartnerPage() {
     if (form.password !== form.confirmPassword) newErrors.confirmPassword = t("partner.errors.passwordMatch");
     if (!form.phone.trim()) newErrors.phone = t("partner.errors.phone");
     if (!form.address.trim()) newErrors.address = t("partner.errors.address");
-    if (!form.city.trim()) newErrors.city = t("partner.errors.city");
+    if (!form.wilayaCode) newErrors.wilayaCode = t("partner.errors.wilaya");
     if (!form.parcelsPerMonth) newErrors.parcelsPerMonth = t("partner.errors.parcels");
     return newErrors;
   };
@@ -104,7 +105,8 @@ export default function PartnerPage() {
           password: form.password,
           phone: form.phone,
           address: form.address,
-          city: form.city,
+          wilayaCode: form.wilayaCode,
+          wilayaName: WILAYA_LIST.find((wilaya) => wilaya.code === form.wilayaCode)?.name ?? "",
           parcelsPerMonth: form.parcelsPerMonth,
         }),
       });
@@ -113,7 +115,7 @@ export default function PartnerPage() {
         throw new Error(data.error ?? "send_failed");
       }
       toast({ title: t("partner.successTitle"), description: t("partner.successDesc") });
-      setForm({ lastName: "", firstName: "", email: "", password: "", confirmPassword: "", phone: "", address: "", city: "", parcelsPerMonth: "" });
+      setForm({ lastName: "", firstName: "", email: "", password: "", confirmPassword: "", phone: "", address: "", wilayaCode: "", parcelsPerMonth: "" });
     } catch (e) {
       const isEmailTaken = e instanceof Error && e.message === "email_already_registered";
       toast({
@@ -211,8 +213,13 @@ export default function PartnerPage() {
                   <Field label={t("partner.address")} error={errors.address}>
                     <Input placeholder={t("partner.address")} value={form.address} onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange("address", e.target.value)} className="h-12" />
                   </Field>
-                  <Field label={t("partner.city")} error={errors.city}>
-                    <Input placeholder={t("partner.city")} value={form.city} onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange("city", e.target.value)} className="h-12" />
+                  <Field label={t("partner.wilaya")} error={errors.wilayaCode}>
+                    <Select onValueChange={(v) => handleChange("wilayaCode", v)} value={form.wilayaCode}>
+                      <SelectTrigger className="h-12"><SelectValue placeholder={t("partner.wilayaPh")} /></SelectTrigger>
+                      <SelectContent>
+                        {WILAYA_LIST.map((wilaya) => <SelectItem key={wilaya.code} value={wilaya.code}>{wilaya.code.replace("DZ", "")} — {wilaya.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </Field>
                   <Field label={t("partner.parcelsPerMonth")} error={errors.parcelsPerMonth}>
                     <Select onValueChange={(v) => handleChange("parcelsPerMonth", v)} value={form.parcelsPerMonth}>

@@ -10,7 +10,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const ADMIN_ROLES = ["admin", "office", "finance", "commercial"] as const;
+export const ADMIN_ROLES = ["admin", "office", "finance", "commercial", "ticket_manager"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export const adminsTable = mysqlTable("admins", {
@@ -31,6 +31,10 @@ export const partnersTable = mysqlTable("partners", {
   phone: varchar("phone", { length: 50 }).notNull(),
   address: text("address").notNull(),
   city: varchar("city", { length: 100 }).notNull(),
+  // `city` is retained for legacy integrations; new applications use this
+  // canonical wilaya pair.
+  wilayaCode: varchar("wilaya_code", { length: 10 }),
+  wilayaName: varchar("wilaya_name", { length: 100 }),
   parcelsPerMonth: varchar("parcels_per_month", { length: 50 }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   notes: text("notes"),

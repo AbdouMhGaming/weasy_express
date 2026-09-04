@@ -125,6 +125,7 @@ export default function QueueView() {
   const username = getSessionUsername();
   const myHub    = localStorage.getItem("admin_office_hub") ?? "";
   const isAdmin = role === "admin";
+  const isTicketManager = role === "ticket_manager";
 
   // data
   const [tickets, setTickets]               = useState<Ticket[]>([]);
@@ -206,7 +207,12 @@ export default function QueueView() {
     } catch { }
   }, []);
 
-  useEffect(() => { fetchTickets(); fetchMeta(); }, [fetchTickets, fetchMeta]);
+  useEffect(() => {
+    fetchTickets();
+    // Ticket managers cannot create tickets, so do not request create-form
+    // metadata that belongs to unrelated administration features.
+    if (!isTicketManager) fetchMeta();
+  }, [fetchTickets, fetchMeta, isTicketManager]);
   // Auto-refresh: new tickets appear without a manual reload (every 15 s + on tab focus)
   useAutoRefresh(fetchTickets, 15_000);
 
@@ -896,7 +902,7 @@ export default function QueueView() {
                 {(() => {
                   const isSender = selected.created_by === username;
                   const isRecipient =
-                    isAdmin ||
+                    isAdmin || isTicketManager ||
                     (role === "office" && selected.destination_type === "pickup_desk" && !!myHub && selected.recipient_office === myHub) ||
                     (role === "expediteur" && selected.destination_type === "merchant" && selected.recipient_username === username);
                   const st = selected.status;

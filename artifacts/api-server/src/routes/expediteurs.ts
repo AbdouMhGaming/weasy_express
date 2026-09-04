@@ -3,6 +3,12 @@ import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
 
 const router = Router();
+router.use(adminAuth, (req, res, next) => {
+  if ((req as AuthedRequest).adminRole === "ticket_manager") {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  next();
+});
 
 // ── GET /api/admin/expediteurs — list expediteurs (admin or office) ─────────
 

@@ -104,6 +104,17 @@ router.post("/admin/change-password", adminAuth, async (req, res) => {
   }
 });
 
+// Ticket managers are deliberately limited to the ticket router. Keep this
+// guard before all remaining /admin data routes so a manually crafted request
+// cannot bypass the queue-only UI.
+router.use("/admin", adminAuth, (req, res, next) => {
+  if ((req as AuthedRequest).adminRole === "ticket_manager") {
+    res.status(403).json({ ok: false, error: "forbidden" });
+    return;
+  }
+  next();
+});
+
 // ── Admin management (super admin only) ───────────────────────────────────────
 
 router.get("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
@@ -127,7 +138,7 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   const password = String(body.password ?? "");
   const role = String(body.role ?? "office");
   const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
-  const validRoles = ["admin", "office", "finance", "commercial"];
+  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager"];
   if (!username || password.length < 8 || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
@@ -163,7 +174,7 @@ router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
   const password = body.password ? String(body.password) : null;
   const role = String(body.role ?? "office");
   const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
-  const validRoles = ["admin", "office", "finance", "commercial"];
+  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager"];
   if (!username || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
@@ -231,7 +242,7 @@ router.get("/admin/partners", adminAuth, async (req, res) => {
         if (allowed.length === 0) { res.json({ ok: true, partners: [], canChangePartnerStatus }); return; }
         const placeholders = allowed.map(() => "?").join(",");
         const [rows] = await conn.execute(
-          `SELECT id, first_name AS firstName, last_name AS lastName, email, password, phone, address, city, parcels_per_month AS parcelsPerMonth, status, notes, created_at AS createdAt FROM partners WHERE status IN (${placeholders}) ORDER BY created_at DESC`,
+           `SELECT id, first_name AS firstName, last_name AS lastName, email, password, phone, address, city, wilaya_code AS wilayaCode, wilaya_name AS wilayaName, parcels_per_month AS parcelsPerMonth, status, notes, created_at AS createdAt FROM partners WHERE status IN (${placeholders}) ORDER BY created_at DESC`,
           allowed
         );
         res.json({ ok: true, partners: rows, canChangePartnerStatus });
@@ -254,20 +265,24 @@ router.post("/admin/partners", adminAuth, commercialOrAdminOnly, async (req, res
   const phone = String(body.phone ?? "").trim().slice(0, 50);
   const address = String(body.address ?? "").trim().slice(0, 500);
   const city = String(body.city ?? "").trim().slice(0, 100);
+  const wilayaCode = body.wilayaCode ? String(body.wilayaCode).trim().slice(0, 10) : null;
+  const wilayaName = body.wilayaName ? String(body.wilayaName).trim().slice(0, 100) : null;
   const parcelsPerMonth = String(body.parcelsPerMonth ?? "").trim().slice(0, 50);
   const password = body.password ? String(body.password).trim().slice(0, 200) : null;
   const allowedStatuses = ["pending", "reviewing", "approved", "rejected"];
   const status = allowedStatuses.includes(String(body.status)) ? String(body.status) : "pending";
   const notes = body.notes ? String(body.notes).trim().slice(0, 2000) : null;
-  if (!firstName || !lastName || !email || !phone || !address || !city || !parcelsPerMonth) {
+  if (!firstName || !lastName || !email || !phone || !address || !city || !parcelsPerMonth ||
+      (wilayaCode !== null && !/^DZ(?:0[1-9]|[1-4][0-9]|5[0-8])$/.test(wilayaCode)) ||
+      (wilayaCode !== null && !wilayaName)) {
     res.status(400).json({ ok: false, error: "missing_fields" }); return;
   }
   try {
     const conn = await pool.getConnection();
     try {
       const [result] = await conn.execute(
-        "INSERT INTO partners (first_name, last_name, email, password, phone, address, city, parcels_per_month, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [firstName, lastName, email, password, phone, address, city, parcelsPerMonth, status, notes]
+        "INSERT INTO partners (first_name, last_name, email, password, phone, address, city, wilaya_code, wilaya_name, parcels_per_month, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [firstName, lastName, email, password, phone, address, city, wilayaCode, wilayaName, parcelsPerMonth, status, notes]
       );
       res.json({ ok: true, id: (result as { insertId: number }).insertId });
     } finally { conn.release(); }

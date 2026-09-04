@@ -23,12 +23,12 @@ import { WILAYA_LIST } from "@/lib/wilayas";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type PartnerStatus = "pending" | "reviewing" | "approved" | "rejected";
-type AdminRole = "admin" | "office" | "finance" | "commercial" | "expediteur";
+type AdminRole = "admin" | "office" | "finance" | "commercial" | "expediteur" | "ticket_manager";
 type OrderStatus = "pending" | "in_transit" | "delivered" | "returned" | "failed" | "cancelled";
 
 interface Partner {
   id: number; firstName: string; lastName: string; email: string;
-  password: string | null; phone: string; address: string; city: string;
+  password: string | null; phone: string; address: string; city: string; wilayaCode?: string | null; wilayaName?: string | null;
   parcelsPerMonth: string; status: PartnerStatus; notes: string | null; createdAt: string;
 }
 interface Office {
@@ -102,6 +102,7 @@ const ROLE_COLOR: Record<AdminRole, string> = {
   finance: "bg-emerald-100 text-emerald-800",
   commercial: "bg-orange-100 text-orange-800",
   expediteur: "bg-amber-100 text-amber-800",
+  ticket_manager: "bg-cyan-100 text-cyan-800",
 };
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
@@ -346,6 +347,12 @@ function SidebarInner({
           )}
           {expAllowed("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          )}
+        </nav>
+      ) : role === "ticket_manager" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItem("queue", t("admin.sidebar.queue"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
           )}
         </nav>
       ) : (
@@ -1503,22 +1510,22 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
 
   // Add partner form
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ firstName: "", lastName: "", email: "", phone: "", city: "", address: "", parcelsPerMonth: "", password: "", status: "pending" as PartnerStatus, notes: "" });
+  const [addForm, setAddForm] = useState({ firstName: "", lastName: "", email: "", phone: "", wilayaCode: "", address: "", parcelsPerMonth: "", password: "", status: "pending" as PartnerStatus, notes: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
 
-  function openAdd() { setAddForm({ firstName: "", lastName: "", email: "", phone: "", city: "", address: "", parcelsPerMonth: "", password: "", status: "pending", notes: "" }); setAddError(""); setShowAdd(true); }
+  function openAdd() { setAddForm({ firstName: "", lastName: "", email: "", phone: "", wilayaCode: "", address: "", parcelsPerMonth: "", password: "", status: "pending", notes: "" }); setAddError(""); setShowAdd(true); }
   function setAdd<K extends keyof typeof addForm>(k: K, v: typeof addForm[K]) { setAddForm((f) => ({ ...f, [k]: v })); }
 
   async function addPartner() {
-    if (!addForm.firstName || !addForm.lastName || !addForm.email || !addForm.phone || !addForm.city || !addForm.address || !addForm.parcelsPerMonth) {
+    if (!addForm.firstName || !addForm.lastName || !addForm.email || !addForm.phone || !addForm.wilayaCode || !addForm.address || !addForm.parcelsPerMonth) {
       setAddError(t("admin.partners.addError")); return;
     }
     setAddSaving(true); setAddError("");
     try {
       const res = await fetch(`${API_BASE}/api/admin/partners`, {
         method: "POST", headers: adminHeaders(),
-        body: JSON.stringify({ ...addForm, password: addForm.password || null, notes: addForm.notes || null }),
+        body: JSON.stringify({ ...addForm, city: WILAYA_LIST.find(w => w.code === addForm.wilayaCode)?.name ?? "", wilayaName: WILAYA_LIST.find(w => w.code === addForm.wilayaCode)?.name ?? "", password: addForm.password || null, notes: addForm.notes || null }),
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = (await res.json()) as { ok: boolean; error?: string };
@@ -1656,7 +1663,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
                 {[
                   [t("admin.partners.fields.email"), selected.email],
                   [t("admin.partners.fields.phone"), selected.phone],
-                  [t("admin.partners.fields.city"), selected.city],
+                  [t("admin.partners.fields.wilaya"), selected.wilayaName || selected.city],
                   [t("admin.partners.fields.parcels"), selected.parcelsPerMonth],
                   [t("admin.partners.fields.date"), fmtDate(selected.createdAt)],
                   [t("admin.partners.fields.address"), selected.address],
@@ -1762,10 +1769,12 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
                     placeholder="06XXXXXXXX" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.city")} *</label>
-                  <input value={addForm.city} onChange={(e) => setAdd("city", e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]"
-                    placeholder={t("admin.partners.fields.cityPh")} />
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.partners.fields.wilaya")} *</label>
+                  <select value={addForm.wilayaCode} onChange={(e) => setAdd("wilayaCode", e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
+                    <option value="">{t("admin.partners.fields.wilayaPh")}</option>
+                    {WILAYA_LIST.map((w) => <option key={w.code} value={w.code}>{w.code.replace("DZ", "")} — {w.name}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
@@ -2404,7 +2413,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.role")}</label>
                   <select value={newRole} onChange={(e) => setNewRole(e.target.value as AdminRole)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
-                    {(["admin", "office", "finance", "commercial"] as const).map((r) => (
+                    {(["admin", "office", "finance", "commercial", "ticket_manager"] as const).map((r) => (
                       <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
                     ))}
                   </select>
@@ -2500,7 +2509,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.role")}</label>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value as AdminRole)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white transition-colors">
-                    {(["admin", "office", "finance", "commercial"] as const).map((r) => (
+                    {(["admin", "office", "finance", "commercial", "ticket_manager"] as const).map((r) => (
                       <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
                     ))}
                   </select>
@@ -2749,9 +2758,12 @@ export default function AdminDashboard() {
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
   const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
+  const OFFICE_SECTIONS: SidebarView[] = ["office-dashboard", "queue", "returns", "merchants", "payouts", "messaging", "team", "analytics"];
   const allowedSections: SidebarView[] = (role === "expediteur" && isTeam && teamPerms.length > 0)
     ? EXPEDITEUR_SECTIONS.filter(s => teamPerms.includes(s))
-    : EXPEDITEUR_SECTIONS;
+    : role === "office" && isTeam && teamPerms.length > 0
+    ? OFFICE_SECTIONS.filter(s => teamPerms.includes(s))
+    : role === "office" ? OFFICE_SECTIONS : EXPEDITEUR_SECTIONS;
 
   function expAllowed(section: SidebarView): boolean {
     return role !== "expediteur" || !isTeam || allowedSections.includes(section);
@@ -2759,9 +2771,30 @@ export default function AdminDashboard() {
 
   const defaultView: SidebarView = role === "finance" ? "charges"
     : role === "commercial" ? "partners"
-    : role === "expediteur" ? (allowedSections[0] ?? "queue")
+    : role === "ticket_manager" ? "queue"
+    : role === "office" || role === "expediteur" ? (allowedSections[0] ?? "queue")
     : "dashboard";
-  const [view, setView] = useState<SidebarView>(defaultView);
+  const viewStorageKey = `weasy:${isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
+  const permittedViews = useMemo<SidebarView[]>(() => {
+    if (role === "admin") return ["dashboard", "partners", "offices", "admins", "performance", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
+    if (role === "office") return allowedSections;
+    if (role === "finance") return ["charges", "commissions", "workers", "decharges"];
+    if (role === "commercial") return ["partners"];
+    if (role === "ticket_manager") return ["queue"];
+    return allowedSections;
+  }, [role, allowedSections]);
+  const [view, setViewState] = useState<SidebarView>(() => {
+    const saved = localStorage.getItem(viewStorageKey) as SidebarView | null;
+    return saved && permittedViews.includes(saved) ? saved : defaultView;
+  });
+  const setView = useCallback((next: SidebarView) => {
+    const safe = permittedViews.includes(next) ? next : defaultView;
+    localStorage.setItem(viewStorageKey, safe);
+    setViewState(safe);
+  }, [defaultView, permittedViews, viewStorageKey]);
+  useEffect(() => {
+    if (!permittedViews.includes(view)) setView(defaultView);
+  }, [view, permittedViews, defaultView, setView]);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -2812,6 +2845,7 @@ export default function AdminDashboard() {
       );
     }
     localStorage.removeItem("push_enabled");
+    localStorage.removeItem(viewStorageKey);
 
     if (isExpediteurPath) {
       localStorage.removeItem("exp_token");
@@ -2965,6 +2999,8 @@ export default function AdminDashboard() {
             view === "workers" ? <WorkersView /> :
             view === "decharges" ? <DechargesView /> :
             <ChargesView onUnauth={unauth} />
+          ) : role === "ticket_manager" ? (
+            <QueueView />
           ) : role === "commercial" ? (
             <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} canChangeStatus={canChangePartnerStatus} />
           ) : !isAdmin ? (

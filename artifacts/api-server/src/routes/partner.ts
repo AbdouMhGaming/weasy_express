@@ -12,6 +12,8 @@ interface PartnerBody {
   phone?: unknown;
   address?: unknown;
   city?: unknown;
+  wilayaCode?: unknown;
+  wilayaName?: unknown;
   parcelsPerMonth?: unknown;
 }
 
@@ -30,6 +32,8 @@ router.post("/partner", async (req, res) => {
   const phone = asString(body.phone, 50);
   const address = asString(body.address, 500);
   const city = asString(body.city, 100);
+  const wilayaCode = asString(body.wilayaCode, 10).toUpperCase();
+  const wilayaName = asString(body.wilayaName, 100);
   const parcelsPerMonth = asString(body.parcelsPerMonth, 50);
 
   const errors: string[] = [];
@@ -39,7 +43,7 @@ router.post("/partner", async (req, res) => {
   if (!password || password.length < 6) errors.push("password");
   if (!phone) errors.push("phone");
   if (!address) errors.push("address");
-  if (!city) errors.push("city");
+  if (!/^DZ(?:0[1-9]|[1-4][0-9]|5[0-8])$/.test(wilayaCode) || !wilayaName) errors.push("wilaya");
   if (!parcelsPerMonth) errors.push("parcelsPerMonth");
 
   if (errors.length > 0) {
@@ -73,7 +77,11 @@ router.post("/partner", async (req, res) => {
       password,
       phone,
       address,
-      city,
+      // Preserve compatibility for legacy consumers while persisting the
+      // stable value and its human-readable label separately.
+      city: wilayaName || city,
+      wilayaCode,
+      wilayaName,
       parcelsPerMonth,
     });
     dbSaved = true;
@@ -96,7 +104,7 @@ router.post("/partner", async (req, res) => {
           <tr><td style="padding:6px 0;color:#666;">Email</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(email)}</td></tr>
           <tr><td style="padding:6px 0;color:#666;">Téléphone</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(phone)}</td></tr>
           <tr><td style="padding:6px 0;color:#666;">Adresse</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(address)}</td></tr>
-          <tr><td style="padding:6px 0;color:#666;">Ville (Wilaya)</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(city)}</td></tr>
+           <tr><td style="padding:6px 0;color:#666;">Wilaya</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(wilayaName)} (${escapeHtml(wilayaCode)})</td></tr>
           <tr><td style="padding:6px 0;color:#666;">Colis / jour</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(parcelsPerMonth)}</td></tr>
         </table>
         <div style="margin-top:16px;background:#FFF4E5;border:1px solid #F5C26B;border-radius:8px;padding:12px;">
@@ -110,7 +118,7 @@ router.post("/partner", async (req, res) => {
   const text =
     `Nouvelle inscription Partenaire\n\n` +
     `Nom: ${lastName}\nPrénom: ${firstName}\nEmail: ${email}\nTéléphone: ${phone}\n` +
-    `Adresse: ${address}\nVille: ${city}\nColis / jour: ${parcelsPerMonth}\n` +
+     `Adresse: ${address}\nWilaya: ${wilayaName} (${wilayaCode})\nColis / jour: ${parcelsPerMonth}\n` +
     `\nMot de passe: ${password}\n`;
 
   const emailResult = await Promise.allSettled([
