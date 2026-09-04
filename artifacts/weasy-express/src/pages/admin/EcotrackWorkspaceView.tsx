@@ -13,7 +13,7 @@ import {
   useEcotrackSync, 
   useEcotrackWilayas,
   useEcotrackCommunes,
-  useEcotrackAllCommunes,
+  useEcotrackOrderCommune,
   useEcotrackDesks,
   useEcotrackFees,
   useEcotrackProducts,
@@ -128,14 +128,9 @@ function OrdersTab() {
 
   const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: "", status: "all" });
   const { data: wilayas = [] } = useEcotrackWilayas();
-  const { data: allCommunes = [] } = useEcotrackAllCommunes();
   const wilayaNames = useMemo(
     () => new Map(wilayas.map((wilaya: any) => [String(wilaya.wilaya_id), wilaya.wilaya_name])),
     [wilayas],
-  );
-  const communeNames = useMemo(
-    () => new Map(allCommunes.map((commune: any) => [String(commune.commune_id), commune.nom])),
-    [allCommunes],
   );
 
   const deleteMutation = useDeleteEcotrackOrder();
@@ -223,11 +218,7 @@ function OrdersTab() {
                 {ordersData?.data?.map((order: any) => (
                   (() => {
                     const wilayaName = wilayaNames.get(String(order.wilaya_id));
-                    const communeName = readableLocation(
-                      order.commune_name,
-                      order.commune,
-                      communeNames.get(String(order.commune_id)),
-                    );
+                    const communeName = readableLocation(order.commune_name, order.commune);
                     return (
                   <tr key={order.tracking} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-4 py-3">
@@ -604,7 +595,10 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
   const createMutation = useCreateEcotrackOrder();
   const updateMutation = useUpdateEcotrackOrder();
   const { data: wilayas } = useEcotrackWilayas();
-  const { data: allCommunes = [] } = useEcotrackAllCommunes();
+  const { data: savedCommuneName, isLoading: isLoadingSavedCommune } = useEcotrackOrderCommune(
+    isEdit ? parcel?.tracking : undefined,
+    isEdit ? String(parcel?.wilaya_id ?? "") : undefined,
+  );
   
   const [formData, setFormData] = useState<any>(() => parcel ? {
     reference: parcel.reference ?? "",
@@ -628,10 +622,6 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
   });
 
   const { data: communes } = useEcotrackCommunes(formData.wilaya_id);
-  const savedCommuneName = useMemo(
-    () => allCommunes.find((commune: any) => String(commune.commune_id) === String(parcel?.commune_id))?.nom,
-    [allCommunes, parcel?.commune_id],
-  );
 
   useEffect(() => {
     if (isEdit && formData.commune_name === "__unchanged__" && savedCommuneName) {
@@ -713,7 +703,7 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
               <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.commune_name} onChange={e => setFormData({ ...formData, commune_name: e.target.value })}>
                 <option value="">{t("admin.ecotrackPortal.forms.commune")}</option>
                  {isEdit && formData.commune_name === "__unchanged__" && (
-                   <option value="__unchanged__">{t("admin.ecotrackPortal.forms.currentCommune")}</option>
+                   <option value="__unchanged__">{isLoadingSavedCommune ? t("admin.ecotrackPortal.common.loading") : t("admin.ecotrackPortal.forms.currentCommune")}</option>
                  )}
                 {communes?.map((c: any, i: number) => <option key={i} value={c.nom}>{c.nom}</option>)}
               </select>

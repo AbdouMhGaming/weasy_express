@@ -104,20 +104,17 @@ export function useEcotrackCommunes(wilaya_id?: string) {
   });
 }
 
-export function useEcotrackAllCommunes() {
+export function useEcotrackOrderCommune(tracking?: string, wilayaId?: string) {
   return useQuery({
-    queryKey: ["ecotrack", "communes", "all"],
+    queryKey: ["ecotrack", "order-commune", tracking, wilayaId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/communes`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/orders/${encodeURIComponent(tracking!)}/commune?wilaya_id=${encodeURIComponent(wilayaId!)}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
-      const raw = body.data?.data ?? body.data ?? {};
-      return Object.entries(raw).map(([communeId, commune]: [string, any]) => ({
-        ...commune,
-        commune_id: communeId,
-        nom: commune.nom ?? commune.commune_name ?? commune.name,
-      }));
+      if (!res.ok || !body.ok) throw new Error(body.error || "commune_lookup_failed");
+      return String(body.commune);
     },
+    enabled: Boolean(tracking && wilayaId),
     staleTime: 5 * 60_000,
   });
 }

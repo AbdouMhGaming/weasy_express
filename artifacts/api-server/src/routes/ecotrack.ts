@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
 import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
@@ -7,6 +8,9 @@ const router = Router();
 const PAGE_SIZE = 40;
 const MAX_SYNC_PAGES = 10;
 const references = new Map<string, { until: number; value: unknown }>();
+const resolvedCommunes = new Map<string, { until: number; value: string }>();
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 
 async function accountFor(req: AuthedRequest): Promise<any | null> {
   if (req.adminRole !== "expediteur") return null;
@@ -177,6 +181,46 @@ router.get("/expediteur/ecotrack/orders/:tracking", async (req: AuthedRequest, r
     catch { updates = await ecotrackRequest(token, "/api/v1/get/maj", { params: { tracking: id } }); }
     return res.json({ ok: true, tracking: id, info: (await info).body, updates: updates.body });
   } catch (e) { return error(res, e); }
+});
+
+router.get("/expediteur/ecotrack/orders/:tracking/commune", async (req: AuthedRequest, res) => {
+  const id = tracking(req.params.tracking);
+  const wilayaId = String(req.query.wilaya_id ?? "").trim();
+  if (!id || !wilayaId) return res.status(400).json({ ok: false, error: "tracking_and_wilaya_required" });
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const cacheKey = `${expediteurId}:${id}`;
+    const cached = resolvedCommunes.get(cacheKey);
+    if (cached && cached.until > Date.now()) return res.json({ ok: true, commune: cached.value, cached: true });
+
+    const communesKey = `${expediteurId}:communes`;
+    const savedCommunes = references.get(communesKey);
+    let communesBody: any;
+    if (savedCommunes && savedCommunes.until > Date.now()) {
+      communesBody = savedCommunes.value;
+    } else {
+      const result = await ecotrackRequest(token, "/api/v1/get/communes");
+      communesBody = result.body ?? {};
+      references.set(communesKey, { until: Date.now() + 5 * 60_000, value: communesBody });
+    }
+
+    const labelResponse = await ecotrackPdf(token, "/api/v1/get/order/label", { tracking: id });
+    const labelText = String((await pdfParse(Buffer.from(await labelResponse.arrayBuffer())))?.text ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase();
+    const candidates = Object.values(communesBody ?? {})
+      .filter((commune: any) => String(commune?.wilaya_id) === wilayaId && typeof commune?.nom === "string")
+      .map((commune: any) => String(commune.nom))
+      .filter((name: string) => labelText.includes(name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase()))
+      .sort((a: string, b: string) => b.length - a.length);
+    const commune = candidates[0];
+    if (!commune) return res.status(404).json({ ok: false, error: "commune_not_found_on_label" });
+    resolvedCommunes.set(cacheKey, { until: Date.now() + 24 * 60 * 60_000, value: commune });
+    return res.json({ ok: true, commune, cached: false });
+  } catch (e) {
+    return error(res, e);
+  }
 });
 
 async function mutation(req: AuthedRequest, res: any, path: string, method: string, params: any, body?: any) {

@@ -20,3 +20,9 @@ Complete statistics must come from an incremental per-Expediteur order cache rat
 **Why:** Production enforces tight minute/hour/day limits, while order history is paginated. Re-fetching every page for each dashboard view is slow and can exhaust the account's quota.
 
 **How to apply:** Synchronize bounded page batches, persist the cursor and rate-limit block, serve aggregates from the cache, and enforce team permissions server-side before decrypting the root credential.
+
+The numeric keys returned by `/api/v1/get/communes` are array positions, not the `commune_id` values returned on orders. Never join an order to a commune by those keys.
+
+**Why:** Every array position from 0 through 1541 exists, so an incorrect key lookup appears successful while silently assigning the wrong real-world commune.
+
+**How to apply:** For an existing order, resolve the commune from the order's own Ecotrack label, restricted to commune names belonging to its known wilaya. Prefer the longest printed name when one candidate is a substring of another, and cache the result to protect API limits.
