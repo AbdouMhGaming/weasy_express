@@ -216,7 +216,7 @@ export default function PartnerPage() {
                   <Field label={t("partner.wilaya")} error={errors.wilayaCode}>
                     <Select onValueChange={(v) => handleChange("wilayaCode", v)} value={form.wilayaCode}>
                       <SelectTrigger className="h-12"><SelectValue placeholder={t("partner.wilayaPh")} /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-72 overflow-y-auto">
                         {WILAYA_LIST.map((wilaya) => <SelectItem key={wilaya.code} value={wilaya.code}>{wilaya.code.replace("DZ", "")} — {wilaya.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
