@@ -228,7 +228,9 @@ export default function QueueView() {
 
   // ── Filter ─────────────────────────────────────────────────────────────
 
-  const canFilterDir = isAdmin || role === "office" || role === "expediteur";
+  // Ticket managers have the same all-ticket visibility and filtering tools as
+  // super admins, while creation/deletion remain restricted separately.
+  const canFilterDir = isAdmin || isTicketManager || role === "office" || role === "expediteur";
   const filtered = useMemo(() => tickets.filter(tk => {
     if (statusFilter !== "all" && tk.status !== statusFilter) return false;
     if (canFilterDir) {
@@ -246,7 +248,7 @@ export default function QueueView() {
       ) return false;
     }
     return true;
-  }), [tickets, statusFilter, dirFilter, search, isAdmin, username]);
+  }), [tickets, statusFilter, dirFilter, search, canFilterDir, username]);
 
   const sorted = useMemo(() => {
     const KEY_MAP: Record<SortCol, keyof Ticket> = {
@@ -418,7 +420,7 @@ export default function QueueView() {
       </div>
 
       {/* ── Direction filter ── */}
-      {(isAdmin || role === "office" || role === "expediteur") && (
+      {canFilterDir && (
         <div className="flex items-center gap-1 mb-3 flex-wrap">
           {DIRECTION_TABS.map(d => (
             <button key={d} onClick={() => setDirFilter(d)} className={filterTabCls(dirFilter === d)}>
