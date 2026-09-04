@@ -1489,6 +1489,9 @@ const ar: Translations = {
       settingsButton: "فتح إعدادات إيكوتراك",
       lastSync: "آخر مزامنة:",
       never: "أبداً",
+      liveSync: "المزامنة التلقائية نشطة",
+      initialSync: "جارٍ استيراد جميع بيانات Ecotrack",
+      initialSyncDescription: "يتم تحميل سجل الطلبات الكامل تلقائيًا. ستظهر الطلبات والإجماليات الصحيحة فور اكتمال الاستيراد.",
       sync: "مزامنة مع إيكوتراك",
       syncing: "جارٍ المزامنة...",
       tabs: {

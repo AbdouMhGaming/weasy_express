@@ -94,7 +94,13 @@ router.get("/expediteur/ecotrack/dashboard", async (req: AuthedRequest, res) => 
       const [recent] = await conn.execute(`SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE expediteur_id=?
         ORDER BY COALESCE(last_updated_at_remote, created_at_remote) DESC, fetched_at DESC LIMIT 10`, [expediteurId]) as any;
       const [[state]] = await conn.execute("SELECT next_page, last_page, last_synced_at, blocked_until FROM expediteur_ecotrack_sync_state WHERE expediteur_id=?", [expediteurId]) as any;
-      return res.json({ ok: true, totals: { orders: Number(total.total), montant: Number(total.amount), tarifPrestation: Number(total.prestationFees), tarifRetour: Number(total.returnFees) }, statuses, recentOrders: recent.map((r: any) => JSON.parse(r.raw_order)), sync: state ?? { next_page: 1, last_page: null, last_synced_at: null, blocked_until: null } });
+      const sync = state
+        ? {
+            ...state,
+            complete: state.last_page !== null && Number(state.next_page) === 1 && Boolean(state.last_synced_at),
+          }
+        : { next_page: 1, last_page: null, last_synced_at: null, blocked_until: null, complete: false };
+      return res.json({ ok: true, totals: { orders: Number(total.total), montant: Number(total.amount), tarifPrestation: Number(total.prestationFees), tarifRetour: Number(total.returnFees) }, statuses, recentOrders: recent.map((r: any) => JSON.parse(r.raw_order)), sync });
     } finally { conn.release(); }
   } catch (e) { return error(res, e); }
 });

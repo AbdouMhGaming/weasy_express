@@ -1489,6 +1489,9 @@ const en: Translations = {
       settingsButton: "Open Ecotrack settings",
       lastSync: "Last sync:",
       never: "Never",
+      liveSync: "Automatic sync active",
+      initialSync: "Importing all Ecotrack data",
+      initialSyncDescription: "The complete order history is loading automatically. Correct totals and orders will appear as soon as the import finishes.",
       sync: "Sync with Ecotrack",
       syncing: "Syncing...",
       tabs: {

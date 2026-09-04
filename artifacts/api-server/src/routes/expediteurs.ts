@@ -105,6 +105,12 @@ router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
       );
       await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?", [account.id]);
       await conn.execute("DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?", [account.id]);
+      await conn.execute(
+        `INSERT INTO expediteur_ecotrack_sync_state
+         (expediteur_id, next_page, last_page, last_synced_at, blocked_until)
+         VALUES (?, 1, NULL, NULL, NULL)`,
+        [account.id],
+      );
       await conn.commit();
     } catch (error) {
       await conn.rollback();

@@ -79,7 +79,11 @@ async function cacheOrders(expediteurId: number, orders: any[]) {
   }
 }
 
-async function syncChunk(expediteurId: number, token: string): Promise<EcotrackSyncResult> {
+async function syncChunk(
+  expediteurId: number,
+  token: string,
+  dateRange: { startDate: string; endDate: string },
+): Promise<EcotrackSyncResult> {
   const conn = await pool.getConnection();
   let state: any;
   try {
@@ -114,7 +118,13 @@ async function syncChunk(expediteurId: number, token: string): Promise<EcotrackS
   for (; fetched < MAX_SYNC_PAGES; fetched++) {
     let result;
     try {
-      result = await ecotrackRequest(token, "/api/v1/get/orders", { params: { page } });
+      result = await ecotrackRequest(token, "/api/v1/get/orders", {
+        params: {
+          page,
+          start_date: dateRange.startDate,
+          end_date: dateRange.endDate,
+        },
+      });
     } catch (error) {
       if (error instanceof EcotrackError && error.status === 429) {
         const wait = error.retryAfter ?? 60;
@@ -187,9 +197,13 @@ export function syncEcotrackAccount(
   const task = withEcotrackAccountLock(expediteurId, async () => {
     let totalPages = 0;
     let chunks = 0;
+    const dateRange = {
+      startDate: "2020-01-01",
+      endDate: new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
+    };
     let result: EcotrackSyncResult;
     do {
-      result = await syncChunk(expediteurId, token);
+      result = await syncChunk(expediteurId, token, dateRange);
       totalPages += result.pagesFetched;
       chunks++;
       if (result.blocked) {

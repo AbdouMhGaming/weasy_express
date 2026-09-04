@@ -1487,6 +1487,9 @@ const fr = {
       settingsButton: "Ouvrir les paramètres Ecotrack",
       lastSync: "Dernière synchro :",
       never: "Jamais",
+      liveSync: "Synchronisation automatique active",
+      initialSync: "Importation de toutes les données Ecotrack",
+      initialSyncDescription: "L’historique complet des commandes se charge automatiquement. Les totaux et commandes corrects apparaîtront dès la fin de l’importation.",
       sync: "Synchroniser avec Ecotrack",
       syncing: "Synchronisation...",
       tabs: {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { 
-  RefreshCw, Search, Plus, Download, Trash2, Edit2, 
+  Search, Plus, Download, Trash2, Edit2,
   CheckCircle, ArrowLeftRight, X, AlertCircle, Loader2, Package, MapPin,
   Eye, MessageSquare, ListPlus, Truck, Settings2, Info
 } from "lucide-react";
@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { 
   useEcotrackDashboard, 
   useEcotrackOrders, 
-  useEcotrackSync, 
   useEcotrackWilayas,
   useEcotrackCommunes,
   useEcotrackOrderCommune,
@@ -84,24 +83,10 @@ function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
 
 export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const { t } = useTranslation();
-  const { toast } = useToast();
-  
   const [activeTab, setActiveTab] = useState<"orders" | "tracking" | "config" | "products">("orders");
 
-  const { data: dashboard, isLoading: isLoadingDashboard, error: dashboardError, refetch: refetchDashboard } = useEcotrackDashboard();
-  const syncMutation = useEcotrackSync();
-
-  const handleSync = () => {
-    syncMutation.mutate(undefined, {
-      onSuccess: () => {
-        toast({ title: t("admin.ecotrackPortal.common.success") });
-        refetchDashboard();
-      },
-      onError: (err) => {
-        toast({ title: t("admin.ecotrackPortal.common.error"), description: err.message, variant: "destructive" });
-      }
-    });
-  };
+  const { data: dashboard, isLoading: isLoadingDashboard, error: dashboardError } = useEcotrackDashboard();
+  const initialSyncPending = isLoadingDashboard || dashboard?.sync?.complete === false;
 
   if (dashboardError?.message === "disconnected") {
     return (
@@ -131,10 +116,12 @@ export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettin
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={handleSync} disabled={syncMutation.isPending} className="text-slate-700 border-slate-200 hover:bg-slate-50">
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-              {syncMutation.isPending ? t("admin.ecotrackPortal.syncing") : t("admin.ecotrackPortal.sync")}
-            </Button>
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
+              {initialSyncPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <span className="h-2 w-2 rounded-full bg-emerald-500" />}
+              {initialSyncPending ? t("admin.ecotrackPortal.initialSync") : t("admin.ecotrackPortal.liveSync")}
+            </span>
           </div>
         </div>
 
@@ -153,8 +140,15 @@ export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettin
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        {activeTab === "orders" && <OrdersTab />}
-        {activeTab === "tracking" && <TrackingTab statuses={dashboard?.statuses || []} />}
+        {(activeTab === "orders" || activeTab === "tracking") && initialSyncPending ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center p-8">
+            <Loader2 className="h-9 w-9 animate-spin text-[#E10600]" />
+            <p className="font-semibold text-slate-700">{t("admin.ecotrackPortal.initialSync")}</p>
+            <p className="max-w-md text-sm text-slate-500">{t("admin.ecotrackPortal.initialSyncDescription")}</p>
+          </div>
+        ) : activeTab === "orders" ? <OrdersTab />
+          : activeTab === "tracking" ? <TrackingTab statuses={dashboard?.statuses || []} />
+          : null}
         {activeTab === "config" && <ConfigTab />}
         {activeTab === "products" && <ProductsTab />}
       </div>

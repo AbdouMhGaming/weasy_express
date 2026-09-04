@@ -44,3 +44,9 @@ Ecotrack order synchronization is server-driven: saving a token and API startup 
 **Why:** Browser-triggered partial syncs left most pages unloaded and stopped when the user closed the page. Ecotrack also rate-limits bursts with short 429 retry windows.
 
 **How to apply:** Pace order-list requests at roughly one per second, honor `Retry-After`, bulk-upsert each page, serialize each account with a MySQL advisory lock, and only reconcile deletions after a complete cycle.
+
+Ecotrack `/get/orders` silently defaults to non-archived orders created in the last 90 days; pagination can be complete while older active orders and status counts are still missing.
+
+**Why:** A current API returned 63 orders and one `vers_wilaya` with default parameters, but 68 orders and two `vers_wilaya` when the documented historical date range was supplied.
+
+**How to apply:** Every full order sync must send explicit `start_date` and `end_date`. Treat `next_page=1` as complete only when `last_page` and `last_synced_at` are also present.
