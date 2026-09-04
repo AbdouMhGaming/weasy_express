@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { 
   RefreshCw, Search, Plus, Download, Trash2, Edit2, 
   CheckCircle, ArrowLeftRight, X, AlertCircle, Loader2, Package, MapPin,
-  Eye, MessageSquare, ListPlus, Truck, MoreHorizontal, Settings2, Info
+  Eye, MessageSquare, ListPlus, Truck, Settings2, Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -366,26 +366,25 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
             className="pl-9 bg-white shadow-sm"
           />
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
-          {statusOptions.map(status => {
-            const statInfo = statuses.find((s: any) => s.status === status);
-            return (
-              <button
-                key={status} onClick={() => { setStatusFilter(status); setPage(1); }}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                  statusFilter === status ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 shadow-sm"
-                }`}
-              >
-                {status === "all" ? t("admin.ecotrackPortal.common.all") : humanizeEcotrackStatus(status, t)}
-                {statInfo && statInfo.count > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === status ? "bg-white/20" : "bg-slate-100"}`}>{statInfo.count}</span>}
-              </button>
-            );
-          })}
+        <div className="w-full sm:w-64 shrink-0">
+          <label className="sr-only" htmlFor="tracking-status-filter">{t("admin.ecotrackPortal.tracking.filterStatus")}</label>
+          <select
+            id="tracking-status-filter"
+            value={statusFilter}
+            onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}
+            className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="all">{t("admin.ecotrackPortal.tracking.filterStatus")}: {t("admin.ecotrackPortal.common.all")}</option>
+            {statusOptions.filter(status => status !== "all").map(status => {
+              const statInfo = statuses.find((item: any) => item.status === status);
+              return (
+                <option key={status} value={status}>
+                  {humanizeEcotrackStatus(status, t)}{statInfo?.count ? ` (${statInfo.count})` : ""}
+                </option>
+              );
+            })}
+          </select>
         </div>
-        <Button variant="outline" className="bg-white border-slate-200 shadow-sm shrink-0" disabled>
-          <MoreHorizontal className="h-4 w-4 mr-2" />
-          {t("admin.ecotrackPortal.tracking.trackMultiple")}
-        </Button>
       </div>
 
       <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
