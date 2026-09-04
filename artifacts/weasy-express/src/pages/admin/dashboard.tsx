@@ -341,7 +341,7 @@ function SidebarInner({
         </nav>
       ) : role === "expediteur" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {expAllowed("ecotrack") && navItem("ecotrack", t("admin.ecotrackWorkspace.nav"), 0,
+          {expAllowed("ecotrack") && navItem("ecotrack", t("admin.ecotrackPortal.nav"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7h-3V4H3a2 2 0 00-2 2v11h2a3 3 0 006 0h6a3 3 0 006 0h2v-5l-3-5zM6 19a2 2 0 110-4 2 2 0 010 4zm12 0a2 2 0 110-4 2 2 0 010 4zM17 9h2l2 3h-4V9z" /></svg>
           )}
           {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
