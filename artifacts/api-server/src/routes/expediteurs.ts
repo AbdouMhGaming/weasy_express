@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
+import { encryptEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
 
 const router = Router();
 // Scope the guard to this router's non-admin prefix. /admin routes are already
@@ -10,6 +11,120 @@ router.use("/expediteur", adminAuth, (req, res, next) => {
     res.status(403).json({ ok: false, error: "forbidden" }); return;
   }
   next();
+});
+
+async function getRootExpediteur(req: AuthedRequest) {
+  const username = req.adminDataUsername ?? req.adminUsername!;
+  const conn = await pool.getConnection();
+  try {
+    const [[account]] = await conn.execute(
+      "SELECT id, username, parent_id FROM admins WHERE username = ? AND role = 'expediteur' LIMIT 1",
+      [username],
+    ) as any;
+    return account ?? null;
+  } finally {
+    conn.release();
+  }
+}
+
+// ── Ecotrack credentials (root Expediteur only) ─────────────────────────────
+
+router.get("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "expediteur") {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  if (req.adminDataUsername && req.adminDataUsername !== req.adminUsername) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const account = await getRootExpediteur(req);
+  if (!account || account.parent_id) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const conn = await pool.getConnection();
+  try {
+    const [[credential]] = await conn.execute(
+      `SELECT token_hint, connection_status, last_validated_at, updated_at
+       FROM expediteur_ecotrack_credentials WHERE expediteur_id = ? LIMIT 1`,
+      [account.id],
+    ) as any;
+    res.json({
+      ok: true,
+      connected: Boolean(credential),
+      tokenHint: credential?.token_hint ?? null,
+      status: credential?.connection_status ?? "disconnected",
+      lastValidatedAt: credential?.last_validated_at ?? null,
+      updatedAt: credential?.updated_at ?? null,
+    });
+  } finally {
+    conn.release();
+  }
+});
+
+router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "expediteur") {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  if (req.adminDataUsername && req.adminDataUsername !== req.adminUsername) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const account = await getRootExpediteur(req);
+  if (!account || account.parent_id) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const token = String(req.body?.token ?? "").trim();
+  if (token.length < 10 || token.length > 2000) {
+    return res.status(400).json({ ok: false, error: "invalid_token_format" });
+  }
+
+  const validation = await validateEcotrackToken(token);
+  if (!validation.valid) {
+    const status = validation.reason === "unavailable" ? 502 : 400;
+    return res.status(status).json({ ok: false, error: `ecotrack_${validation.reason}` });
+  }
+
+  const encrypted = encryptEcotrackToken(token);
+  const conn = await pool.getConnection();
+  try {
+    await conn.execute(
+      `INSERT INTO expediteur_ecotrack_credentials
+       (expediteur_id, token_ciphertext, token_iv, token_auth_tag, token_hint, connection_status, last_validated_at)
+       VALUES (?, ?, ?, ?, ?, 'connected', NOW())
+       ON DUPLICATE KEY UPDATE
+         token_ciphertext = VALUES(token_ciphertext),
+         token_iv = VALUES(token_iv),
+         token_auth_tag = VALUES(token_auth_tag),
+         token_hint = VALUES(token_hint),
+         connection_status = 'connected',
+         last_validated_at = NOW()`,
+      [account.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag, encrypted.hint],
+    );
+    res.json({ ok: true, connected: true, tokenHint: encrypted.hint });
+  } finally {
+    conn.release();
+  }
+});
+
+router.delete("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "expediteur") {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  if (req.adminDataUsername && req.adminDataUsername !== req.adminUsername) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const account = await getRootExpediteur(req);
+  if (!account || account.parent_id) {
+    return res.status(403).json({ ok: false, error: "root_account_required" });
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.execute(
+      "DELETE FROM expediteur_ecotrack_credentials WHERE expediteur_id = ?",
+      [account.id],
+    );
+    res.json({ ok: true });
+  } finally {
+    conn.release();
+  }
 });
 
 // ── GET /api/admin/expediteurs — list expediteurs (admin or office) ─────────

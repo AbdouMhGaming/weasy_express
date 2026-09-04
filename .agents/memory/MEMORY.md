@@ -11,3 +11,4 @@
 - [Workers & Décharges sections](workers-decharges.md) — workers/decharges tables added; PDF generated client-side with jspdf+jsbarcode (dynamic import); worker_positions stored as JSON in app_settings; financeOrAdminOnly middleware guards all routes.
 - [Expediteur role & features](expediteur-features.md) — full Expediteur role, payouts, team sub-accounts, and ticket system overhaul; key decisions and file locations documented.
 - [Push notifications](push-notifications.md) — Web Push via web-push + VAPID; service worker in public/sw.js; bell icon in SidebarInner; fire-and-forget triggers in tickets.ts.
+- [Ecotrack API behavior](ecotrack-api-behavior.md) — production invalid-token responses differ from the docs; treat HTTP 401 “Unauthenticated.” as an invalid credential.

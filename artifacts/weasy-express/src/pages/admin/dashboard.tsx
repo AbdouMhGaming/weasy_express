@@ -12,6 +12,7 @@ const QueueView              = lazy(() => import("./QueueView"));
 const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
 const TeamView               = lazy(() => import("./TeamView"));
 const AnalyticsView          = lazy(() => import("./AnalyticsView"));
+const EcotrackSettingsView   = lazy(() => import("./EcotrackSettingsView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -119,7 +120,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
+type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack-settings";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -347,6 +348,9 @@ function SidebarInner({
           )}
           {expAllowed("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          )}
+          {!sidebarIsTeam && navItem("ecotrack-settings", t("admin.ecotrack.nav"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
           )}
         </nav>
       ) : role === "ticket_manager" ? (
@@ -2757,7 +2761,7 @@ export default function AdminDashboard() {
   const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem(isExpediteurPath ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
-  const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
+  const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team", "ecotrack-settings"];
   const OFFICE_SECTIONS: SidebarView[] = ["office-dashboard", "queue", "returns", "merchants", "payouts", "messaging", "team", "analytics"];
   const allowedSections: SidebarView[] = (role === "expediteur" && isTeam && teamPerms.length > 0)
     ? EXPEDITEUR_SECTIONS.filter(s => teamPerms.includes(s))
@@ -2984,6 +2988,7 @@ export default function AdminDashboard() {
             view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :
             view === "team"       ? <TeamView onUnauth={unauth} /> :
             view === "analytics"  ? <AnalyticsView onUnauth={unauth} /> :
+            view === "ecotrack-settings" ? <EcotrackSettingsView /> :
             <QueueView />
           ) : role === "office" ? (
             view === "queue"     ? <QueueView /> :
