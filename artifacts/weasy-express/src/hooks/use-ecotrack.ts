@@ -39,12 +39,11 @@ export function useEcotrackOrders(params: { page: number; search: string; status
   return useQuery({
     queryKey: ["ecotrack", "orders", params],
     queryFn: async () => {
-      const url = new URL(`${BASE}/orders`);
-      url.searchParams.set("page", params.page.toString());
-      if (params.search) url.searchParams.set("search", params.search);
-      if (params.status && params.status !== "all") url.searchParams.set("status", params.status);
+      const searchParams = new URLSearchParams({ page: params.page.toString() });
+      if (params.search) searchParams.set("search", params.search);
+      if (params.status && params.status !== "all") searchParams.set("status", params.status);
 
-      const res = await fetch(url.toString(), { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/orders?${searchParams.toString()}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -76,7 +75,12 @@ export function useEcotrackWilayas() {
       const res = await fetch(`${BASE}/wilayas`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
-      return body.data || [];
+      const raw = Array.isArray(body.data) ? body.data : body.data?.data;
+      return (Array.isArray(raw) ? raw : []).map((wilaya: any) => ({
+        ...wilaya,
+        wilaya_id: wilaya.wilaya_id ?? wilaya.code ?? wilaya.id,
+        wilaya_name: wilaya.wilaya_name ?? wilaya.nom ?? wilaya.name,
+      }));
     }
   });
 }
@@ -90,7 +94,11 @@ export function useEcotrackCommunes(wilaya_id?: string) {
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
       // Ecotrack returns communes as an object keyed by string
-      return Object.values(body.data || {});
+      const raw = body.data?.data ?? body.data ?? {};
+      return Object.values(raw).map((commune: any) => ({
+        ...commune,
+        nom: commune.nom ?? commune.commune_name ?? commune.name,
+      }));
     },
     enabled: !!wilaya_id,
   });
@@ -103,7 +111,7 @@ export function useEcotrackDesks() {
       const res = await fetch(`${BASE}/desks`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
-      return body.data || { my_desk: [], other_desks: [] };
+      return body.data?.data ?? body.data ?? { my_desk: null, other_desks: [] };
     }
   });
 }
@@ -115,7 +123,7 @@ export function useEcotrackFees() {
       const res = await fetch(`${BASE}/fees`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
-      return body.data || {};
+      return body.data?.data ?? body.data ?? {};
     }
   });
 }
@@ -127,7 +135,8 @@ export function useEcotrackProducts(page = 1) {
       const res = await fetch(`${BASE}/products?page=${page}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await res.json();
-      return body.data || { products: [], pagination: {} };
+      const raw = body.data?.data ?? body.data;
+      return raw && typeof raw === "object" ? raw : { products: [], pagination: {} };
     }
   });
 }

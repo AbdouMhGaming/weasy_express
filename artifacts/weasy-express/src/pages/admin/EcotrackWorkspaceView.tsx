@@ -122,7 +122,7 @@ function OrdersTab() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  const { data: ordersData, isLoading, isFetching } = useEcotrackOrders({ page, search: "", status: "all" });
+  const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: "", status: "all" });
 
   const deleteMutation = useDeleteEcotrackOrder();
   const validateMutation = useValidateEcotrackOrder();
@@ -177,6 +177,12 @@ function OrdersTab() {
         <div className="flex-1 overflow-auto">
           {isLoading ? (
             <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#E10600]" /></div>
+          ) : error ? (
+            <div className="flex flex-col h-full items-center justify-center text-center p-8">
+              <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+              <p className="text-slate-900 font-semibold">{t("admin.ecotrackPortal.common.error")}</p>
+              <p className="text-sm text-slate-500 mt-1">{error.message}</p>
+            </div>
           ) : ordersData?.data?.length === 0 ? (
             <div className="flex flex-col h-full items-center justify-center text-center p-8">
               <Package className="h-12 w-12 text-slate-200 mb-3" />
