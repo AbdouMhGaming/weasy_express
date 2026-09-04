@@ -32,3 +32,9 @@ Replacing or disconnecting an Ecotrack credential is an account-boundary event: 
 **Why:** Cache keys scoped only to the root Expediteur remain the same when its token changes. Without coordinated invalidation, orders and statistics from the previous Ecotrack account appear beside data from the newly connected account.
 
 **How to apply:** Validate the new token first, then replace the credential and delete account-scoped database caches in one transaction. After commit, clear runtime caches and remove all browser queries under the Ecotrack query-key prefix.
+
+Ecotrack tracking details are split across endpoints: `/get/tracking/info` returns status activity, while `/get/maj` can return a root array containing station, driver, comments, remark, and `created_at`.
+
+**Why:** Reading only `info.activity`, or expecting `maj.activity`, silently hides delivery-attempt notes even though Ecotrack shows them in its own interface.
+
+**How to apply:** Merge both sources by their complete date/time, retain unmatched rows, and preserve unknown non-empty fields for display so new upstream detail fields do not disappear.

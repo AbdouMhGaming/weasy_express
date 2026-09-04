@@ -974,9 +974,20 @@ function TrackingDetailModal({ tracking, onClose }: { tracking: string; onClose:
                           <span className="text-xs font-medium text-slate-400">{[ev.date, ev.time].filter(Boolean).join(" ")}</span>
                         </div>
                         {ev.station && <p className="text-xs font-medium text-slate-500 mt-2">{ev.station}</p>}
+                         {ev.scanLocation && ev.scanLocation !== ev.station && (
+                           <p className="text-xs text-slate-500 mt-1">{t("admin.ecotrackPortal.tracking.scanLocation")}: {ev.scanLocation}</p>
+                         )}
+                         {ev.driver && <p className="text-sm text-slate-700 mt-2"><span className="font-semibold">{t("admin.ecotrackPortal.tracking.driver")}:</span> {ev.driver}</p>}
+                         {ev.comments && <p className="text-sm text-slate-800 mt-1"><span className="font-semibold">{t("admin.ecotrackPortal.tracking.comments")}:</span> {ev.comments}</p>}
+                         {ev.remark && <p className="text-sm text-slate-600 mt-1"><span className="font-semibold">{t("admin.ecotrackPortal.tracking.remark")}:</span> {ev.remark}</p>}
                         {ev.reason && ev.reason !== ev.status && <p className="text-sm text-slate-700 mt-2">{ev.reason}</p>}
                         {ev.details && <p className="text-sm text-slate-600 mt-1">{ev.details}</p>}
                         {ev.postponedTo && <p className="text-xs text-amber-700 mt-2">{t("admin.ecotrackPortal.tracking.postponedTo")}: {ev.postponedTo}</p>}
+                         {ev.metadata?.map((item: any) => (
+                           <p key={item.key} className="text-xs text-slate-500 mt-1">
+                             <span className="font-semibold">{item.key.replaceAll("_", " ")}:</span> {item.value}
+                           </p>
+                         ))}
                       </div>
                     </div>
                   ))}

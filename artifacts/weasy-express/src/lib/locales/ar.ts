@@ -1536,6 +1536,10 @@ const ar: Translations = {
         status: "الحالة",
         returnConfirm: "طلب إرجاع هذا الطرد؟",
         postponedTo: "مؤجل إلى",
+        driver: "السائق",
+        comments: "التعليقات",
+        remark: "ملاحظة",
+        scanLocation: "موقع المسح",
         statusLabels: {
           unknown: "الحالة غير متاحة",
           readyToShip: "جاهز للشحن",

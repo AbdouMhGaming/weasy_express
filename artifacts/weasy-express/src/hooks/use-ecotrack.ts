@@ -65,20 +65,80 @@ export function useEcotrackOrderDetail(tracking: string) {
       const info = infoEnvelope[tracking] ?? infoEnvelope;
       const updatesEnvelope = body.updates?.data ?? body.updates ?? {};
       const updates = updatesEnvelope[tracking] ?? updatesEnvelope;
-      const activity = [info?.activity, updates?.activity].find(Array.isArray) ?? [];
+      const activity = [
+        ...(Array.isArray(info?.activity) ? info.activity : []),
+        ...(Array.isArray(updates?.activity) ? updates.activity : []),
+      ];
+      const updateRows = Array.isArray(updates)
+        ? updates
+        : Array.isArray(updates?.updates)
+          ? updates.updates
+          : Array.isArray(updates?.data)
+            ? updates.data
+            : [];
+      const dateParts = (event: any) => {
+        const createdAt = String(event?.created_at ?? event?.createdAt ?? "").trim();
+        const [createdDate = "", createdTime = ""] = createdAt.split(/\s+/, 2);
+        return {
+          date: String(event?.date ?? createdDate).trim(),
+          time: String(event?.time ?? createdTime).trim(),
+        };
+      };
+      const timestampKey = (event: any) => {
+        const { date, time } = dateParts(event);
+        return `${date} ${time}`.trim();
+      };
+      const updatesByTimestamp = new Map<string, any[]>();
+      updateRows.forEach((row: any) => {
+        const key = timestampKey(row);
+        const rows = updatesByTimestamp.get(key) ?? [];
+        rows.push(row);
+        updatesByTimestamp.set(key, rows);
+      });
+      const knownKeys = new Set([
+        "status", "activity", "reason", "date", "time", "created_at", "createdAt",
+        "station", "scanLocation", "details", "postponed_to", "livreur", "driver",
+        "commentaires", "comments", "remarque", "remark", "tracking",
+      ]);
+      const normalizeEvent = (event: any, update: any = {}) => {
+        const { date, time } = dateParts(event?.date || event?.created_at ? event : update);
+        const metadata = Object.entries({ ...event, ...update })
+          .filter(([key, value]) => !knownKeys.has(key) && value !== null && value !== undefined && value !== "")
+          .map(([key, value]) => ({ key, value: typeof value === "object" ? JSON.stringify(value) : String(value) }));
+        return {
+          status: event?.status ?? event?.activity ?? event?.reason ?? update?.status ?? update?.activity ?? update?.reason ?? "",
+          date,
+          time,
+          station: update?.station ?? event?.station ?? event?.scanLocation ?? "",
+          scanLocation: update?.scanLocation ?? event?.scanLocation ?? "",
+          reason: update?.reason ?? event?.reason ?? "",
+          details: update?.details ?? event?.details ?? "",
+          postponedTo: update?.postponed_to ?? event?.postponed_to ?? null,
+          driver: update?.livreur ?? update?.driver ?? event?.livreur ?? event?.driver ?? "",
+          comments: update?.commentaires ?? update?.comments ?? event?.commentaires ?? event?.comments ?? "",
+          remark: update?.remarque ?? update?.remark ?? event?.remarque ?? event?.remark ?? "",
+          metadata,
+        };
+      };
+      const events = activity.map((event: any) => {
+        const key = timestampKey(event);
+        const matchingUpdates = updatesByTimestamp.get(key) ?? [];
+        const update = matchingUpdates.shift() ?? {};
+        if (matchingUpdates.length) updatesByTimestamp.set(key, matchingUpdates);
+        else updatesByTimestamp.delete(key);
+        return normalizeEvent(event, update);
+      });
+      for (const remainingRows of updatesByTimestamp.values()) {
+        remainingRows.forEach((row: any) => events.push(normalizeEvent(row)));
+      }
+      events.sort((a: any, b: any) =>
+        `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
+      );
       return {
         ...body,
         info,
         updates,
-        events: activity.map((event: any) => ({
-          status: event.status ?? event.activity ?? event.reason ?? "",
-          date: event.date ?? "",
-          time: event.time ?? "",
-          station: event.station ?? event.scanLocation ?? "",
-          reason: event.reason ?? "",
-          details: event.details ?? "",
-          postponedTo: event.postponed_to ?? null,
-        })),
+        events,
       };
     },
     enabled: !!tracking,

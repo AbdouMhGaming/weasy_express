@@ -1536,6 +1536,10 @@ const en: Translations = {
         status: "Status",
         returnConfirm: "Request the return of this parcel?",
         postponedTo: "Postponed until",
+        driver: "Driver",
+        comments: "Comments",
+        remark: "Remark",
+        scanLocation: "Scan location",
         statusLabels: {
           unknown: "Status unavailable",
           readyToShip: "Ready to ship",

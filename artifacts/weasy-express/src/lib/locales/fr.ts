@@ -1534,6 +1534,10 @@ const fr = {
         status: "Statut",
         returnConfirm: "Demander le retour de ce colis ?",
         postponedTo: "Reporté au",
+        driver: "Livreur",
+        comments: "Commentaires",
+        remark: "Remarque",
+        scanLocation: "Lieu du scan",
         statusLabels: {
           unknown: "Statut indisponible",
           readyToShip: "Prêt à expédier",
