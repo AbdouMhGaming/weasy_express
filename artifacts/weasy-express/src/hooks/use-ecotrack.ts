@@ -104,6 +104,24 @@ export function useEcotrackCommunes(wilaya_id?: string) {
   });
 }
 
+export function useEcotrackAllCommunes() {
+  return useQuery({
+    queryKey: ["ecotrack", "communes", "all"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/communes`, { headers: expediteurHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+      const body = await res.json();
+      const raw = body.data?.data ?? body.data ?? {};
+      return Object.entries(raw).map(([communeId, commune]: [string, any]) => ({
+        ...commune,
+        commune_id: communeId,
+        nom: commune.nom ?? commune.commune_name ?? commune.name,
+      }));
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useEcotrackDesks() {
   return useQuery({
     queryKey: ["ecotrack", "desks"],
