@@ -1583,6 +1583,7 @@ const en: Translations = {
         exchange: "Exchange",
         chooseWilaya: "Choose a wilaya",
         chooseCommune: "Choose a commune",
+        currentCommune: "Current commune (unchanged)",
       }
     },
   },

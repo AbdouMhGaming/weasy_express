@@ -1583,6 +1583,7 @@ const ar: Translations = {
         exchange: "تبديل",
         chooseWilaya: "اختر ولاية",
         chooseCommune: "اختر بلدية",
+        currentCommune: "البلدية الحالية (بدون تغيير)",
       }
     },
   },

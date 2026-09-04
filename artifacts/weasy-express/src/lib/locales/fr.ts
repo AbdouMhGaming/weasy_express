@@ -1581,6 +1581,7 @@ const fr = {
         exchange: "Échange",
         chooseWilaya: "Choisir une wilaya",
         chooseCommune: "Choisir une commune",
+        currentCommune: "Commune actuelle (inchangée)",
       }
     },
   },

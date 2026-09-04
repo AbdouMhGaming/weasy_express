@@ -596,35 +596,41 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
   const { data: wilayas } = useEcotrackWilayas();
   
   const [formData, setFormData] = useState<any>(() => parcel ? {
-    ...parcel,
-    commune_name: parcel.commune_name || "",
-    products: parcel.products || "",
-    weight: parcel.weight || "",
-    type: String(parcel.type_id || parcel.type || "1"),
+    reference: parcel.reference ?? "",
+    client: parcel.client ?? "",
+    phone: parcel.phone ?? "",
+    phone_2: parcel.phone_2 ?? "",
+    adresse: parcel.adresse ?? "",
+    wilaya_id: String(parcel.wilaya_id ?? ""),
+    commune_name: parcel.commune_name || parcel.commune || (parcel.commune_id ? "__unchanged__" : ""),
+    montant: parcel.montant ?? "",
+    products: parcel.products ?? "",
+    weight: parcel.weight ?? "",
+    remarque: parcel.remarque ?? "",
+    type: String(parcel.type_id ?? parcel.type ?? "1"),
     stop_desk: Boolean(parcel.stop_desk),
-    fragile: Boolean(parcel.fragile),
+    fragile: parcel.fragile == null ? null : Boolean(parcel.fragile),
   } : {
     reference: "", client: "", phone: "", phone_2: "", adresse: "", wilaya_id: "",
     commune_name: "", montant: "", products: "", weight: "", stop_desk: false,
     fragile: false, remarque: "", type: "1",
   });
 
-  useEffect(() => {
-    if (parcel && parcel.commune_id && !formData.commune_name) setFormData((f: any) => ({ ...f, commune_name: parcel.commune_id }));
-  }, [parcel]);
-
   const { data: communes } = useEcotrackCommunes(formData.wilaya_id);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const communeVal = communes?.find((c: any) => c.nom === formData.commune_name)?.nom || formData.commune_name;
+    const communeVal = formData.commune_name === "__unchanged__"
+      ? undefined
+      : communes?.find((c: any) => c.nom === formData.commune_name)?.nom || formData.commune_name;
 
     if (isEdit && parcel) {
       const payload = {
         tracking: parcel.tracking, client: formData.client, tel: formData.phone, tel2: formData.phone_2,
         adresse: formData.adresse, commune: communeVal, wilaya: formData.wilaya_id, montant: formData.montant,
         remarque: formData.remarque, product: formData.products, weight: formData.weight, type: Number(formData.type || 1),
-        stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
+        stop_desk: formData.stop_desk ? 1 : 0,
+        fragile: formData.fragile == null ? undefined : formData.fragile ? 1 : 0,
       };
       updateMutation.mutate(payload, {
         onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
@@ -658,12 +664,10 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.client")}</label>
               <Input required value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} />
             </div>
-            {!isEdit && (
-              <div className="col-span-2 md:col-span-1 space-y-1">
-                <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.reference")}</label>
-                <Input value={formData.reference} onChange={e => setFormData({ ...formData, reference: e.target.value })} />
-              </div>
-            )}
+             <div className="col-span-2 md:col-span-1 space-y-1">
+               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.reference")}</label>
+               <Input value={formData.reference} onChange={e => setFormData({ ...formData, reference: e.target.value })} />
+             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.phone")}</label>
               <Input required value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
@@ -687,6 +691,9 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.commune")}</label>
               <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.commune_name} onChange={e => setFormData({ ...formData, commune_name: e.target.value })}>
                 <option value="">{t("admin.ecotrackPortal.forms.commune")}</option>
+                 {isEdit && formData.commune_name === "__unchanged__" && (
+                   <option value="__unchanged__">{t("admin.ecotrackPortal.forms.currentCommune")}</option>
+                 )}
                 {communes?.map((c: any, i: number) => <option key={i} value={c.nom}>{c.nom}</option>)}
               </select>
             </div>
@@ -719,7 +726,7 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
                 {t("admin.ecotrackPortal.forms.stopDesk")}
               </label>
               <label className="flex items-center gap-2 text-sm font-medium">
-                <input type="checkbox" checked={formData.fragile} onChange={e => setFormData({ ...formData, fragile: e.target.checked })} />
+                 <input type="checkbox" checked={Boolean(formData.fragile)} onChange={e => setFormData({ ...formData, fragile: e.target.checked })} />
                 {t("admin.ecotrackPortal.forms.fragile")}
               </label>
             </div>
