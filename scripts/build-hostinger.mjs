@@ -116,6 +116,10 @@ STATIC_DIR=./public
 
 # Optional: Admin HMAC secret (set a random string)
 ADMIN_SECRET=change_me_to_a_random_secret_string
+
+# Required: stable encryption/session secret. Do not rotate this without
+# reconnecting every stored Ecotrack credential.
+SESSION_SECRET=change_me_to_a_long_random_secret_string
 `;
 fs.writeFileSync(path.join(BUILD_DIR, ".env.example"), envExample);
 
@@ -141,6 +145,7 @@ const readme = `# Weasy Express — Hostinger Deployment
    - \`DB_HOST\`, \`DB_USER\`, \`DB_PASS\`, \`DB_NAME\` — your MySQL credentials
    - \`STATIC_DIR=./public\`
    - \`ADMIN_SECRET\` — a random secret for admin authentication
+   - \`SESSION_SECRET\` — a stable random secret used to encrypt Ecotrack credentials
 3. Set the start command to: \`node --enable-source-maps ./dist/index.mjs\`
 4. The server will serve both the API (\`/api/*\`) and the frontend SPA.
 

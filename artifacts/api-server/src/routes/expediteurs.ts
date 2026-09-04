@@ -71,7 +71,8 @@ router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
   if (!account || account.parent_id) {
     return res.status(403).json({ ok: false, error: "root_account_required" });
   }
-  const token = String(req.body?.token ?? "").trim();
+  // Accept pasted Authorization values without ever persisting the Bearer scheme.
+  const token = String(req.body?.token ?? "").trim().replace(/^Bearer\s+/i, "").trim();
   if (token.length < 10 || token.length > 2000) {
     return res.status(400).json({ ok: false, error: "invalid_token_format" });
   }

@@ -8,7 +8,7 @@ function encryptionKey(): Buffer {
   if (!source || source.length < 16) {
     throw new Error("SESSION_SECRET must be configured to encrypt Ecotrack tokens");
   }
-  return crypto.hkdfSync("sha256", source, "weasy-express", TOKEN_CONTEXT, 32);
+  return Buffer.from(crypto.hkdfSync("sha256", source, "weasy-express", TOKEN_CONTEXT, 32));
 }
 
 export function encryptEcotrackToken(token: string): {

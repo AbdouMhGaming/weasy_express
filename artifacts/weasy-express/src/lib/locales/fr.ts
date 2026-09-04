@@ -102,6 +102,20 @@ const fr = {
     placeholder: "Entrez votre numéro de suivi",
     track: "Suivre",
     empty: { title: "Prêt à suivre ?", subtitle: "Entrez votre numéro de suivi ci-dessus pour commencer." },
+      detail: {
+        title: "Détails de la commande",
+        info: "Informations",
+        history: "Historique",
+        noHistory: "Aucun historique trouvé.",
+        driver: "Livreur",
+        addNote: "Ajouter une note",
+        notePlaceholder: "Tapez votre note ici...",
+        saveNote: "Enregistrer la note",
+        driverPhone: "Téléphone livreur",
+        lastUpdated: "Dernière mise à jour",
+        deliveredAt: "Livré le"
+      },
+
     error: { title: "Numéro introuvable", subtitle: "Vérifiez votre numéro et réessayez. Assurez-vous qu'il correspond exactement au reçu." },
     upstreamError: {
       title: "Service de suivi temporairement indisponible",
@@ -1367,6 +1381,103 @@ const fr = {
         report: "Supprimer ce rapport ?",
         confirm: "Supprimer ?",
       },
+    },
+    ecotrackWorkspace: {
+      title: "Espace Ecotrack",
+      subtitle: "Gérez vos opérations Ecotrack directement depuis Weasy",
+      dashboard: "Tableau de bord",
+      parcels: "Colis",
+      sync: "Synchroniser Ecotrack",
+      syncing: "Synchronisation...",
+      lastSync: "Dernière synchro :",
+      never: "Jamais",
+      stats: {
+        total: "Total Colis",
+        delivered: "Livrés",
+        in_transit: "En Transit",
+        returned: "Retournés",
+        pending: "En Attente",
+        revenue: "Revenus"
+      },
+      search: "Rechercher un suivi, destinataire...",
+      filters: {
+        all: "Tous",
+        status: "Statut",
+        wilaya: "Wilaya"
+      },
+      table: {
+        tracking: "Suivi",
+        recipient: "Destinataire",
+        destination: "Destination",
+        status: "Statut",
+        amount: "Montant",
+        actions: "Actions",
+        date: "Date"
+      },
+      actions: {
+        create: "Nouveau Colis",
+        bulkCreate: "Création Multiple",
+        validate: "Valider",
+        validateSelected: "Valider la sélection",
+        ship: "Expédier",
+        printLabel: "Télécharger l'étiquette",
+        requestReturn: "Demander le retour",
+        addNote: "Ajouter une note",
+        edit: "Modifier",
+        delete: "Supprimer"
+      },
+      status: {
+        draft: "Brouillon",
+        pending: "En attente",
+        validated: "Validé",
+        in_transit: "En Transit",
+        delivered: "Livré",
+        returned: "Retourné",
+        failed: "Échoué"
+      },
+      form: {
+        type: "Type",
+        fragile: "Fragile",
+        gps_link: "Lien GPS",
+        select: "Sélectionner...",
+        remarque: "Remarque",
+
+        title: "Détails du colis",
+        recipientName: "Nom du destinataire",
+        recipientPhone: "Téléphone du destinataire",
+        wilaya: "Wilaya",
+        commune: "Commune",
+        address: "Adresse",
+        desk: "Bureau Stop Desk",
+        product: "Produit",
+        amount: "Montant (DZD)",
+        weight: "Poids (kg)",
+        freeDelivery: "Livraison gratuite",
+        stopDesk: "Stop Desk",
+        save: "Enregistrer le colis",
+        cancel: "Annuler",
+        notes: "Notes",
+        reference: "Référence",
+        phone_2: "Téléphone 2",
+        tarif_prestation: "Frais de service",
+        tarif_retour: "Frais de retour",
+        type_id: "Type",
+        products: "Produits"
+      },
+      errors: {
+        disconnected: "Non connecté à Ecotrack. Veuillez configurer votre jeton API dans les paramètres.",
+        rateLimited: "Trop de requêtes. Veuillez patienter un instant.",
+        general: "Une erreur s'est produite lors de la communication avec Ecotrack.",
+        loadFailed: "Échec du chargement des données.",
+        actionFailed: "L'action a échoué."
+      },
+      empty: {
+        title: "Aucun colis trouvé",
+        desc: "Créez un nouveau colis ou modifiez vos filtres de recherche."
+      },
+      deleteConfirm: "Supprimer ce colis ? Cette action est irréversible.",
+      returnConfirm: "Demander le retour de ce colis ?",
+      validateConfirm: "Valider ce colis pour l'expédition ?"
     },
   },
   expediteur: {

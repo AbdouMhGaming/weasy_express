@@ -104,6 +104,20 @@ const en: Translations = {
     placeholder: "Enter your tracking number",
     track: "Track",
     empty: { title: "Ready to track?", subtitle: "Enter your tracking number above to get started." },
+      detail: {
+        title: "Order Details",
+        info: "Information",
+        history: "History",
+        noHistory: "No history found.",
+        driver: "Driver",
+        addNote: "Add Note",
+        notePlaceholder: "Type your note here...",
+        saveNote: "Save Note",
+        driverPhone: "Driver Phone",
+        lastUpdated: "Last Updated",
+        deliveredAt: "Delivered At"
+      },
+
     error: { title: "Number not found", subtitle: "Check your number and try again. Make sure it matches the receipt exactly." },
     upstreamError: {
       title: "Tracking service temporarily unavailable",
@@ -1369,6 +1383,103 @@ const en: Translations = {
         report: "Delete this report?",
         confirm: "Delete?",
       },
+    },
+    ecotrackWorkspace: {
+      title: "Ecotrack Workspace",
+      subtitle: "Manage your Ecotrack operations directly from Weasy",
+      dashboard: "Dashboard",
+      parcels: "Parcels",
+      sync: "Sync Ecotrack",
+      syncing: "Syncing...",
+      lastSync: "Last sync:",
+      never: "Never",
+      stats: {
+        total: "Total Parcels",
+        delivered: "Delivered",
+        in_transit: "In Transit",
+        returned: "Returned",
+        pending: "Pending",
+        revenue: "Revenue"
+      },
+      search: "Search tracking, recipient...",
+      filters: {
+        all: "All",
+        status: "Status",
+        wilaya: "Wilaya"
+      },
+      table: {
+        tracking: "Tracking",
+        recipient: "Recipient",
+        destination: "Destination",
+        status: "Status",
+        amount: "Amount",
+        actions: "Actions",
+        date: "Date"
+      },
+      actions: {
+        create: "New Parcel",
+        bulkCreate: "Bulk Create",
+        validate: "Validate",
+        validateSelected: "Validate Selected",
+        ship: "Ship",
+        printLabel: "Download Label",
+        requestReturn: "Request Return",
+        addNote: "Add Note",
+        edit: "Edit",
+        delete: "Delete"
+      },
+      status: {
+        draft: "Draft",
+        pending: "Pending",
+        validated: "Validated",
+        in_transit: "In Transit",
+        delivered: "Delivered",
+        returned: "Returned",
+        failed: "Failed"
+      },
+      form: {
+        type: "Type",
+        fragile: "Fragile",
+        gps_link: "GPS Link",
+        select: "Select...",
+        remarque: "Remark",
+
+        title: "Parcel Details",
+        recipientName: "Recipient Name",
+        recipientPhone: "Recipient Phone",
+        wilaya: "Wilaya",
+        commune: "Commune",
+        address: "Address",
+        desk: "Pickup Desk",
+        product: "Product",
+        amount: "Amount (DZD)",
+        weight: "Weight (kg)",
+        freeDelivery: "Free Delivery",
+        stopDesk: "Stop Desk",
+        save: "Save Parcel",
+        cancel: "Cancel",
+        notes: "Notes",
+        reference: "Reference",
+        phone_2: "Phone 2",
+        tarif_prestation: "Service Fee",
+        tarif_retour: "Return Fee",
+        type_id: "Type",
+        products: "Products"
+      },
+      errors: {
+        disconnected: "Not connected to Ecotrack. Please configure your API token in Settings.",
+        rateLimited: "Too many requests. Please wait a moment.",
+        general: "An error occurred communicating with Ecotrack.",
+        loadFailed: "Failed to load data.",
+        actionFailed: "Action failed."
+      },
+      empty: {
+        title: "No parcels found",
+        desc: "Create a new parcel or change your search filters."
+      },
+      deleteConfirm: "Delete this parcel? This action cannot be undone.",
+      returnConfirm: "Request return for this parcel?",
+      validateConfirm: "Validate this parcel for shipping?"
     },
   },
   expediteur: {

@@ -104,6 +104,20 @@ const ar: Translations = {
     placeholder: "أدخل رقم التتبع",
     track: "تتبع",
     empty: { title: "هل أنت جاهز للتتبع؟", subtitle: "أدخل رقم التتبع أعلاه للبدء." },
+      detail: {
+        title: "تفاصيل الطلب",
+        info: "معلومات",
+        history: "السجل",
+        noHistory: "لم يتم العثور على سجل.",
+        driver: "السائق",
+        addNote: "إضافة ملاحظة",
+        notePlaceholder: "اكتب ملاحظتك هنا...",
+        saveNote: "حفظ الملاحظة",
+        driverPhone: "هاتف السائق",
+        lastUpdated: "آخر تحديث",
+        deliveredAt: "تاريخ التسليم"
+      },
+
     error: { title: "الرقم غير موجود", subtitle: "تحقق من الرقم وحاول مرة أخرى. تأكد من أنه يطابق الإيصال تماماً." },
     upstreamError: {
       title: "خدمة التتبع غير متاحة مؤقتاً",
@@ -1369,6 +1383,103 @@ const ar: Translations = {
         report: "حذف هذا التقرير؟",
         confirm: "حذف؟",
       },
+    },
+    ecotrackWorkspace: {
+      title: "مساحة عمل إيكوتراك",
+      subtitle: "أدر عمليات إيكوتراك الخاصة بك مباشرة من ويزي",
+      dashboard: "لوحة التحكم",
+      parcels: "الطرود",
+      sync: "مزامنة إيكوتراك",
+      syncing: "جارٍ المزامنة...",
+      lastSync: "آخر مزامنة:",
+      never: "أبداً",
+      stats: {
+        total: "إجمالي الطرود",
+        delivered: "تم التسليم",
+        in_transit: "في النقل",
+        returned: "مُعاد",
+        pending: "قيد الانتظار",
+        revenue: "الإيرادات"
+      },
+      search: "البحث برقم التتبع، المستلم...",
+      filters: {
+        all: "الكل",
+        status: "الحالة",
+        wilaya: "الولاية"
+      },
+      table: {
+        tracking: "التتبع",
+        recipient: "المستلم",
+        destination: "الوجهة",
+        status: "الحالة",
+        amount: "المبلغ",
+        actions: "إجراءات",
+        date: "التاريخ"
+      },
+      actions: {
+        create: "طرد جديد",
+        bulkCreate: "إنشاء متعدد",
+        validate: "تأكيد",
+        validateSelected: "تأكيد المحدد",
+        ship: "شحن",
+        printLabel: "تحميل الملصق",
+        requestReturn: "طلب إرجاع",
+        addNote: "إضافة ملاحظة",
+        edit: "تعديل",
+        delete: "حذف"
+      },
+      status: {
+        draft: "مسودة",
+        pending: "قيد الانتظار",
+        validated: "مؤكد",
+        in_transit: "في النقل",
+        delivered: "تم التسليم",
+        returned: "مُعاد",
+        failed: "فشل"
+      },
+      form: {
+        type: "النوع",
+        fragile: "هش",
+        gps_link: "رابط GPS",
+        select: "اختر...",
+        remarque: "ملاحظة",
+
+        title: "تفاصيل الطرد",
+        recipientName: "اسم المستلم",
+        recipientPhone: "هاتف المستلم",
+        wilaya: "الولاية",
+        commune: "البلدية",
+        address: "العنوان",
+        desk: "مكتب التوقف",
+        product: "المنتج",
+        amount: "المبلغ (دج)",
+        weight: "الوزن (كغ)",
+        freeDelivery: "توصيل مجاني",
+        stopDesk: "توقف في المكتب",
+        save: "حفظ الطرد",
+        cancel: "إلغاء",
+        notes: "ملاحظات",
+        reference: "المرجع",
+        phone_2: "الهاتف 2",
+        tarif_prestation: "تكلفة الخدمة",
+        tarif_retour: "تكلفة الإرجاع",
+        type_id: "النوع",
+        products: "المنتجات"
+      },
+      errors: {
+        disconnected: "غير متصل بإيكوتراك. يرجى إعداد رمز API في الإعدادات.",
+        rateLimited: "الكثير من الطلبات. يرجى الانتظار قليلاً.",
+        general: "حدث خطأ أثناء التواصل مع إيكوتراك.",
+        loadFailed: "فشل تحميل البيانات.",
+        actionFailed: "فشل الإجراء."
+      },
+      empty: {
+        title: "لم يتم العثور على طرود",
+        desc: "قم بإنشاء طرد جديد أو تغيير فلاتر البحث."
+      },
+      deleteConfirm: "حذف هذا الطرد؟ لا يمكن التراجع عن هذا الإجراء.",
+      returnConfirm: "طلب إرجاع لهذا الطرد؟",
+      validateConfirm: "تأكيد هذا الطرد للشحن؟"
     },
   },
   expediteur: {

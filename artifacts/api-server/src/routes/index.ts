@@ -8,6 +8,7 @@ import officeRouter from "./office";
 import publicLocationsRouter from "./public-locations";
 import ticketsRouter from "./tickets";
 import expediteursRouter from "./expediteurs";
+import ecotrackRouter from "./ecotrack";
 import analyticsRouter from "./analytics";
 import pushRouter from "./push";
 
@@ -22,6 +23,7 @@ router.use(officeRouter);
 router.use(publicLocationsRouter);
 router.use(ticketsRouter);
 router.use(expediteursRouter);
+router.use(ecotrackRouter);
 router.use(analyticsRouter);
 router.use(pushRouter);
 
