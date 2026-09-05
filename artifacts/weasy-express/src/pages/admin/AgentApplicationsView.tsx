@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders } from "@/lib/api";
+import { usePagination, PaginationBar } from "@/components/Pagination";
 
 type AgentStatus = "pending" | "reviewing" | "approved" | "rejected";
 
@@ -56,7 +57,11 @@ export default function AgentApplicationsView({ onUnauth }: { onUnauth: () => vo
     approved: applications.filter((item) => item.status === "approved").length,
     rejected: applications.filter((item) => item.status === "rejected").length,
   }), [applications]);
-  const visible = filter === "all" ? applications : applications.filter((item) => item.status === filter);
+  const visible = useMemo(
+    () => filter === "all" ? applications : applications.filter((item) => item.status === filter),
+    [applications, filter],
+  );
+  const pagedApplications = usePagination(visible, 10);
 
   const open = (application: AgentApplication) => {
     setSelected(application);
@@ -128,7 +133,7 @@ export default function AgentApplicationsView({ onUnauth }: { onUnauth: () => vo
           <div className="py-20 text-center text-gray-400 text-sm">{t("admin.agentApplications.noData")}</div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {visible.map((application) => (
+          {pagedApplications.paged.map((application) => (
               <div key={application.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-gray-50/60">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#E10600] to-[#B80500] flex items-center justify-center shrink-0 text-xs font-bold text-white">
@@ -151,6 +156,7 @@ export default function AgentApplicationsView({ onUnauth }: { onUnauth: () => vo
             ))}
           </div>
         )}
+        {!loading && visible.length > 0 && <PaginationBar {...pagedApplications} />}
       </div>
 
       {selected && (

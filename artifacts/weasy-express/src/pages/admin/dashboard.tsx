@@ -13,8 +13,6 @@ const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
 const TeamView               = lazy(() => import("./TeamView"));
 const AnalyticsView          = lazy(() => import("./AnalyticsView"));
 const AgentApplicationsView  = lazy(() => import("./AgentApplicationsView"));
-const EcotrackSettingsView   = lazy(() => import("./EcotrackSettingsView"));
-const EcotrackWorkspaceView  = lazy(() => import("./EcotrackWorkspaceView"));
 import { useTranslation } from "react-i18next";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
@@ -122,7 +120,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-settings";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -345,9 +343,6 @@ function SidebarInner({
         </nav>
       ) : role === "expediteur" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {expAllowed("ecotrack") && navItem("ecotrack", t("admin.ecotrackPortal.nav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7h-3V4H3a2 2 0 00-2 2v11h2a3 3 0 006 0h6a3 3 0 006 0h2v-5l-3-5zM6 19a2 2 0 110-4 2 2 0 010 4zm12 0a2 2 0 110-4 2 2 0 010 4zM17 9h2l2 3h-4V9z" /></svg>
-          )}
           {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
           )}
@@ -356,9 +351,6 @@ function SidebarInner({
           )}
           {expAllowed("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-          )}
-          {!sidebarIsTeam && navItem("ecotrack-settings", t("admin.ecotrack.nav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
           )}
         </nav>
       ) : role === "ticket_manager" ? (
@@ -1578,7 +1570,11 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
     approved: partners.filter((p) => p.status === "approved").length,
     rejected: partners.filter((p) => p.status === "rejected").length,
   };
-  const filtered = filter === "all" ? partners : partners.filter((p) => p.status === filter);
+  const filtered = useMemo(
+    () => filter === "all" ? partners : partners.filter((p) => p.status === filter),
+    [partners, filter],
+  );
+  const pagedPartners = usePagination(filtered, 10);
 
   return (
     <>
@@ -1631,7 +1627,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
             <div className="py-20 text-center text-gray-400 text-sm">{t("admin.partners.noData")}</div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {filtered.map((p) => (
+              {pagedPartners.paged.map((p) => (
                 <div key={p.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/60 transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#E10600] to-[#B80500] flex items-center justify-center shrink-0 text-xs font-bold text-white uppercase">
@@ -1651,6 +1647,7 @@ function PartnersView({ partners, loading, error, onRefresh, onUnauth, role, can
               ))}
             </div>
           )}
+          {!loading && filtered.length > 0 && <PaginationBar {...pagedPartners} />}
         </div>
       </div>
 
@@ -2769,8 +2766,8 @@ export default function AdminDashboard() {
   const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem(isExpediteurPath ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
-  const EXPEDITEUR_SECTIONS: SidebarView[] = ["ecotrack", "queue", "payouts", "team", "ecotrack-settings"];
-  const EXPEDITEUR_TEAM_SECTIONS: SidebarView[] = ["ecotrack", "queue", "payouts", "team"];
+  const EXPEDITEUR_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
+  const EXPEDITEUR_TEAM_SECTIONS: SidebarView[] = ["queue", "payouts", "team"];
   const OFFICE_SECTIONS: SidebarView[] = ["office-dashboard", "queue", "returns", "merchants", "payouts", "messaging", "team", "analytics"];
   const allowedSections: SidebarView[] = (role === "expediteur" && isTeam)
     ? (teamPerms.length > 0
@@ -3007,11 +3004,9 @@ export default function AdminDashboard() {
         <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
-            view === "ecotrack"   ? <EcotrackWorkspaceView onOpenSettings={() => setView("ecotrack-settings")} /> :
             view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :
             view === "team"       ? <TeamView onUnauth={unauth} /> :
             view === "analytics"  ? <AnalyticsView onUnauth={unauth} /> :
-            view === "ecotrack-settings" ? <EcotrackSettingsView /> :
             <QueueView />
           ) : role === "office" ? (
             view === "queue"     ? <QueueView /> :

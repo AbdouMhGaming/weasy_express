@@ -6,72 +6,84 @@ id = "XMVoesBedtb5Gnqvg3JQA"
 uri = "file://exports/weasy-express-hostinger.zip"
 type = "unspecified"
 title = "weasy-express-hostinger.zip"
+logical_id = "57ca137c-6cf0-4929-a0f3-9c75552b539f"
 
 [[outputs]]
 id = "M8tMkpufzCokPjkJ88DWN"
 uri = "file://weasy-express-project.tar.gz"
 type = "unspecified"
 title = "Weasy Express — Full Project Archive"
+logical_id = "673e1745-6e0e-4fc6-bc84-43d39cdbf791"
 
 [[outputs]]
 id = "P03rLRQo3meDXccEdLmdF"
 uri = "file://exports/weasy-express-nodejs.zip"
 type = "unspecified"
 title = "Weasy Express — Hostinger Node.js package"
+logical_id = "12b410ff-c855-4bc8-bebd-f8209a62b963"
 
 [[outputs]]
 id = "y7oDiuhKANxEtfuUMUaZb"
 uri = "file://exports/weasy-hostinger.zip"
 type = "unspecified"
 title = "Weasy Express - Hostinger Deploy Bundle (logo full size)"
+logical_id = "5977c91a-de32-431d-92c2-7f0fc5c61476"
 
 [[outputs]]
 id = "K0bsk_BgxECcOWW3McGwu"
 uri = "file://weasy-express-hostinger.tar.gz"
 type = "unspecified"
 title = "Weasy Express — Hostinger Build"
+logical_id = "74bc8b44-a90d-43bd-8492-905ba9c79fd1"
 
 [[outputs]]
 id = "zJ62BVv9XDAgBKUUEvbGk"
 uri = "file://weasy-express-hostinger.zip"
 type = "unspecified"
 title = "weasy-express-hostinger.zip — Hostinger Node.js build (6.8 MB)"
+logical_id = "f0bd6537-7e1b-47e9-8cbe-05f9713abd22"
 
 [[outputs]]
 id = "4eYePTh0a00woYZrvC1p8"
 uri = "file://weasy-express-migration.zip"
 type = "unspecified"
 title = "weasy-express-migration.zip — SQL export (7 tables, 25 rows)"
+logical_id = "128c7613-047c-4555-8fd7-857cb4ba4f88"
 
 [[outputs]]
 id = "_s2L25s-iYnTMwH5-5ip3"
 uri = "file://deploy/weasy-express-2026-06-16.tar.gz"
 type = "unspecified"
 title = "Weasy Express — Hostinger Package (2026-06-16)"
+logical_id = "5a67b2d7-83c9-4869-952b-5173c0abfd70"
 
 [[outputs]]
 id = "wApsEn0cExwj5Jq7_F47h"
 uri = "file://deploy/weasy-express-2026-06-16.zip"
 type = "unspecified"
 title = "Weasy Express — Hostinger Package (16 juin 2026)"
+logical_id = "7bd18c78-2065-4556-b9ac-97af3452c557"
 
 [[outputs]]
 id = "H8PoU6KdqV-VqyNe-gEhU"
 uri = "file://deploy/weasy-express-2026-06-17.zip"
 type = "unspecified"
 title = "weasy-express-hostinger-2026-06-17.zip"
+logical_id = "b95ac8a5-f035-4af1-9952-d58253acbf25"
 
 [[outputs]]
 id = "0CiQFtDPxYKtL7n6xjN9w"
 uri = "file://deploy/weasy-express-2026-06-18.zip"
 type = "unspecified"
 title = "weasy-express-hostinger-2026-06-18.zip"
+logical_id = "29e57bc3-dbac-49ac-98f3-0d6954204ecf"
 
 [[outputs]]
 id = "TzHbefZAveohEx4SO0nfB"
 uri = "file://hostinger-build.tar.gz"
 type = "unspecified"
 title = "Hostinger Build (API server + Frontend)"
+logical_id = "482448b9-8df7-4bb7-9eca-fb66230bc633"
 
 [[outputs]]
 id = "ZARKNdQRU1EisA89M7BYC"
@@ -79,6 +91,7 @@ uri = "file://deploy/weasy-express-2026-08-17.zip"
 type = "unspecified"
 title = "weasy-express-2026-08-17.zip"
 description = "Fixed Hostinger build — now includes drizzle-orm in package.json so npm install on Hostinger will resolve all runtime dependencies."
+logical_id = "f2e5d2fe-f5c4-4604-b318-54d456c01a9f"
 
 [[outputs]]
 id = "XaJkWuopRabQS5TxOVRGZ"
@@ -86,3 +99,18 @@ uri = "file://deploy/weasy-express-2026-08-18.zip"
 type = "unspecified"
 title = "Hostinger Build — 2026-08-18"
 description = "Production package (7.6 MB): dist/index.mjs + public SPA. Upload to Hostinger Node.js root and set env vars as per README.md inside the zip."
+logical_id = "a417379d-4d13-46c8-8fe1-fbef7c9b3593"
+
+[[outputs]]
+id = "HYN5Y707Y1OdPLwEMIs7Y"
+uri = "file://deploy/weasy-express-2026-09-05.zip"
+type = "unspecified"
+title = "Weasy Express Hostinger build"
+description = "Production Hostinger deployment archive with paginated registration requests and the Expediteur portal Ecotrack sections excluded."
+logical_id = "8b2a7b8e-f27b-4ce0-8204-2f558ad7e48e"
+content_hash = "sha256:4341e438fb60c4ba383b49ccc2f738d1f8220f400d4beb6d65d8b60164b67c26"
+size = 9065891
+mtime_ms = 1788626795423
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/8b2a7b8e-f27b-4ce0-8204-2f558ad7e48e/22231752-9ef9-48fb-ae0c-a095b70ee6dc"
+storage_version_token = "1788626825695512"
+content_type = "application/octet-stream"
