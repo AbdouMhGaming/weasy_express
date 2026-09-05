@@ -9,6 +9,7 @@ import TrackingPage from "@/pages/tracking";
 import LocationsPage from "@/pages/locations";
 import ContactPage from "@/pages/contact";
 import PartnerPage from "@/pages/partner";
+import AgentPage from "@/pages/agent";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
@@ -33,6 +34,7 @@ function Router() {
             <Route path="/locations" component={LocationsPage} />
             <Route path="/contact" component={ContactPage} />
             <Route path="/partner" component={PartnerPage} />
+            <Route path="/agent" component={AgentPage} />
             <Route path="/privacy" component={PrivacyPage} />
             <Route path="/terms" component={TermsPage} />
             <Route component={NotFound} />

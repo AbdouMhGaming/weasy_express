@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS agent_applications (
+  id INT NOT NULL AUTO_INCREMENT,
+  full_name VARCHAR(150) NOT NULL,
+  wilaya_code VARCHAR(10) NOT NULL,
+  wilaya_name VARCHAR(100) NOT NULL,
+  commune VARCHAR(100) NOT NULL,
+  phone VARCHAR(50) NOT NULL,
+  email VARCHAR(200) NOT NULL,
+  previous_experience TINYINT(1) NOT NULL DEFAULT 0,
+  experience_years INT NULL,
+  has_commercial_space TINYINT(1) NOT NULL DEFAULT 0,
+  start_availability VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  notes TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX agent_applications_status_idx (status),
+  INDEX agent_applications_created_idx (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

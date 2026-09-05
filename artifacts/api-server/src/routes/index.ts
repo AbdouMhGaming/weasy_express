@@ -11,6 +11,7 @@ import expediteursRouter from "./expediteurs";
 import ecotrackRouter from "./ecotrack";
 import analyticsRouter from "./analytics";
 import pushRouter from "./push";
+import agentRouter from "./agent";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(expediteursRouter);
 router.use(ecotrackRouter);
 router.use(analyticsRouter);
 router.use(pushRouter);
+router.use(agentRouter);
 
 export default router;

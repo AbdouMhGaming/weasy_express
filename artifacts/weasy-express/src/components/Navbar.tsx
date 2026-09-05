@@ -27,6 +27,7 @@ export function Navbar() {
     { href: "/locations", label: t("nav.locations") },
     { href: "/contact", label: t("nav.contact") },
     { href: "/partner", label: t("nav.partner") },
+    { href: "/agent", label: t("nav.agent") },
   ];
 
   const headerCls = scrolled

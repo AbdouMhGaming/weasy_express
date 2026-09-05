@@ -257,6 +257,67 @@ router.get("/admin/partners", adminAuth, async (req, res) => {
   }
 });
 
+// ── Agent applications ────────────────────────────────────────────────────────
+router.get("/admin/agent-applications", adminAuth, superAdminOnly, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, full_name AS fullName, wilaya_code AS wilayaCode, wilaya_name AS wilayaName,
+        commune, phone, email, previous_experience AS previousExperience,
+        experience_years AS experienceYears, has_commercial_space AS hasCommercialSpace,
+        start_availability AS startAvailability, status, notes, created_at AS createdAt,
+        updated_at AS updatedAt
+       FROM agent_applications ORDER BY created_at DESC`,
+    );
+    res.json({ ok: true, applications: rows });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch agent applications");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.patch("/admin/agent-applications/:id", adminAuth, superAdminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  const status = String(req.body?.status ?? "");
+  const notes = typeof req.body?.notes === "string" ? req.body.notes.trim().slice(0, 5000) : null;
+  if (!Number.isInteger(id) || !["pending", "reviewing", "approved", "rejected"].includes(status)) {
+    res.status(400).json({ ok: false, error: "invalid_fields" });
+    return;
+  }
+  try {
+    const [result] = await pool.execute(
+      "UPDATE agent_applications SET status=?, notes=? WHERE id=?",
+      [status, notes || null, id],
+    ) as any;
+    if (!result.affectedRows) {
+      res.status(404).json({ ok: false, error: "not_found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update agent application");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+router.delete("/admin/agent-applications/:id", adminAuth, superAdminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, error: "invalid_id" });
+    return;
+  }
+  try {
+    const [result] = await pool.execute("DELETE FROM agent_applications WHERE id=?", [id]) as any;
+    if (!result.affectedRows) {
+      res.status(404).json({ ok: false, error: "not_found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete agent application");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 router.post("/admin/partners", adminAuth, commercialOrAdminOnly, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const firstName = String(body.firstName ?? "").trim().slice(0, 100);

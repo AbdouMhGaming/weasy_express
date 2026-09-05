@@ -12,6 +12,7 @@ const QueueView              = lazy(() => import("./QueueView"));
 const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
 const TeamView               = lazy(() => import("./TeamView"));
 const AnalyticsView          = lazy(() => import("./AnalyticsView"));
+const AgentApplicationsView  = lazy(() => import("./AgentApplicationsView"));
 const EcotrackSettingsView   = lazy(() => import("./EcotrackSettingsView"));
 const EcotrackWorkspaceView  = lazy(() => import("./EcotrackWorkspaceView"));
 import { useTranslation } from "react-i18next";
@@ -121,16 +122,16 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-settings";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-settings";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
-  partnerCount, officeCount, isOpen, onClose,
+  partnerCount, agentApplicationCount, officeCount, isOpen, onClose,
 }: {
   view: SidebarView; setView: (v: SidebarView) => void;
   role: AdminRole; username: string;
   onLogout: () => void; onChangePassword: () => void;
-  partnerCount: number; officeCount: number;
+  partnerCount: number; agentApplicationCount: number; officeCount: number;
   isOpen: boolean; onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -240,6 +241,9 @@ function SidebarInner({
           )}
           {navItem("partners", t("admin.sidebar.partners"), partnerCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          )}
+          {navItem("agent-applications", t("admin.sidebar.agentApplications"), agentApplicationCount,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0M19 8v6m3-3h-6" /></svg>
           )}
           {navItem("offices", t("admin.sidebar.offices"), officeCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -2787,7 +2791,7 @@ export default function AdminDashboard() {
     : "dashboard";
   const viewStorageKey = `weasy:${isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
   const permittedViews = useMemo<SidebarView[]>(() => {
-    if (role === "admin") return ["dashboard", "partners", "offices", "admins", "performance", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
+    if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
     if (role === "office") return allowedSections;
     if (role === "finance") return ["charges", "commissions", "workers", "decharges"];
     if (role === "commercial") return ["partners"];
@@ -2812,6 +2816,7 @@ export default function AdminDashboard() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
   const [partnersError, setPartnersError] = useState("");
+  const [agentApplications, setAgentApplications] = useState<Array<{ id: number; status: PartnerStatus }>>([]);
   const [canChangePartnerStatus, setCanChangePartnerStatus] = useState(
     role === "commercial" && localStorage.getItem("admin_can_change_status") === "1"
   );
@@ -2896,6 +2901,15 @@ export default function AdminDashboard() {
     } catch { setOfficesError("Impossible de charger les bureaux."); } finally { setOfficesLoading(false); }
   }, []);
 
+  const fetchAgentApplications = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/agent-applications`, { headers: adminHeaders() });
+      if (res.status === 401) { unauth(); return; }
+      const data = (await res.json()) as { ok: boolean; applications?: Array<{ id: number; status: PartnerStatus }> };
+      if (data.ok) setAgentApplications(data.applications ?? []);
+    } catch { /* The dedicated view displays the load error. */ }
+  }, []);
+
   useEffect(() => {
     // Each path checks its own separate token — admin and expediteur sessions are independent
     const token = localStorage.getItem(isExpediteurPath ? "exp_token" : "admin_token");
@@ -2903,9 +2917,9 @@ export default function AdminDashboard() {
       navigate(isExpediteurPath ? "/expediteurs/login" : "/admin/login");
       return;
     }
-    if (role === "admin") { fetchPartners(); fetchOffices(); }
+    if (role === "admin") { fetchPartners(); fetchOffices(); fetchAgentApplications(); }
     else if (role === "commercial") { fetchPartners(); }
-  }, [fetchPartners, fetchOffices, navigate, role, location, isExpediteurPath]);
+  }, [fetchPartners, fetchOffices, fetchAgentApplications, navigate, role, location, isExpediteurPath]);
 
   // Register service worker for push notifications
   useEffect(() => {
@@ -2985,6 +2999,7 @@ export default function AdminDashboard() {
         view={view} setView={setView} role={role} username={username}
         onLogout={unauth} onChangePassword={() => setShowChangePass(true)}
         partnerCount={partners.filter((p) => p.status === "pending").length}
+        agentApplicationCount={agentApplications.filter((application) => application.status === "pending").length}
         officeCount={offices.length}
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
       />
@@ -3022,6 +3037,8 @@ export default function AdminDashboard() {
             <DashboardView onUnauth={unauth} onRefreshBadge={fetchPartners} />
           ) : view === "partners" ? (
             <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} />
+          ) : view === "agent-applications" ? (
+            <AgentApplicationsView onUnauth={unauth} />
           ) : view === "offices" ? (
             <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
           ) : view === "performance" ? (
