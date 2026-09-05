@@ -1,0 +1,99 @@
+SEP 05,17:50:01.236
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:01.850
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:03.293
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:03.952
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:10.677
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:12.329
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:12.916
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:31.826
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+SEP 05,17:50:32.783
+Error: Cannot find module 'pdf-parse/lib/pdf-parse.js'
+Require stack:
+- /home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs
+at Module._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+at Module._load (node:internal/modules/cjs/loader:1043:27)
+at Module.require (node:internal/modules/cjs/loader:1298:19)
+at require (node:internal/modules/helpers:182:18)
+at file:///home/u339743905/domains/antiquewhite-snake-783247.hostingersite.com/hbuilds/versions/01a07279-dfbe-70a6-b686-db0221930fe1/nodejs/dist/index.mjs:408667:17
+at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
