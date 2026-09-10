@@ -114,3 +114,17 @@ mtime_ms = 1788627160451
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/8b2a7b8e-f27b-4ce0-8204-2f558ad7e48e/2d6ba984-584d-4b71-b12f-9d01c1edaae6"
 storage_version_token = "1788627172255591"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "dMv5bi9Nrla7urpadhg5B"
+uri = "file://deploy/weasy-express-2026-09-10.zip"
+type = "unspecified"
+title = "Corrected Hostinger public build"
+description = "Hostinger-only build with Ecotrack Portal and Ecotrack Settings excluded; both remain available in the Replit project."
+logical_id = "473492f3-018e-432f-932e-dfda9d33e712"
+content_hash = "sha256:1f5171a0cc9400546139910dab636b431c933d323549dc845706271709c9afb9"
+size = 7377219
+mtime_ms = 1789063071143
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/473492f3-018e-432f-932e-dfda9d33e712/f7e7f31e-a97f-4413-9402-8aeb8d99e732"
+storage_version_token = "1789063131525107"
+content_type = "application/octet-stream"

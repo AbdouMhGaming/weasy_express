@@ -46,7 +46,7 @@ function copyDir(src, dst) {
 
 // ── 1. Build frontend ──────────────────────────────────────────────────────
 console.log("\n🖼  Building frontend (Vite)…");
-run("PORT=5000 BASE_PATH=/ pnpm --filter @workspace/weasy-express run build");
+run("VITE_HOSTINGER_BUILD=true PORT=5000 BASE_PATH=/ pnpm --filter @workspace/weasy-express run build");
 
 // ── 2. Build API server ────────────────────────────────────────────────────
 console.log("\n🔧  Building API server (esbuild)…");

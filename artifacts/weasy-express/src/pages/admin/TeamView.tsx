@@ -25,8 +25,11 @@ interface ParentUser {
 
 // ── Section definitions per role ───────────────────────────────────────────────
 
+const HOSTINGER_PUBLIC_BUILD = import.meta.env.VITE_HOSTINGER_BUILD === "true";
+
 const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
   expediteur: [
+    ...(!HOSTINGER_PUBLIC_BUILD ? [{ key: "ecotrack", label: "Ecotrack" }] : []),
     { key: "queue",   label: "Queue" },
     { key: "payouts", label: "Payouts" },
     { key: "team",    label: "Team" },
