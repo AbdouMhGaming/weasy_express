@@ -1654,6 +1654,13 @@ const fr = {
         deliveredPct: "Livrés %",
         returnsPct: "Retours %",
       },
+      quickSearch: {
+        placeholder: "Suivi, référence, client ou téléphone",
+        hint: "Saisissez au moins 2 caractères pour trouver une commande",
+        searching: "Recherche des commandes…",
+        noResults: "Aucune commande correspondante",
+        moreResults: "{{count}} autres commandes trouvées",
+      },
       delays: {
         title: "Retards",
         subtitle: "Commandes en retard actuellement en transit ou en livraison",
@@ -1829,6 +1836,8 @@ const fr = {
         cancel: "Annuler",
         save: "Enregistrer",
         search: "Rechercher...",
+        clear: "Effacer",
+        close: "Fermer",
         error: "Une erreur est survenue",
         success: "Action réussie",
         all: "Tous",

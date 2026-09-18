@@ -3174,7 +3174,7 @@ export default function AdminDashboard() {
         <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
-            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-dashboard" && EcotrackDashboardView ? <EcotrackDashboardView onOpenOrderSearch={() => setView("ecotrack-history")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-dashboard" && EcotrackDashboardView ? <EcotrackDashboardView /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus="prete_a_expedier" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view.startsWith("ecotrack-status-") && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus={view.replace("ecotrack-status-", "")} onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history" onOpenSettings={() => setView("ecotrack-settings")} /> :

@@ -1656,6 +1656,13 @@ const ar: Translations = {
         deliveredPct: "نسبة التوصيل",
         returnsPct: "نسبة الإرجاع",
       },
+      quickSearch: {
+        placeholder: "رقم التتبع أو المرجع أو العميل أو الهاتف",
+        hint: "أدخل حرفين على الأقل للعثور على طلب",
+        searching: "جارٍ البحث عن الطلبات…",
+        noResults: "لم يتم العثور على طلبات مطابقة",
+        moreResults: "{{count}} طلبات مطابقة إضافية",
+      },
       delays: {
         title: "التأخيرات",
         subtitle: "الطلبات المتأخرة حالياً في النقل أو التوصيل",
@@ -1831,6 +1838,8 @@ const ar: Translations = {
         cancel: "إلغاء",
         save: "حفظ",
         search: "بحث...",
+        clear: "مسح",
+        close: "إغلاق",
         error: "حدث خطأ",
         success: "تمت العملية بنجاح",
         all: "الكل",

@@ -32,3 +32,15 @@ Only show order statuses whose current count is greater than zero.
 **Why:** Empty statuses add unnecessary sidebar clutter.
 
 **How to apply:** Aggregate aliases first, then remove zero-count canonical statuses before rendering the Orders submenu.
+
+All Ecotrack operational screens must inherit the existing Weasy Express visual system and interaction patterns; screenshots or references communicate content, not a replacement theme.
+
+**Why:** The user repeatedly rejected Ecotrack reports and admin-delay screens that copied a reference image’s colors instead of matching the main website.
+
+**How to apply:** Reuse the main dashboard’s white/slate surfaces, red brand accent, spacing, controls, and responsive behavior for reports, Retards, and future Ecotrack sections.
+
+Dashboard quick actions must complete their task in place when possible. Order quick search belongs directly above New Order and opens an anchored search/results panel; it must not navigate to History.
+
+**Why:** The user intends to remove History and expects the dashboard shortcut to remain a genuinely fast search interaction.
+
+**How to apply:** Keep the button adjacent to the New Order FAB and show matching order essentials in an overlay without changing the active sidebar section.

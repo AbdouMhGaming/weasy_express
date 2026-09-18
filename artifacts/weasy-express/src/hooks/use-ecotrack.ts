@@ -95,7 +95,10 @@ export type EcotrackOrderFilters = {
   stopDesk?: string;
 };
 
-export function useEcotrackOrders(params: { page: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters) {
+export function useEcotrackOrders(
+  params: { page: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["ecotrack", "orders", params],
     queryFn: async () => {
@@ -118,6 +121,7 @@ export function useEcotrackOrders(params: { page: number; search: string; status
       return body;
     },
     refetchInterval: 5_000,
+    enabled: options?.enabled ?? true,
   });
 }
 

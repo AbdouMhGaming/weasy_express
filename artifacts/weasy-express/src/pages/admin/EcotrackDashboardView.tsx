@@ -2,10 +2,11 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useEcotrackAnalytics,
+  useEcotrackOrders,
   useEcotrackWilayas,
 } from "@/hooks/use-ecotrack";
 import {
-  Package, CheckCircle, ArrowLeftRight, AlertCircle, Loader2, Activity, TrendingUp, TrendingDown, RefreshCcw, Filter, X, Truck, ChevronLeft, ChevronRight, Plus, ListPlus, Search
+  Package, CheckCircle, ArrowLeftRight, AlertCircle, Loader2, Activity, TrendingUp, TrendingDown, RefreshCcw, Filter, X, Truck, ChevronLeft, ChevronRight, Plus, ListPlus, Search, MapPin, Phone, Hash
 } from "lucide-react";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -80,7 +81,7 @@ const localDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function EcotrackDashboardView({ onOpenOrderSearch }: { onOpenOrderSearch?: () => void }) {
+export default function EcotrackDashboardView() {
   const { t } = useTranslation();
 
   const [dateRange, setDateRange] = useState<"all" | "today" | "yesterday" | "7d" | "30d" | "custom">("all");
@@ -157,19 +158,39 @@ export default function EcotrackDashboardView({ onOpenOrderSearch }: { onOpenOrd
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const [isFabOpen, setIsFabOpen] = useState(false);
+  const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState("");
+  const [debouncedQuickSearch, setDebouncedQuickSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const fabRef = useRef<HTMLDivElement>(null);
+  const quickSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuickSearch(quickSearch.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [quickSearch]);
+
+  const quickSearchReady = isQuickSearchOpen && debouncedQuickSearch.length >= 2;
+  const { data: quickSearchData, isFetching: isQuickSearching } = useEcotrackOrders(
+    { page: 1, search: debouncedQuickSearch, status: "all", sort: "updated_desc" },
+    { enabled: quickSearchReady },
+  );
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (fabRef.current && !fabRef.current.contains(event.target as Node)) {
         setIsFabOpen(false);
+        setIsQuickSearchOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (isQuickSearchOpen) window.setTimeout(() => quickSearchInputRef.current?.focus(), 50);
+  }, [isQuickSearchOpen]);
 
   const hoveredWilayaData = useMemo(() => {
     if (!hoveredWilaya) return null;
@@ -645,17 +666,116 @@ export default function EcotrackDashboardView({ onOpenOrderSearch }: { onOpenOrd
       )}
 
       {/* Floating Action Button */}
-      <div ref={fabRef} className="fixed bottom-8 end-8 z-50 flex flex-col items-end gap-3">
-        {onOpenOrderSearch && (
-          <button
-            onClick={() => { onOpenOrderSearch(); setIsFabOpen(false); }}
-            className="h-14 w-14 mb-2 rounded-full bg-slate-800 hover:bg-slate-900 text-white shadow-xl shadow-slate-900/20 flex items-center justify-center transition-transform hover:scale-105"
-            title={t("admin.ecotrackPortal.common.search")}
-            data-testid="search-shortcut"
+      <div ref={fabRef} className="fixed bottom-8 end-8 z-50 flex flex-col items-end gap-2">
+        {isQuickSearchOpen && (
+          <div
+            className="mb-1 w-[min(92vw,410px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15"
+            data-testid="quick-search-panel"
           >
-            <Search className="w-6 h-6" />
-          </button>
+            <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-3">
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={quickSearchInputRef}
+                    value={quickSearch}
+                    onChange={(event) => setQuickSearch(event.target.value)}
+                    placeholder={t("admin.ecotrackPortal.quickSearch.placeholder")}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white ps-9 pe-9 text-sm text-slate-900 outline-none transition focus:border-[#E10600] focus:ring-2 focus:ring-red-100"
+                    data-testid="input-quick-order-search"
+                  />
+                  {quickSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickSearch("")}
+                      className="absolute end-2.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      data-testid="button-clear-quick-order-search"
+                      aria-label={t("admin.ecotrackPortal.common.clear")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickSearchOpen(false)}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  data-testid="button-close-quick-order-search"
+                  aria-label={t("admin.ecotrackPortal.common.close")}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {!quickSearchReady ? (
+                <div className="px-4 py-8 text-center">
+                  <Search className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-700">{t("admin.ecotrackPortal.quickSearch.hint")}</p>
+                </div>
+              ) : isQuickSearching ? (
+                <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm font-medium text-slate-500">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#E10600]" />
+                  {t("admin.ecotrackPortal.quickSearch.searching")}
+                </div>
+              ) : !quickSearchData?.data?.length ? (
+                <div className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                  {t("admin.ecotrackPortal.quickSearch.noResults")}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {quickSearchData.data.slice(0, 8).map((order: any) => {
+                    const wilayaId = String(order.wilaya_id ?? order.code_wilaya ?? "").replace(/^0+/, "");
+                    const wilayaName = wilayaNames.get(wilayaId);
+                    return (
+                      <div
+                        key={order.tracking}
+                        className="rounded-xl border border-transparent px-3 py-3 transition hover:border-red-100 hover:bg-red-50/40"
+                        data-testid={`quick-search-result-${order.tracking}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 font-mono text-sm font-black text-slate-900">
+                              <Hash className="h-3.5 w-3.5 text-[#E10600]" />
+                              {order.tracking}
+                            </div>
+                            <p className="mt-1 truncate text-sm font-semibold text-slate-700">{order.client || order.nom_client || "—"}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
+                            {humanizeEcotrackStatus(order.status, t)}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{wilayaName ? `(${wilayaId}, ${wilayaName})` : "—"}</span>
+                          {(order.phone || order.telephone) && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{order.phone || order.telephone}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Number(quickSearchData.pagination?.total) > 8 && (
+                    <p className="px-3 py-2 text-center text-xs font-semibold text-slate-400">
+                      {t("admin.ecotrackPortal.quickSearch.moreResults", { count: Number(quickSearchData.pagination.total) - 8 })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setIsQuickSearchOpen((open) => !open);
+            setIsFabOpen(false);
+          }}
+          className={`h-14 w-14 rounded-full text-white shadow-xl flex items-center justify-center transition-all hover:scale-105 ${
+            isQuickSearchOpen ? "bg-[#E10600] shadow-red-500/25" : "bg-slate-800 hover:bg-slate-900 shadow-slate-900/20"
+          }`}
+          title={t("admin.ecotrackPortal.common.search")}
+          data-testid="search-shortcut"
+        >
+          {isQuickSearchOpen ? <X className="w-6 h-6" /> : <Search className="w-6 h-6" />}
+        </button>
         <div className={`flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
           <button 
             onClick={() => { setIsModalOpen(true); setIsFabOpen(false); }}
@@ -677,8 +797,9 @@ export default function EcotrackDashboardView({ onOpenOrderSearch }: { onOpenOrd
           </button>
         </div>
         <button 
-          onClick={() => setIsFabOpen(!isFabOpen)}
+          onClick={() => { setIsFabOpen(!isFabOpen); setIsQuickSearchOpen(false); }}
           className={`h-14 w-14 rounded-full bg-[#E10600] hover:bg-red-700 text-white shadow-xl shadow-red-500/30 flex items-center justify-center transition-transform duration-200 ${isFabOpen ? 'rotate-45' : ''}`}
+          data-testid="button-new-order-menu"
         >
           <Plus className="w-6 h-6" />
         </button>

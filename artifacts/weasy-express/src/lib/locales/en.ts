@@ -1656,6 +1656,13 @@ const en: Translations = {
         deliveredPct: "Delivered %",
         returnsPct: "Returns %",
       },
+      quickSearch: {
+        placeholder: "Tracking, reference, customer or phone",
+        hint: "Enter at least 2 characters to find an order",
+        searching: "Searching orders…",
+        noResults: "No matching orders found",
+        moreResults: "{{count}} more matching orders",
+      },
       delays: {
         title: "Delays",
         subtitle: "Overdue orders currently in transit or delivery",
@@ -1831,6 +1838,8 @@ const en: Translations = {
         cancel: "Cancel",
         save: "Save",
         search: "Search...",
+        clear: "Clear",
+        close: "Close",
         error: "An error occurred",
         success: "Action successful",
         all: "All",

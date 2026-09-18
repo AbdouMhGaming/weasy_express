@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackDelays, useEcotrackDelayThresholds, useUpdateEcotrackDelayThresholds } from "@/hooks/use-ecotrack";
-import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2 } from "lucide-react";
+import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck } from "lucide-react";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +45,19 @@ function ExpediteurDelaysView({ t }: { t: any }) {
   };
 
   const activeFiltersCount = (selectedWilaya ? 1 : 0) + (selectedStatus ? 1 : 0) + (debouncedSearch ? 1 : 0);
+  const wilayaNames = useMemo(
+    () => new Map(WILAYA_LIST.map((wilaya) => [String(Number(wilaya.code.replace("DZ", ""))), wilaya.name])),
+    [],
+  );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-50/50 p-6 overflow-hidden w-full relative">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm mb-6 shrink-0">
-        <div>
+    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+      <div className="mb-5 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="h-1 bg-[#E10600]" />
+        <div className="flex flex-col items-start justify-between gap-4 p-5 xl:flex-row xl:items-center">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-50 text-[#E10600]"><Clock className="h-5 w-5" /></div>
+          <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t("admin.ecotrackPortal.delays.title")}</h1>
           <p className="text-sm text-slate-500 mt-1">{t("admin.ecotrackPortal.delays.subtitle")}</p>
           {activeFiltersCount > 0 && (
@@ -62,6 +70,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
               </button>
             </div>
           )}
+          </div>
         </div>
         
         <div className="flex flex-col gap-3 w-full xl:w-auto">
@@ -99,9 +108,10 @@ function ExpediteurDelaysView({ t }: { t: any }) {
             </select>
           </div>
         </div>
+        </div>
       </div>
 
-      <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
+      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
           <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#E10600]" /></div>
         ) : error ? (
@@ -131,7 +141,18 @@ function ExpediteurDelaysView({ t }: { t: any }) {
                 {delaysData.orders.map((order: any) => (
                   <tr key={order.tracking} className="hover:bg-slate-50 transition-colors" data-testid="overdue-row">
                     <td className="px-4 py-3 font-mono font-bold text-slate-900">{order.tracking}</td>
-                    <td className="px-4 py-3 font-medium text-slate-700">{order.wilayaName || order.wilaya}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700">
+                      {(() => {
+                        const id = String(order.wilayaId ?? order.wilaya_id ?? order.code_wilaya ?? "").replace(/^0+/, "");
+                        const name = order.wilayaName || order.wilaya_name || wilayaNames.get(id);
+                        return name ? (
+                          <span className="inline-flex items-center gap-1.5" data-testid={`delay-destination-${order.tracking}`}>
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#E10600]" />
+                            ({id}, {name})
+                          </span>
+                        ) : <span className="text-slate-400">—</span>;
+                      })()}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{order.recipient || order.client}</div>
                       <div className="text-xs text-slate-500">{order.phone}</div>
@@ -170,6 +191,13 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
   type EditVal = { value: string; unit: Unit };
   const [edits, setEdits] = useState<Record<string, { versWilaya: EditVal, enLivraison: EditVal }>>({});
   const [isEditing, setIsEditing] = useState(false);
+  const overdueTotals = useMemo(() => (thresholdsData?.rows || []).reduce(
+    (totals: { transit: number; delivery: number }, row: any) => ({
+      transit: totals.transit + (Number(row.versWilayaOverdue) || 0),
+      delivery: totals.delivery + (Number(row.enLivraisonOverdue) || 0),
+    }),
+    { transit: 0, delivery: 0 },
+  ), [thresholdsData?.rows]);
 
   React.useEffect(() => {
     if (thresholdsData?.rows && !isEditing) {
@@ -225,11 +253,16 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-50/50 p-6 overflow-hidden w-full relative">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm mb-6 shrink-0">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t("admin.ecotrackPortal.delays.thresholdsTitle")}</h1>
-          <p className="text-sm text-slate-500 mt-1">{t("admin.ecotrackPortal.delays.thresholdsSubtitle")}</p>
+    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+      <div className="mb-5 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="h-1 bg-[#E10600]" />
+        <div className="flex flex-col items-start justify-between gap-5 p-5 xl:flex-row xl:items-center">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-50 text-[#E10600]"><Settings2 className="h-5 w-5" /></div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t("admin.ecotrackPortal.delays.thresholdsTitle")}</h1>
+            <p className="text-sm text-slate-500 mt-1">{t("admin.ecotrackPortal.delays.thresholdsSubtitle")}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isEditing ? (
@@ -247,9 +280,31 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
             </Button>
           )}
         </div>
+        </div>
       </div>
 
-      <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
+      {!isLoading && !error && (
+        <div className="mb-5 grid shrink-0 gap-3 sm:grid-cols-2">
+          <div className="flex items-center gap-4 rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-600"><Truck className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("admin.ecotrackPortal.delays.versWilayaHours")}</p>
+              <p className="mt-0.5 text-2xl font-black text-slate-900" data-testid="total-vers-wilaya-overdue">{overdueTotals.transit}</p>
+            </div>
+            <span className="ms-auto rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700">{t("admin.ecotrackPortal.delays.overdue")}</span>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-red-100 bg-white p-4 shadow-sm">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-red-50 text-[#E10600]"><PackageCheck className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("admin.ecotrackPortal.delays.enLivraisonHours")}</p>
+              <p className="mt-0.5 text-2xl font-black text-slate-900" data-testid="total-en-livraison-overdue">{overdueTotals.delivery}</p>
+            </div>
+            <span className="ms-auto rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-[#E10600]">{t("admin.ecotrackPortal.delays.overdue")}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
           <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#E10600]" /></div>
         ) : error ? (
@@ -263,8 +318,8 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
               <thead className="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
                 <tr>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.reports.wilayas")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.versWilayaHours")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.enLivraisonHours")}</th>
+                  <th className="border-s border-slate-200 px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.versWilayaHours")}</th>
+                  <th className="border-s border-slate-200 px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.enLivraisonHours")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -275,9 +330,12 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
                   
                   return (
                     <tr key={wilaya.code} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-700">{wilaya.name}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-700">
+                        <span className="me-2 inline-flex min-w-7 justify-center rounded-md bg-slate-100 px-1.5 py-1 text-[10px] font-black text-slate-500">{id}</span>
+                        {wilaya.name}
+                      </td>
                       
-                      <td className="px-4 py-3">
+                      <td className="border-s border-slate-100 px-4 py-3">
                         <div className="flex items-center gap-3">
                           {isEditing ? (
                             <div className="flex items-center">
@@ -309,7 +367,7 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="border-s border-slate-100 px-4 py-3">
                         <div className="flex items-center gap-3">
                           {isEditing ? (
                             <div className="flex items-center">
