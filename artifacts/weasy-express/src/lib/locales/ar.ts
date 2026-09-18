@@ -1675,7 +1675,7 @@ const ar: Translations = {
         enLivraisonHours: "توصيل (ساعة)",
         suspenduHours: "معلّق (ساعة)",
         retourHours: "الإرجاع (ساعة)",
-        allReturns: "الإرجاع (جميع الأنواع)",
+        allReturns: "الإرجاع",
         overdueCounts: "متأخر",
         overdue: "متأخر",
       },

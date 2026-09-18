@@ -1675,7 +1675,7 @@ const en: Translations = {
         enLivraisonHours: "Delivery (h)",
         suspenduHours: "Suspended (h)",
         retourHours: "Returns (h)",
-        allReturns: "Returns (all types)",
+        allReturns: "Returns",
         overdueCounts: "Overdue",
         overdue: "overdue",
       },

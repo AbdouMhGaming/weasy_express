@@ -1673,7 +1673,7 @@ const fr = {
         enLivraisonHours: "Livraison (h)",
         suspenduHours: "Suspendu (h)",
         retourHours: "Retours (h)",
-        allReturns: "Retours (tous types)",
+        allReturns: "Retours",
         overdueCounts: "En Retard",
         overdue: "en retard",
       },
