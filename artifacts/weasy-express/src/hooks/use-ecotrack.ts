@@ -97,7 +97,7 @@ export type EcotrackOrderFilters = {
 
 export function useEcotrackOrders(
   params: { page: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; refetchInterval?: number | false },
 ) {
   return useQuery({
     queryKey: ["ecotrack", "orders", params],
@@ -120,7 +120,7 @@ export function useEcotrackOrders(
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return body;
     },
-    refetchInterval: 5_000,
+    refetchInterval: options?.refetchInterval ?? 5_000,
     enabled: options?.enabled ?? true,
   });
 }

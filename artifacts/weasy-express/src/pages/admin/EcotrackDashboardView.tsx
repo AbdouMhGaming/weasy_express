@@ -2,15 +2,19 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useEcotrackAnalytics,
+  useDeleteEcotrackOrder,
+  useLabelEcotrackOrder,
   useEcotrackOrders,
   useEcotrackWilayas,
+  useValidateEcotrackOrder,
 } from "@/hooks/use-ecotrack";
 import {
-  Package, CheckCircle, ArrowLeftRight, AlertCircle, Loader2, Activity, TrendingUp, TrendingDown, RefreshCcw, Filter, X, Truck, ChevronLeft, ChevronRight, Plus, ListPlus, Search, MapPin, Phone, Hash
+  Package, CheckCircle, ArrowLeftRight, AlertCircle, Loader2, Activity, TrendingUp, TrendingDown, RefreshCcw, Filter, X, Truck, ChevronLeft, ChevronRight, Plus, ListPlus, Search, MapPin, Phone, Hash, Eye, Edit2, Download, Trash2
 } from "lucide-react";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { OrderFormModal, BulkOrderModal } from "./EcotrackWorkspaceView";
+import { OrderFormModal, BulkOrderModal, OrderDetailsModal } from "./EcotrackWorkspaceView";
+import { useToast } from "@/hooks/use-toast";
 
 const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   pret_a_expedier: "readyToShip",
@@ -83,6 +87,7 @@ const localDate = (date: Date) => {
 
 export default function EcotrackDashboardView() {
   const { t } = useTranslation();
+  const { toast } = useToast();
 
   const [dateRange, setDateRange] = useState<"all" | "today" | "yesterday" | "7d" | "30d" | "custom">("all");
   const [customFrom, setCustomFrom] = useState("");
@@ -163,6 +168,8 @@ export default function EcotrackDashboardView() {
   const [debouncedQuickSearch, setDebouncedQuickSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [selectedParcel, setSelectedParcel] = useState<any | null>(null);
+  const [detailOrder, setDetailOrder] = useState<any | null>(null);
   const fabRef = useRef<HTMLDivElement>(null);
   const quickSearchInputRef = useRef<HTMLInputElement>(null);
 
@@ -172,10 +179,38 @@ export default function EcotrackDashboardView() {
   }, [quickSearch]);
 
   const quickSearchReady = isQuickSearchOpen && debouncedQuickSearch.length >= 2;
-  const { data: quickSearchData, isFetching: isQuickSearching } = useEcotrackOrders(
+  const { data: quickSearchData, isLoading: isQuickSearching } = useEcotrackOrders(
     { page: 1, search: debouncedQuickSearch, status: "all", sort: "updated_desc" },
-    { enabled: quickSearchReady },
+    { enabled: quickSearchReady, refetchInterval: false },
   );
+  const deleteMutation = useDeleteEcotrackOrder();
+  const validateMutation = useValidateEcotrackOrder();
+  const labelMutation = useLabelEcotrackOrder();
+
+  const actionError = (err: Error) => toast({
+    title: t("admin.ecotrackPortal.common.error"),
+    description: err.message,
+    variant: "destructive",
+  });
+  const actionSuccess = () => toast({ title: t("admin.ecotrackPortal.common.success") });
+  const handleQuickDelete = (tracking: string) => {
+    if (!window.confirm(t("admin.ecotrackPortal.orders.deleteConfirm"))) return;
+    deleteMutation.mutate(tracking, { onSuccess: actionSuccess, onError: actionError });
+  };
+  const handleQuickShip = (tracking: string) => {
+    if (!window.confirm(t("admin.ecotrackPortal.orders.shipConfirm"))) return;
+    validateMutation.mutate({ tracking, ask_collection: false }, { onSuccess: actionSuccess, onError: actionError });
+  };
+  const handleQuickLabel = (tracking: string) => {
+    labelMutation.mutate(tracking, {
+      onSuccess: (url) => {
+        if (!url) return;
+        window.open(url, "_blank");
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      onError: actionError,
+    });
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -749,6 +784,56 @@ export default function EcotrackDashboardView() {
                           <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{wilayaName ? `(${wilayaId}, ${wilayaName})` : "—"}</span>
                           {(order.phone || order.telephone) && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{order.phone || order.telephone}</span>}
                         </div>
+                        <div className="mt-2 flex items-center justify-end gap-1 border-t border-slate-100 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setDetailOrder(order)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-blue-600 transition hover:bg-blue-50 hover:text-blue-700"
+                            title={t("admin.ecotrackPortal.orders.details.title")}
+                            data-testid={`quick-action-details-${order.tracking}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedParcel(order); setIsModalOpen(true); }}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                            title={t("admin.ecotrackPortal.orders.modify")}
+                            data-testid={`quick-action-edit-${order.tracking}`}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickShip(order.tracking)}
+                            disabled={validateMutation.isPending}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                            title={t("admin.ecotrackPortal.orders.ship")}
+                            data-testid={`quick-action-ship-${order.tracking}`}
+                          >
+                            <Truck className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickLabel(order.tracking)}
+                            disabled={labelMutation.isPending}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
+                            title={t("admin.ecotrackPortal.orders.downloadLabel")}
+                            data-testid={`quick-action-label-${order.tracking}`}
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickDelete(order.tracking)}
+                            disabled={deleteMutation.isPending}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                            title={t("admin.ecotrackPortal.orders.delete")}
+                            data-testid={`quick-action-delete-${order.tracking}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -760,6 +845,30 @@ export default function EcotrackDashboardView() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+        {isFabOpen && (
+          <div className="flex flex-col items-end gap-2">
+            <button
+              onClick={() => { setSelectedParcel(null); setIsModalOpen(true); setIsFabOpen(false); }}
+              className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition-colors"
+              data-testid="button-add-one-order"
+            >
+              <span className="text-sm font-semibold">{t("admin.ecotrackPortal.orders.addOne")}</span>
+              <div className="bg-[#1a237e] text-white p-1.5 rounded-full">
+                <Plus className="w-4 h-4" />
+              </div>
+            </button>
+            <button
+              onClick={() => { setIsBulkModalOpen(true); setIsFabOpen(false); }}
+              className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition-colors"
+              data-testid="button-add-multiple-orders"
+            >
+              <span className="text-sm font-semibold">{t("admin.ecotrackPortal.orders.addMultiple")}</span>
+              <div className="bg-slate-200 text-slate-700 p-1.5 rounded-full">
+                <ListPlus className="w-4 h-4" />
+              </div>
+            </button>
           </div>
         )}
         <button
@@ -776,26 +885,6 @@ export default function EcotrackDashboardView() {
         >
           {isQuickSearchOpen ? <X className="w-6 h-6" /> : <Search className="w-6 h-6" />}
         </button>
-        <div className={`flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-          <button 
-            onClick={() => { setIsModalOpen(true); setIsFabOpen(false); }}
-            className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <span className="text-sm font-semibold">{t("admin.ecotrackPortal.orders.addOne")}</span>
-            <div className="bg-[#1a237e] text-white p-1.5 rounded-full">
-              <Plus className="w-4 h-4" />
-            </div>
-          </button>
-          <button 
-            onClick={() => { setIsBulkModalOpen(true); setIsFabOpen(false); }}
-            className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <span className="text-sm font-semibold">{t("admin.ecotrackPortal.orders.addMultiple")}</span>
-            <div className="bg-slate-200 text-slate-700 p-1.5 rounded-full">
-              <ListPlus className="w-4 h-4" />
-            </div>
-          </button>
-        </div>
         <button 
           onClick={() => { setIsFabOpen(!isFabOpen); setIsQuickSearchOpen(false); }}
           className={`h-14 w-14 rounded-full bg-[#E10600] hover:bg-red-700 text-white shadow-xl shadow-red-500/30 flex items-center justify-center transition-transform duration-200 ${isFabOpen ? 'rotate-45' : ''}`}
@@ -805,8 +894,9 @@ export default function EcotrackDashboardView() {
         </button>
       </div>
 
-      {isModalOpen && <OrderFormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} parcel={null} isEdit={false} />}
+      {isModalOpen && <OrderFormModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedParcel(null); }} parcel={selectedParcel} isEdit={Boolean(selectedParcel)} />}
       {isBulkModalOpen && <BulkOrderModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />}
+      {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
       
       <style>{`
         .map-container svg { width: 100%; height: 100%; object-fit: contain; }

@@ -1370,7 +1370,7 @@ function BulkOrderRow({ row, index, wilayas, updateRow, removeRow }: {
   );
 }
 
-function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void }) {
+export function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void }) {
   const { t } = useTranslation();
   const { data: wilayas = [] } = useEcotrackWilayas();
   const value = (...keys: string[]) => {
