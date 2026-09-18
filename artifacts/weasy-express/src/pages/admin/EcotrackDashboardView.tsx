@@ -762,6 +762,13 @@ export default function EcotrackDashboardView() {
                   {quickSearchData.data.slice(0, 8).map((order: any) => {
                     const wilayaId = String(order.wilaya_id ?? order.code_wilaya ?? "").replace(/^0+/, "");
                     const wilayaName = wilayaNames.get(wilayaId);
+                    const normalizedStatus = String(order.status ?? "")
+                      .normalize("NFD")
+                      .replace(/[\u0300-\u036f]/g, "")
+                      .trim()
+                      .toLocaleLowerCase()
+                      .replace(/[\s-]+/g, "_");
+                    const isReadyToShip = normalizedStatus === "prete_a_expedier" || normalizedStatus === "pret_a_expedier";
                     return (
                       <div
                         key={order.tracking}
@@ -794,25 +801,29 @@ export default function EcotrackDashboardView() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedParcel(order); setIsModalOpen(true); }}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                            title={t("admin.ecotrackPortal.orders.modify")}
-                            data-testid={`quick-action-edit-${order.tracking}`}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleQuickShip(order.tracking)}
-                            disabled={validateMutation.isPending}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
-                            title={t("admin.ecotrackPortal.orders.ship")}
-                            data-testid={`quick-action-ship-${order.tracking}`}
-                          >
-                            <Truck className="h-4 w-4" />
-                          </button>
+                          {isReadyToShip && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedParcel(order); setIsModalOpen(true); }}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                                title={t("admin.ecotrackPortal.orders.modify")}
+                                data-testid={`quick-action-edit-${order.tracking}`}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickShip(order.tracking)}
+                                disabled={validateMutation.isPending}
+                                className="grid h-8 w-8 place-items-center rounded-lg text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                                title={t("admin.ecotrackPortal.orders.ship")}
+                                data-testid={`quick-action-ship-${order.tracking}`}
+                              >
+                                <Truck className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleQuickLabel(order.tracking)}
@@ -823,16 +834,18 @@ export default function EcotrackDashboardView() {
                           >
                             <Download className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleQuickDelete(order.tracking)}
-                            disabled={deleteMutation.isPending}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                            title={t("admin.ecotrackPortal.orders.delete")}
-                            data-testid={`quick-action-delete-${order.tracking}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {isReadyToShip && (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickDelete(order.tracking)}
+                              disabled={deleteMutation.isPending}
+                              className="grid h-8 w-8 place-items-center rounded-lg text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                              title={t("admin.ecotrackPortal.orders.delete")}
+                              data-testid={`quick-action-delete-${order.tracking}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
