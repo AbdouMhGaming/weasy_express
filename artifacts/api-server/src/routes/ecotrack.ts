@@ -176,9 +176,17 @@ router.get("/expediteur/ecotrack/delays", async (req: AuthedRequest, res) => {
     const requestedStatus = normalizedStatus(req.query.status);
     const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
     const search = String(req.query.search ?? "").trim().slice(0, 255);
-    const where = ["c.expediteur_id=?", "c.status_value IN ('vers_wilaya','en_livraison')"];
+    const delayStatusCondition = "(c.status_value IN ('vers_wilaya','en_livraison','suspendu','suspendus') OR c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%')";
+    const where = ["c.expediteur_id=?", delayStatusCondition];
     const params: any[] = [expediteurId];
-    if (requestedStatus === "vers_wilaya" || requestedStatus === "en_livraison") { where.push("c.status_value=?"); params.push(requestedStatus); }
+    if (requestedStatus === "vers_wilaya" || requestedStatus === "en_livraison") {
+      where.push("c.status_value=?");
+      params.push(requestedStatus);
+    } else if (requestedStatus === "suspendu") {
+      where.push("c.status_value IN ('suspendu','suspendus')");
+    } else if (requestedStatus === "retour") {
+      where.push("(c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%')");
+    }
     if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }
     if (search) { where.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR c.phone LIKE ?)"); params.push(...Array(3).fill(`%${search}%`)); }
     const conn = await pool.getConnection();
@@ -187,7 +195,12 @@ router.get("/expediteur/ecotrack/delays", async (req: AuthedRequest, res) => {
         `SELECT c.raw_order, c.tracking, c.client_name, c.status_value status, ${wilayaExpression} wilayaId,
           COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at) enteredAt,
           TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW()) elapsedHours,
-          CASE WHEN c.status_value='vers_wilaya' THEN t.vers_wilaya_hours ELSE t.en_livraison_hours END thresholdHours
+          CASE
+            WHEN c.status_value='vers_wilaya' THEN t.vers_wilaya_hours
+            WHEN c.status_value='en_livraison' THEN t.en_livraison_hours
+            WHEN c.status_value IN ('suspendu','suspendus') THEN t.suspendu_hours
+            ELSE t.retour_hours
+          END thresholdHours
          FROM expediteur_ecotrack_order_cache c
          JOIN ecotrack_delay_thresholds t ON t.wilaya_id=${wilayaExpression}
          LEFT JOIN (
@@ -210,15 +223,19 @@ router.get("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) =
   try {
     const [rows] = await conn.execute(
       `SELECT t.wilaya_id wilayaId,t.vers_wilaya_hours versWilayaHours,t.en_livraison_hours enLivraisonHours,
+        t.suspendu_hours suspenduHours,t.retour_hours retourHours,
         SUM(c.status_value='vers_wilaya' AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.vers_wilaya_hours) versWilayaOverdue,
-        SUM(c.status_value='en_livraison' AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.en_livraison_hours) enLivraisonOverdue
+        SUM(c.status_value='en_livraison' AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.en_livraison_hours) enLivraisonOverdue,
+        SUM(c.status_value IN ('suspendu','suspendus') AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.suspendu_hours) suspenduOverdue,
+        SUM((c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%') AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.retour_hours) retourOverdue
        FROM ecotrack_delay_thresholds t
-       LEFT JOIN expediteur_ecotrack_order_cache c ON ${wilayaExpression}=t.wilaya_id AND c.status_value IN ('vers_wilaya','en_livraison')
+       LEFT JOIN expediteur_ecotrack_order_cache c ON ${wilayaExpression}=t.wilaya_id
+         AND (c.status_value IN ('vers_wilaya','en_livraison','suspendu','suspendus') OR c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%')
        LEFT JOIN (
          SELECT expediteur_id,tracking,status_value,MAX(occurred_at) entered_at
          FROM expediteur_ecotrack_status_history GROUP BY expediteur_id,tracking,status_value
        ) h ON h.expediteur_id=c.expediteur_id AND h.tracking=c.tracking AND h.status_value=c.status_value
-       GROUP BY t.wilaya_id,t.vers_wilaya_hours,t.en_livraison_hours ORDER BY t.wilaya_id`,
+       GROUP BY t.wilaya_id,t.vers_wilaya_hours,t.en_livraison_hours,t.suspendu_hours,t.retour_hours ORDER BY t.wilaya_id`,
     ) as any;
     return res.json({ ok: true, rows });
   } finally { conn.release(); }
@@ -231,15 +248,22 @@ router.put("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) =
     wilayaId: Math.floor(Number(row.wilayaId)),
     vers: Math.floor(Number(row.versWilayaHours)),
     delivery: Math.floor(Number(row.enLivraisonHours)),
-  })).filter((row: any) => row.wilayaId >= 1 && row.wilayaId <= 58 && row.vers >= 1 && row.vers <= 8760 && row.delivery >= 1 && row.delivery <= 8760);
+    suspended: Math.floor(Number(row.suspenduHours)),
+    returns: Math.floor(Number(row.retourHours)),
+  })).filter((row: any) => row.wilayaId >= 1 && row.wilayaId <= 58
+    && row.vers >= 1 && row.vers <= 8760
+    && row.delivery >= 1 && row.delivery <= 8760
+    && row.suspended >= 1 && row.suspended <= 8760
+    && row.returns >= 1 && row.returns <= 8760);
   if (!valid.length) return res.status(400).json({ ok: false, error: "invalid_thresholds" });
   const conn = await pool.getConnection();
   try {
     await conn.execute(
-      `INSERT INTO ecotrack_delay_thresholds (wilaya_id,vers_wilaya_hours,en_livraison_hours)
-       VALUES ${valid.map(() => "(?,?,?)").join(",")}
-       ON DUPLICATE KEY UPDATE vers_wilaya_hours=VALUES(vers_wilaya_hours),en_livraison_hours=VALUES(en_livraison_hours)`,
-      valid.flatMap((row: any) => [row.wilayaId, row.vers, row.delivery]),
+      `INSERT INTO ecotrack_delay_thresholds (wilaya_id,vers_wilaya_hours,en_livraison_hours,suspendu_hours,retour_hours)
+       VALUES ${valid.map(() => "(?,?,?,?,?)").join(",")}
+       ON DUPLICATE KEY UPDATE vers_wilaya_hours=VALUES(vers_wilaya_hours),en_livraison_hours=VALUES(en_livraison_hours),
+         suspendu_hours=VALUES(suspendu_hours),retour_hours=VALUES(retour_hours)`,
+      valid.flatMap((row: any) => [row.wilayaId, row.vers, row.delivery, row.suspended, row.returns]),
     );
     return res.json({ ok: true });
   } finally { conn.release(); }

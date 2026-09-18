@@ -1665,7 +1665,7 @@ const en: Translations = {
       },
       delays: {
         title: "Delays",
-        subtitle: "Overdue orders currently in transit or delivery",
+        subtitle: "Overdue orders across transit, delivery, suspended, and return statuses",
         noDelays: "No overdue orders found",
         enteredAt: "Entered status at",
         elapsedHours: "Elapsed hours",
@@ -1673,6 +1673,9 @@ const en: Translations = {
         thresholdsSubtitle: "Configure acceptable delay thresholds per wilaya",
         versWilayaHours: "Transit (h)",
         enLivraisonHours: "Delivery (h)",
+        suspenduHours: "Suspended (h)",
+        retourHours: "Returns (h)",
+        allReturns: "Returns (all types)",
         overdueCounts: "Overdue",
         overdue: "overdue",
       },

@@ -1665,7 +1665,7 @@ const ar: Translations = {
       },
       delays: {
         title: "التأخيرات",
-        subtitle: "الطلبات المتأخرة حالياً في النقل أو التوصيل",
+        subtitle: "الطلبات المتأخرة في النقل أو التوصيل أو التعليق أو الإرجاع",
         noDelays: "لم يتم العثور على طلبات متأخرة",
         enteredAt: "دخلت الحالة في",
         elapsedHours: "الساعات المنقضية",
@@ -1673,6 +1673,9 @@ const ar: Translations = {
         thresholdsSubtitle: "تكوين عتبات التأخير المقبولة لكل ولاية",
         versWilayaHours: "نقل (ساعة)",
         enLivraisonHours: "توصيل (ساعة)",
+        suspenduHours: "معلّق (ساعة)",
+        retourHours: "الإرجاع (ساعة)",
+        allReturns: "الإرجاع (جميع الأنواع)",
         overdueCounts: "متأخر",
         overdue: "متأخر",
       },

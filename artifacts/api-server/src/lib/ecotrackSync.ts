@@ -63,13 +63,25 @@ export async function ensureEcotrackStorage() {
         wilaya_id INT NOT NULL,
         vers_wilaya_hours INT NOT NULL DEFAULT 48,
         en_livraison_hours INT NOT NULL DEFAULT 72,
+        suspendu_hours INT NOT NULL DEFAULT 72,
+        retour_hours INT NOT NULL DEFAULT 72,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (wilaya_id)
       )
     `);
-    const thresholdRows = Array.from({ length: 58 }, (_, index) => `(${index + 1},48,72)`).join(",");
+    for (const [column, defaultHours] of [["suspendu_hours", 72], ["retour_hours", 72]] as const) {
+      const [existingColumn] = await conn.execute(
+        `SHOW COLUMNS FROM ecotrack_delay_thresholds LIKE '${column}'`,
+      ) as any;
+      if (!existingColumn.length) {
+        await conn.execute(
+          `ALTER TABLE ecotrack_delay_thresholds ADD COLUMN ${column} INT NOT NULL DEFAULT ${defaultHours}`,
+        );
+      }
+    }
+    const thresholdRows = Array.from({ length: 58 }, (_, index) => `(${index + 1},48,72,72,72)`).join(",");
     await conn.execute(`
-      INSERT IGNORE INTO ecotrack_delay_thresholds (wilaya_id, vers_wilaya_hours, en_livraison_hours)
+      INSERT IGNORE INTO ecotrack_delay_thresholds (wilaya_id, vers_wilaya_hours, en_livraison_hours, suspendu_hours, retour_hours)
       VALUES ${thresholdRows}
     `);
     const [errorColumn] = await conn.execute(

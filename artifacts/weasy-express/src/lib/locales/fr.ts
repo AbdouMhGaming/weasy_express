@@ -1663,7 +1663,7 @@ const fr = {
       },
       delays: {
         title: "Retards",
-        subtitle: "Commandes en retard actuellement en transit ou en livraison",
+        subtitle: "Commandes en retard en transit, livraison, suspension ou retour",
         noDelays: "Aucune commande en retard trouvée",
         enteredAt: "Entré au statut le",
         elapsedHours: "Heures écoulées",
@@ -1671,6 +1671,9 @@ const fr = {
         thresholdsSubtitle: "Configurer les seuils de délai acceptables par wilaya",
         versWilayaHours: "Transit (h)",
         enLivraisonHours: "Livraison (h)",
+        suspenduHours: "Suspendu (h)",
+        retourHours: "Retours (h)",
+        allReturns: "Retours (tous types)",
         overdueCounts: "En Retard",
         overdue: "en retard",
       },

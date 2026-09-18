@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackDelays, useEcotrackDelayThresholds, useUpdateEcotrackDelayThresholds } from "@/hooks/use-ecotrack";
-import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,6 +118,8 @@ function ExpediteurDelaysView({ t }: { t: any }) {
               <option value="">{t("admin.ecotrackDashboard.filters.allStatuses")}</option>
               <option value="vers_wilaya">{t("admin.ecotrackPortal.tracking.statusLabels.toWilaya")}</option>
               <option value="en_livraison">{t("admin.ecotrackPortal.tracking.statusLabels.outForDelivery")}</option>
+              <option value="suspendu">{t("admin.ecotrackPortal.tracking.statusLabels.suspended")}</option>
+              <option value="retour">{t("admin.ecotrackPortal.delays.allReturns")}</option>
             </select>
             <select 
               className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
@@ -194,6 +196,8 @@ function ExpediteurDelaysView({ t }: { t: any }) {
                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-800">
                         {order.status === "vers_wilaya" ? t("admin.ecotrackPortal.tracking.statusLabels.toWilaya") :
                          order.status === "en_livraison" ? t("admin.ecotrackPortal.tracking.statusLabels.outForDelivery") :
+                         order.status === "suspendu" || order.status === "suspendus" ? t("admin.ecotrackPortal.tracking.statusLabels.suspended") :
+                         order.status?.startsWith("retour_") || order.status?.startsWith("return_") ? t("admin.ecotrackPortal.delays.allReturns") :
                          order.status}
                       </span>
                     </td>
@@ -222,15 +226,25 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
 
   type Unit = 'h' | 'd';
   type EditVal = { value: string; unit: Unit };
-  const [edits, setEdits] = useState<Record<string, { versWilaya: EditVal, enLivraison: EditVal }>>({});
+  type ThresholdField = 'versWilaya' | 'enLivraison' | 'suspendu' | 'retour';
+  type ThresholdEdit = Record<ThresholdField, EditVal>;
+  const [edits, setEdits] = useState<Record<string, ThresholdEdit>>({});
   const [isEditing, setIsEditing] = useState(false);
   const overdueTotals = useMemo(() => (thresholdsData?.rows || []).reduce(
-    (totals: { transit: number; delivery: number }, row: any) => ({
+    (totals: { transit: number; delivery: number; suspended: number; returns: number }, row: any) => ({
       transit: totals.transit + (Number(row.versWilayaOverdue) || 0),
       delivery: totals.delivery + (Number(row.enLivraisonOverdue) || 0),
+      suspended: totals.suspended + (Number(row.suspenduOverdue) || 0),
+      returns: totals.returns + (Number(row.retourOverdue) || 0),
     }),
-    { transit: 0, delivery: 0 },
+    { transit: 0, delivery: 0, suspended: 0, returns: 0 },
   ), [thresholdsData?.rows]);
+  const thresholdColumns: Array<{ field: ThresholdField; label: string; overdueKey: string; testId: string }> = [
+    { field: "versWilaya", label: t("admin.ecotrackPortal.delays.versWilayaHours"), overdueKey: "versWilayaOverdue", testId: "vers-wilaya-overdue" },
+    { field: "enLivraison", label: t("admin.ecotrackPortal.delays.enLivraisonHours"), overdueKey: "enLivraisonOverdue", testId: "en-livraison-overdue" },
+    { field: "suspendu", label: t("admin.ecotrackPortal.delays.suspenduHours"), overdueKey: "suspenduOverdue", testId: "suspendu-overdue" },
+    { field: "retour", label: t("admin.ecotrackPortal.delays.retourHours"), overdueKey: "retourOverdue", testId: "retour-overdue" },
+  ];
 
   React.useEffect(() => {
     if (thresholdsData?.rows && !isEditing) {
@@ -238,15 +252,17 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
       thresholdsData.rows.forEach((r: any) => {
         const vh = Number(r.versWilayaHours || 48);
         const lh = Number(r.enLivraisonHours || 72);
+        const sh = Number(r.suspenduHours || 72);
+        const rh = Number(r.retourHours || 72);
+        const editValue = (hours: number): EditVal => ({
+          value: hours % 24 === 0 ? String(hours / 24) : String(hours),
+          unit: hours % 24 === 0 ? 'd' : 'h',
+        });
         initialEdits[r.wilayaId] = {
-          versWilaya: {
-            value: vh % 24 === 0 ? String(vh / 24) : String(vh),
-            unit: vh % 24 === 0 ? 'd' : 'h'
-          },
-          enLivraison: {
-            value: lh % 24 === 0 ? String(lh / 24) : String(lh),
-            unit: lh % 24 === 0 ? 'd' : 'h'
-          }
+          versWilaya: editValue(vh),
+          enLivraison: editValue(lh),
+          suspendu: editValue(sh),
+          retour: editValue(rh),
         };
       });
       setEdits(initialEdits);
@@ -257,10 +273,14 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
     const rows = Object.entries(edits).map(([wilayaId, values]) => {
       const vh = values.versWilaya.unit === 'd' ? Number(values.versWilaya.value) * 24 : Number(values.versWilaya.value);
       const lh = values.enLivraison.unit === 'd' ? Number(values.enLivraison.value) * 24 : Number(values.enLivraison.value);
+      const sh = values.suspendu.unit === 'd' ? Number(values.suspendu.value) * 24 : Number(values.suspendu.value);
+      const rh = values.retour.unit === 'd' ? Number(values.retour.value) * 24 : Number(values.retour.value);
       return {
         wilayaId,
         versWilayaHours: vh,
         enLivraisonHours: lh,
+        suspenduHours: sh,
+        retourHours: rh,
       };
     });
     updateMutation.mutate(rows, {
@@ -272,7 +292,7 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
     });
   };
 
-  const handleUnitChange = (wilayaId: string, field: 'versWilaya' | 'enLivraison', newUnit: Unit) => {
+  const handleUnitChange = (wilayaId: string, field: ThresholdField, newUnit: Unit) => {
     setEdits(prev => {
       const current = prev[wilayaId][field];
       if (current.unit === newUnit) return prev;
@@ -317,7 +337,7 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
       </div>
 
       {!isLoading && !error && (
-        <div className="mb-5 grid shrink-0 gap-3 sm:grid-cols-2">
+        <div className="mb-5 grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="flex items-center gap-4 rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-600"><Truck className="h-5 w-5" /></div>
             <div>
@@ -333,6 +353,22 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
               <p className="mt-0.5 text-2xl font-black text-slate-900" data-testid="total-en-livraison-overdue">{overdueTotals.delivery}</p>
             </div>
             <span className="ms-auto rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-[#E10600]">{t("admin.ecotrackPortal.delays.overdue")}</span>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-purple-50 text-purple-600"><AlertCircle className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("admin.ecotrackPortal.delays.suspenduHours")}</p>
+              <p className="mt-0.5 text-2xl font-black text-slate-900" data-testid="total-suspendu-overdue">{overdueTotals.suspended}</p>
+            </div>
+            <span className="ms-auto rounded-full bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-700">{t("admin.ecotrackPortal.delays.overdue")}</span>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-600"><ArrowLeftRight className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("admin.ecotrackPortal.delays.retourHours")}</p>
+              <p className="mt-0.5 text-2xl font-black text-slate-900" data-testid="total-retour-overdue">{overdueTotals.returns}</p>
+            </div>
+            <span className="ms-auto rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{t("admin.ecotrackPortal.delays.overdue")}</span>
           </div>
         </div>
       )}
@@ -351,15 +387,21 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
               <thead className="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
                 <tr>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.reports.wilayas")}</th>
-                  <th className="border-s border-slate-200 px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.versWilayaHours")}</th>
-                  <th className="border-s border-slate-200 px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.enLivraisonHours")}</th>
+                  {thresholdColumns.map(column => (
+                    <th key={column.field} className="border-s border-slate-200 px-4 py-3 font-semibold text-slate-700">{column.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {WILAYA_LIST.map((wilaya) => {
                   const id = String(Number(wilaya.code.replace("DZ", "")));
-                  const row = thresholdsData?.rows?.find((r: any) => String(r.wilayaId) === id) || { versWilayaOverdue: 0, enLivraisonOverdue: 0 };
-                  const editData = edits[id] || { versWilaya: { value: "48", unit: "h" }, enLivraison: { value: "72", unit: "h" } };
+                  const row = thresholdsData?.rows?.find((r: any) => String(r.wilayaId) === id) || {};
+                  const editData = edits[id] || {
+                    versWilaya: { value: "48", unit: "h" },
+                    enLivraison: { value: "72", unit: "h" },
+                    suspendu: { value: "72", unit: "h" },
+                    retour: { value: "72", unit: "h" },
+                  };
                   
                   return (
                     <tr key={wilaya.code} className="hover:bg-slate-50 transition-colors">
@@ -368,69 +410,45 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
                         {wilaya.name}
                       </td>
                       
-                      <td className="border-s border-slate-100 px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {isEditing ? (
-                            <div className="flex items-center">
-                              <Input 
-                                type="number" 
-                                min="0" 
-                                step="any"
-                                className="w-20 h-8 rounded-r-none border-r-0 focus:z-10 focus-visible:z-10" 
-                                value={editData.versWilaya.value}
-                                onChange={(e) => setEdits(prev => ({ ...prev, [id]: { ...prev[id], versWilaya: { ...prev[id].versWilaya, value: e.target.value } } }))}
-                              />
-                              <select 
-                                className="h-8 rounded-l-none border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#E10600] z-0"
-                                value={editData.versWilaya.unit}
-                                onChange={(e) => handleUnitChange(id, 'versWilaya', e.target.value as Unit)}
-                              >
-                                <option value="h">h</option>
-                                <option value="d">d</option>
-                              </select>
-                            </div>
-                          ) : (
-                            <span className="font-semibold min-w-[3rem]">{editData.versWilaya.value}{editData.versWilaya.unit}</span>
-                          )}
-                          {row.versWilayaOverdue > 0 && (
-                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800" data-testid="vers-wilaya-overdue">
-                              {row.versWilayaOverdue} {t("admin.ecotrackPortal.delays.overdue")}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="border-s border-slate-100 px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {isEditing ? (
-                            <div className="flex items-center">
-                              <Input 
-                                type="number" 
-                                min="0" 
-                                step="any"
-                                className="w-20 h-8 rounded-r-none border-r-0 focus:z-10 focus-visible:z-10" 
-                                value={editData.enLivraison.value}
-                                onChange={(e) => setEdits(prev => ({ ...prev, [id]: { ...prev[id], enLivraison: { ...prev[id].enLivraison, value: e.target.value } } }))}
-                              />
-                              <select 
-                                className="h-8 rounded-l-none border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#E10600] z-0"
-                                value={editData.enLivraison.unit}
-                                onChange={(e) => handleUnitChange(id, 'enLivraison', e.target.value as Unit)}
-                              >
-                                <option value="h">h</option>
-                                <option value="d">d</option>
-                              </select>
-                            </div>
-                          ) : (
-                            <span className="font-semibold min-w-[3rem]">{editData.enLivraison.value}{editData.enLivraison.unit}</span>
-                          )}
-                          {row.enLivraisonOverdue > 0 && (
-                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800" data-testid="en-livraison-overdue">
-                              {row.enLivraisonOverdue} {t("admin.ecotrackPortal.delays.overdue")}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                      {thresholdColumns.map(column => (
+                        <td key={column.field} className="border-s border-slate-100 px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {isEditing ? (
+                              <div className="flex items-center">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  className="w-20 h-8 rounded-r-none border-r-0 focus:z-10 focus-visible:z-10"
+                                  value={editData[column.field].value}
+                                  onChange={(e) => setEdits(prev => ({
+                                    ...prev,
+                                    [id]: {
+                                      ...prev[id],
+                                      [column.field]: { ...prev[id][column.field], value: e.target.value },
+                                    },
+                                  }))}
+                                />
+                                <select
+                                  className="h-8 rounded-l-none border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#E10600] z-0"
+                                  value={editData[column.field].unit}
+                                  onChange={(e) => handleUnitChange(id, column.field, e.target.value as Unit)}
+                                >
+                                  <option value="h">h</option>
+                                  <option value="d">d</option>
+                                </select>
+                              </div>
+                            ) : (
+                              <span className="font-semibold min-w-[3rem]">{editData[column.field].value}{editData[column.field].unit}</span>
+                            )}
+                            {Number(row[column.overdueKey]) > 0 && (
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800" data-testid={column.testId}>
+                                {row[column.overdueKey]} {t("admin.ecotrackPortal.delays.overdue")}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      ))}
 
                     </tr>
                   );
