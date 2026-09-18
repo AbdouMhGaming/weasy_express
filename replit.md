@@ -40,7 +40,7 @@ Multilingual (FR/EN/AR) logistics website for Algeria.
 - The production application uses the existing MySQL database. Never use `drizzle-kit push` because the database contains tables outside the Drizzle schema; use explicit, safe SQL migration scripts instead.
 - Build Hostinger deployment archives only with `node scripts/build-hostinger.mjs`. Do not manually assemble or zip production files. The script is the source of truth: it builds both artifacts, copies the SPA and API output, includes the required production dependencies (`mysql2` and `drizzle-orm`), creates the expected upload directories, and produces `deploy/weasy-express-<date>.zip`.
 - Before delivering a Hostinger archive, confirm that `node scripts/build-hostinger.mjs` completes successfully and report the generated archive path. If server imports or external dependencies change, update the build script's generated production `package.json` so Hostinger installs everything required at runtime.
-- Ecotrack Portal and Ecotrack Settings must remain available in the Replit project. Exclude them only from Hostinger public builds through the `VITE_HOSTINGER_BUILD` build flag; never remove their shared source or Replit navigation.
+- Hostinger production builds must include the complete application, including the Ecotrack Portal, Ecotrack Settings, Expediteur dashboard, Orders, History, desks, fees, products, and team features. Do not set `VITE_HOSTINGER_BUILD` when packaging.
 
 ### Tracking integration
 

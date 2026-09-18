@@ -22,6 +22,13 @@ i18n
     },
     fallbackLng: "fr",
     supportedLngs: SUPPORTED_LANGUAGES,
+    parseMissingKeyHandler: (key) => {
+      const segment = key.split(".").at(-1) ?? "";
+      return segment
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replaceAll("_", " ")
+        .replace(/^./, (letter) => letter.toUpperCase());
+    },
     interpolation: { escapeValue: false },
     detection: {
       order: ["localStorage", "navigator"],

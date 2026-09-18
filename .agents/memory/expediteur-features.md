@@ -40,3 +40,19 @@ description: Full implementation of Expediteur user type, payout requests, team 
 - Sub-accounts inherit parent role; permission subset shown in TeamView.tsx.
 
 **Why:** Expediteur is a separate role from commercial. Keep expediteur CRUD routes separate from admin/office/finance/commercial routes to avoid coupling.
+
+## Ecotrack analytics source
+
+Expediteur analytics must be scoped to the authenticated root Expediteur account and calculated from the persisted Ecotrack order cache. Do not implement dashboard filters by repeatedly fetching the merchant's full upstream Ecotrack history.
+
+**Why:** Full-history upstream requests are slow and risk Ecotrack rate limits; the synchronized cache supports fast server-side filtering and consistent period comparisons.
+
+**How to apply:** Add analytics dimensions to the authenticated Expediteur analytics endpoint and cached-order query. Keep Super Admin analytics endpoints separate because they are not merchant-scoped.
+
+## Ecotrack order navigation
+
+Commandes is a collapsible status-based workspace. History is the read-only all-orders view, while only the ready-to-ship status keeps edit, ship, label-download, and delete actions. Order creation starts from the dashboard action menu.
+
+**Why:** Merchants need active operational work separated from historical inspection; newly created orders must remain immediately actionable without making completed orders mutable.
+
+**How to apply:** Add new order states beneath Commandes, keep History details-only, and support both `pret_a_expedier` and Ecotrack's documented `prete_a_expedier` spelling.

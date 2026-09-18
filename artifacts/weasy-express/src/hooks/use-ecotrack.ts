@@ -1,20 +1,67 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { API_BASE, expediteurHeaders } from "@/lib/api";
+import { API_BASE, expediteurHeaders, readApiJson } from "@/lib/api";
 
 const BASE = `${API_BASE}/api/expediteur/ecotrack`;
 
 // Dashboard
-export function useEcotrackDashboard() {
+export function useEcotrackReports(filters: { from?: string; to?: string; wilaya?: string }) {
+  return useQuery({
+    queryKey: ["ecotrack", "reports", filters],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (filters.from) searchParams.set("from", filters.from);
+      if (filters.to) searchParams.set("to", filters.to);
+      if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
+      const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
+      const res = await fetch(`${BASE}/reports${suffix}`, { headers: expediteurHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      return body;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+export function useEcotrackDashboard(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["ecotrack", "dashboard"],
     queryFn: async () => {
       const res = await fetch(`${BASE}/dashboard`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return body;
     },
     refetchInterval: (query) => query.state.data?.sync?.complete ? 30_000 : 2_000,
+    enabled: options?.enabled,
+  });
+}
+
+export type EcotrackAnalyticsFilters = {
+  from?: string;
+  to?: string;
+  wilaya?: string;
+  status?: string;
+};
+
+export function useEcotrackAnalytics(filters: EcotrackAnalyticsFilters) {
+  return useQuery({
+    queryKey: ["ecotrack", "analytics", filters],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (filters.from) searchParams.set("from", filters.from);
+      if (filters.to) searchParams.set("to", filters.to);
+      if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
+      if (filters.status) searchParams.set("status", filters.status);
+      const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
+      const res = await fetch(`${BASE}/analytics${suffix}`, { headers: expediteurHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      return body;
+    },
+    refetchInterval: 30_000,
   });
 }
 
@@ -25,7 +72,7 @@ export function useEcotrackSync() {
     mutationFn: async () => {
       const res = await fetch(`${BASE}/sync`, { method: "POST", headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -36,17 +83,37 @@ export function useEcotrackSync() {
 }
 
 // Orders
-export function useEcotrackOrders(params: { page: number; search: string; status: string }) {
+export type EcotrackOrderSort = "created_desc" | "created_asc" | "updated_desc" | "updated_asc" | "amount_desc" | "amount_asc";
+
+export type EcotrackOrderFilters = {
+  from?: string;
+  to?: string;
+  wilaya?: string;
+  commune?: string;
+  type?: string;
+  fragile?: string;
+  stopDesk?: string;
+};
+
+export function useEcotrackOrders(params: { page: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters) {
   return useQuery({
     queryKey: ["ecotrack", "orders", params],
     queryFn: async () => {
       const searchParams = new URLSearchParams({ page: params.page.toString() });
       if (params.search) searchParams.set("search", params.search);
       if (params.status && params.status !== "all") searchParams.set("status", params.status);
+      if (params.sort) searchParams.set("sort", params.sort);
+      if (params.from) searchParams.set("from", params.from);
+      if (params.to) searchParams.set("to", params.to);
+      if (params.wilaya) searchParams.set("wilaya", params.wilaya);
+      if (params.commune) searchParams.set("commune", params.commune);
+      if (params.type) searchParams.set("type", params.type);
+      if (params.fragile) searchParams.set("fragile", params.fragile);
+      if (params.stopDesk) searchParams.set("stop_desk", params.stopDesk);
 
       const res = await fetch(`${BASE}/orders?${searchParams.toString()}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return body;
     },
@@ -61,7 +128,7 @@ export function useEcotrackOrderDetail(tracking: string) {
     queryFn: async () => {
       const res = await fetch(`${BASE}/orders/${tracking}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       const infoEnvelope = body.info?.data ?? body.info ?? {};
       const info = infoEnvelope[tracking] ?? infoEnvelope;
@@ -148,6 +215,60 @@ export function useEcotrackOrderDetail(tracking: string) {
   });
 }
 
+export function useEcotrackDelays(filters: { status?: string; wilaya?: string; search?: string }) {
+  return useQuery({
+    queryKey: ["ecotrack", "delays", filters],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (filters.status) searchParams.set("status", filters.status);
+      if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
+      if (filters.search) searchParams.set("search", filters.search);
+      const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
+      const res = await fetch(`${BASE}/delays${suffix}`, { headers: expediteurHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      return body;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+export function useEcotrackDelayThresholds() {
+  return useQuery({
+    queryKey: ["ecotrack", "delay-thresholds"],
+    queryFn: async () => {
+      const token = localStorage.getItem("admin_token") || "";
+      const res = await fetch(`${API_BASE}/api/admin/ecotrack/delay-thresholds`, { 
+        headers: { "Authorization": `Bearer ${token}` } 
+      });
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      return body;
+    },
+  });
+}
+
+export function useUpdateEcotrackDelayThresholds() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: any[]) => {
+      const token = localStorage.getItem("admin_token") || "";
+      const res = await fetch(`${API_BASE}/api/admin/ecotrack/delay-thresholds`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ecotrack", "delay-thresholds"] });
+    },
+  });
+}
+
 // References
 export function useEcotrackWilayas() {
   return useQuery({
@@ -155,7 +276,7 @@ export function useEcotrackWilayas() {
     queryFn: async () => {
       const res = await fetch(`${BASE}/wilayas`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       const raw = Array.isArray(body.data) ? body.data : body.data?.data;
       return (Array.isArray(raw) ? raw : []).map((wilaya: any) => ({
         ...wilaya,
@@ -173,7 +294,7 @@ export function useEcotrackCommunes(wilaya_id?: string) {
       if (!wilaya_id) return [];
       const res = await fetch(`${BASE}/communes?wilaya_id=${wilaya_id}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       // Ecotrack returns communes as an object keyed by string
       const raw = body.data?.data ?? body.data ?? {};
       return Object.values(raw).map((commune: any) => ({
@@ -191,7 +312,7 @@ export function useEcotrackOrderCommune(tracking?: string, wilayaId?: string) {
     queryFn: async () => {
       const res = await fetch(`${BASE}/orders/${encodeURIComponent(tracking!)}/commune?wilaya_id=${encodeURIComponent(wilayaId!)}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "commune_lookup_failed");
       return String(body.commune);
     },
@@ -206,7 +327,7 @@ export function useEcotrackDesks() {
     queryFn: async () => {
       const res = await fetch(`${BASE}/desks`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       return body.data?.data ?? body.data ?? { my_desk: null, other_desks: [] };
     }
   });
@@ -218,7 +339,7 @@ export function useEcotrackFees() {
     queryFn: async () => {
       const res = await fetch(`${BASE}/fees`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       return body.data?.data ?? body.data ?? {};
     }
   });
@@ -230,7 +351,7 @@ export function useEcotrackProducts(page = 1) {
     queryFn: async () => {
       const res = await fetch(`${BASE}/products?page=${page}`, { headers: expediteurHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       const raw = body.data?.data ?? body.data;
       return raw && typeof raw === "object" ? raw : { products: [], pagination: {} };
     }
@@ -248,7 +369,7 @@ export function useCreateEcotrackOrder() {
         body: JSON.stringify(data),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -271,8 +392,10 @@ export function useBulkCreateEcotrackOrders() {
         body: JSON.stringify({ orders }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
-      if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
+      const body = await readApiJson(res);
+      // Ecotrack can accept some rows and reject others in one HTTP 200 response.
+      // Return that response to the modal so it can remove successes and retain failures.
+      if (!res.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
     onSuccess: async () => {
@@ -294,7 +417,7 @@ export function useUpdateEcotrackOrder() {
         body: JSON.stringify(data),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -317,7 +440,7 @@ export function useDeleteEcotrackOrder() {
         headers: expediteurHeaders(),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -341,7 +464,7 @@ export function useValidateEcotrackOrder() {
         body: JSON.stringify({ tracking, ask_collection }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -365,7 +488,7 @@ export function useAddEcotrackNote() {
         body: JSON.stringify({ tracking, content }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -385,7 +508,7 @@ export function useRequestReturnEcotrackOrder() {
         body: JSON.stringify({ tracking }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
-      const body = await res.json();
+      const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
       return body;
     },
@@ -408,7 +531,7 @@ export function useLabelEcotrackOrder() {
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       if (!res.ok) {
         let msg = "actionFailed";
-        try { const body = await res.json(); msg = body.error || msg; } catch {}
+        try { const body = await readApiJson(res); msg = body.error || msg; } catch {}
         throw new Error(msg);
       }
       const blob = await res.blob();

@@ -46,7 +46,7 @@ function copyDir(src, dst) {
 
 // ── 1. Build frontend ──────────────────────────────────────────────────────
 console.log("\n🖼  Building frontend (Vite)…");
-run("VITE_HOSTINGER_BUILD=true PORT=5000 BASE_PATH=/ pnpm --filter @workspace/weasy-express run build");
+run("PORT=5000 BASE_PATH=/ pnpm --filter @workspace/weasy-express run build");
 
 // ── 2. Build API server ────────────────────────────────────────────────────
 console.log("\n🔧  Building API server (esbuild)…");
@@ -119,8 +119,8 @@ STATIC_DIR=./public
 # Optional: Admin HMAC secret (set a random string)
 ADMIN_SECRET=change_me_to_a_random_secret_string
 
-# Required: stable encryption/session secret. Do not rotate this without
-# reconnecting every stored Ecotrack credential.
+# Optional: preferred stable encryption/session secret. If Hostinger does not
+# provide it, the app derives a stable key from the existing DB environment.
 SESSION_SECRET=change_me_to_a_long_random_secret_string
 `;
 fs.writeFileSync(path.join(BUILD_DIR, ".env.example"), envExample);
@@ -140,16 +140,22 @@ const readme = `# Weasy Express — Hostinger Deployment
 
 ## Deployment steps
 
-1. Upload this folder contents to your Hostinger Node.js hosting root.
-2. Copy \`.env.example\` to \`.htaccess\` or set env vars in the Hostinger panel:
+1. Stop the Hostinger Node.js application before replacing files.
+2. Delete the old \`public/assets/\` directory so stale hashed frontend files cannot remain.
+3. Upload the complete package contents to the Node.js application root. Replace both \`public/\` and \`dist/\`; never update only one of them.
+4. Run \`npm install --omit=dev\` from the application root so all production dependencies are installed.
+5. Copy \`.env.example\` to \`.htaccess\` or set env vars in the Hostinger panel:
    - \`PORT\` — port provided by Hostinger (usually 3000)
    - \`NODE_ENV=production\`
    - \`DB_HOST\`, \`DB_USER\`, \`DB_PASS\`, \`DB_NAME\` — your MySQL credentials
    - \`STATIC_DIR=./public\`
    - \`ADMIN_SECRET\` — a random secret for admin authentication
-   - \`SESSION_SECRET\` — a stable random secret used to encrypt Ecotrack credentials
-3. Set the start command to: \`node --enable-source-maps ./dist/index.mjs\`
-4. The server will serve both the API (\`/api/*\`) and the frontend SPA.
+   - \`SESSION_SECRET\` — optional preferred encryption secret; the app automatically uses the existing database environment when Hostinger does not provide one
+6. Set the start command to: \`node --enable-source-maps ./dist/index.mjs\`
+7. Start or restart the Node.js application after every upload.
+8. The server will serve both the API (\`/api/*\`) and the frontend SPA.
+
+If the browser reports that an API response starts with \`<!DOCTYPE\`, the frontend and API versions do not match or Hostinger has not restarted the Node.js process. Repeat steps 1–7 with the complete package.
 
 ## DB migration (optional)
 

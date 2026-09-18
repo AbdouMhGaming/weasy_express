@@ -1,0 +1,86 @@
+SEP 12,20:18:29.350
+Serving static SPA
+SEP 12,20:18:29.354
+Server listening
+SEP 12,20:18:29.385
+request completed
+SEP 12,20:18:29.388
+Ecotrack storage ready
+SEP 12,20:18:48.099
+Serving static SPA
+SEP 12,20:18:48.103
+Server listening
+SEP 12,20:18:48.149
+Ecotrack storage ready
+SEP 12,20:18:48.290
+request completed
+SEP 12,20:18:48.344
+request completed
+SEP 12,20:18:48.380
+request completed
+SEP 12,20:18:53.825
+request completed
+SEP 12,20:18:57.837
+request completed
+SEP 12,20:18:57.960
+request completed
+SEP 12,20:18:58.257
+request completed
+SEP 12,20:18:59.074
+request completed
+SEP 12,20:19:01.205
+request completed
+SEP 12,20:19:03.655
+request errored
+SEP 12,20:19:03.656
+Error: SESSION_SECRET must be configured to encrypt Ecotrack tokens
+at encryptionKey (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168308:11)
+at encryptEcotrackToken (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168314:56)
+at file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168851:21
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+SEP 12,20:19:05.213
+request errored
+SEP 12,20:19:05.213
+Error: SESSION_SECRET must be configured to encrypt Ecotrack tokens
+at encryptionKey (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168308:11)
+at encryptEcotrackToken (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168314:56)
+at file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168851:21
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+SEP 12,20:19:05.320
+request completed
+SEP 12,20:19:05.862
+request errored
+SEP 12,20:19:05.862
+Error: SESSION_SECRET must be configured to encrypt Ecotrack tokens
+at encryptionKey (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168308:11)
+at encryptEcotrackToken (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168314:56)
+at file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168851:21
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+SEP 12,20:19:06.369
+request errored
+SEP 12,20:19:06.371
+Error: SESSION_SECRET must be configured to encrypt Ecotrack tokens
+at encryptionKey (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168308:11)
+at encryptEcotrackToken (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168314:56)
+at file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168851:21
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+SEP 12,20:19:07.449
+request completed
+SEP 12,20:19:08.570
+request completed
+SEP 12,20:19:09.742
+request errored
+SEP 12,20:19:09.743
+Error: SESSION_SECRET must be configured to encrypt Ecotrack tokens
+at encryptionKey (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168308:11)
+at encryptEcotrackToken (file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168314:56)
+at file:///home/u311205429/domains/hotpink-sparrow-481981.hostingersite.com/hbuilds/versions/01a0970e-0913-7368-ae85-16739379bd84/nodejs/dist/index.mjs:168851:21
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+SEP 12,20:19:10.397
+request completed
+SEP 12,20:19:10.541
+request completed
+SEP 12,20:19:10.602
+request completed
+SEP 12,20:19:10.794
+request completed

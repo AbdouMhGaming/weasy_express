@@ -128,3 +128,17 @@ mtime_ms = 1789063071143
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/473492f3-018e-432f-932e-dfda9d33e712/f7e7f31e-a97f-4413-9402-8aeb8d99e732"
 storage_version_token = "1789063131525107"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "l-M49DPxPZerqZaDDTxCY"
+uri = "file://deploy/weasy-express-2026-09-12.zip"
+type = "unspecified"
+title = "Weasy Express — Working Order Filters"
+description = "Corrected deployment package: the active API now processes advanced filters, and commune filtering uses Ecotrack commune IDs as stored in cached orders."
+logical_id = "1cd88c8e-6904-4900-ba8a-4ae4b90406e9"
+content_hash = "sha256:ee5ca4b01de8020f414d2aaf70390c94b579d0d03fd814db51d7f889cceb8b15"
+size = 7541653
+mtime_ms = 1789246958947
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/1cd88c8e-6904-4900-ba8a-4ae4b90406e9/e2b8ef2e-6d7b-40fa-a312-1908f783f432"
+storage_version_token = "1789246982273969"
+content_type = "application/octet-stream"

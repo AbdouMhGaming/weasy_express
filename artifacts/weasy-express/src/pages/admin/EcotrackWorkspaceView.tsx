@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { 
   Search, Plus, Download, Trash2, Edit2,
   CheckCircle, ArrowLeftRight, X, AlertCircle, Loader2, Package, MapPin,
-  Eye, MessageSquare, ListPlus, Truck, Settings2, Info
+  Eye, MessageSquare, ListPlus, Truck, FileSpreadsheet, Upload, SlidersHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +24,11 @@ import {
   useRequestReturnEcotrackOrder,
   useLabelEcotrackOrder,
   useEcotrackOrderDetail,
-  useAddEcotrackNote
+  useAddEcotrackNote,
+  useEcotrackSync
 } from "@/hooks/use-ecotrack";
+import type { EcotrackOrderSort } from "@/hooks/use-ecotrack";
+import type { EcotrackOrderFilters } from "@/hooks/use-ecotrack";
 import { PaginationBar } from "@/components/Pagination";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,13 +37,33 @@ const formatDZD = (num: number) => new Intl.NumberFormat('fr-DZ', { style: 'curr
 const readableLocation = (...values: unknown[]) => values
   .map(value => String(value ?? "").trim())
   .find(value => value.length > 0 && !/^\d+$/.test(value));
+const normalizeOrderPhone = (value: unknown) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.startsWith("213") && digits.length === 12 ? `0${digits.slice(3)}` : digits;
+};
+const normalizeEcotrackLookup = (value: unknown) => String(value ?? "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ")
+  .trim()
+  .toLocaleLowerCase();
+const ecotrackFailureText = (value: unknown): string => {
+  if (Array.isArray(value)) return value.map(ecotrackFailureText).filter(Boolean).join(" ");
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).map(ecotrackFailureText).filter(Boolean).join(" ");
+  }
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+};
 
 const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   pret_a_expedier: "readyToShip",
+  prete_a_expedier: "readyToShip",
   pret_a_preparer: "readyToPrepare",
   en_ramassage: "pickingUp",
   stock_en_preparation: "stockPreparing",
+  vers_station: "toHub",
   vers_hub: "toHub",
+  en_station: "atHub",
   en_hub: "atHub",
   vers_wilaya: "toWilaya",
   en_preparation: "preparing",
@@ -57,6 +80,8 @@ const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   encaisse_non_paye: "collectedNotPaid",
   paiement_prêt: "paymentReady",
   paiement_pret: "paymentReady",
+  paiements_prêts: "paymentReady",
+  paiements_prets: "paymentReady",
   paiement_archivé: "paymentArchived",
   paiement_archive: "paymentArchived",
   order_information_received_by_carrier: "registered",
@@ -66,12 +91,13 @@ const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   attempt_delivery: "deliveryAttempt",
   return_asked: "returnRequested",
   return_received: "returnReceived",
+  retour_recu: "returnReceived",
   livred: "delivered",
   encaissed: "collected",
   payed: "paid",
 };
 
-function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
+export function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
   const raw = String(status ?? "").trim();
   if (!raw || /^\d+$/.test(raw)) return t("admin.ecotrackPortal.tracking.statusLabels.unknown");
   const normalized = raw.toLocaleLowerCase().replace(/[\s-]+/g, "_");
@@ -81,12 +107,23 @@ function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
   return words.charAt(0).toLocaleUpperCase() + words.slice(1);
 }
 
-export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettings?: () => void }) {
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<"orders" | "tracking" | "config" | "products">("orders");
+type WorkspaceMode = "commands" | "desks" | "fees" | "products";
 
-  const { data: dashboard, isLoading: isLoadingDashboard, error: dashboardError } = useEcotrackDashboard();
+export default function EcotrackWorkspaceView({
+  onOpenSettings,
+  mode = "commands",
+  initialStatus = "all"
+}: {
+  onOpenSettings?: () => void;
+  mode?: WorkspaceMode | "history";
+  initialStatus?: string;
+}) {
+  const { t } = useTranslation();
+
+  const { data: dashboard, isLoading: isLoadingDashboard, error: dashboardError, refetch: refetchDashboard } = useEcotrackDashboard();
+  const syncNow = useEcotrackSync();
   const initialSyncPending = isLoadingDashboard || dashboard?.sync?.complete === false;
+  const isReadyToShip = initialStatus === "pret_a_expedier" || initialStatus === "prete_a_expedier";
 
   if (dashboardError?.message === "disconnected") {
     return (
@@ -102,12 +139,40 @@ export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettin
     );
   }
 
+  if (dashboardError || dashboard?.sync?.last_error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center h-[calc(100vh-4rem)] bg-slate-50">
+        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+        <h2 className="text-xl font-bold text-slate-900 mb-2">{t("admin.ecotrackDashboard.error.title")}</h2>
+        <p className="text-slate-500 max-w-md mb-6">{t("admin.ecotrackDashboard.error.desc")}</p>
+        <Button
+          disabled={syncNow.isPending}
+          onClick={() => dashboardError ? void refetchDashboard() : syncNow.mutate()}
+          className="bg-[#E10600] hover:bg-red-700"
+        >
+          {syncNow.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {t("admin.ecotrackDashboard.error.retry")}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-50/50">
       <div className="bg-white border-b border-slate-200 px-6 py-5 shrink-0 z-10 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{t("admin.ecotrackPortal.title")}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {mode === "commands"
+                ? t("admin.ecotrackPortal.title")
+                : mode === "history"
+                  ? t("admin.ecotrackPortal.history")
+                  : mode === "desks"
+                    ? t("admin.ecotrackPortal.desksNav")
+                    : mode === "fees"
+                      ? t("admin.ecotrackPortal.feesNav")
+                      : t("admin.ecotrackPortal.productsNav")}
+            </h1>
             <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
               {t("admin.ecotrackPortal.lastSync")}
               <span className="font-medium text-slate-700">
@@ -124,33 +189,27 @@ export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettin
             </span>
           </div>
         </div>
-
-        <div className="flex border-b border-slate-200 mt-2 gap-6">
-          {(["orders", "tracking", "config", "products"] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-sm font-semibold transition-colors relative ${activeTab === tab ? 'text-[#E10600]' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {t(`admin.ecotrackPortal.tabs.${tab}`)}
-              {activeTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E10600] rounded-t-full" />}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        {(activeTab === "orders" || activeTab === "tracking") && initialSyncPending ? (
+        {(mode === "commands" || mode === "history") && initialSyncPending ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center p-8">
             <Loader2 className="h-9 w-9 animate-spin text-[#E10600]" />
             <p className="font-semibold text-slate-700">{t("admin.ecotrackPortal.initialSync")}</p>
             <p className="max-w-md text-sm text-slate-500">{t("admin.ecotrackPortal.initialSyncDescription")}</p>
           </div>
-        ) : activeTab === "orders" ? <OrdersTab />
-          : activeTab === "tracking" ? <TrackingTab statuses={dashboard?.statuses || []} />
-          : null}
-        {activeTab === "config" && <ConfigTab />}
-        {activeTab === "products" && <ProductsTab />}
+        ) : mode === "commands" && isReadyToShip ? (
+          <OrdersTab status={initialStatus} />
+        ) : mode === "commands" || mode === "history" ? (
+          <TrackingTab
+            key={initialStatus + mode}
+            statuses={dashboard?.statuses || []}
+            initialStatus={initialStatus}
+            isHistory={mode === "history"}
+          />
+        ) : mode === "desks" ? <DesksTab />
+          : mode === "fees" ? <FeesTab />
+          : <ProductsTab />}
       </div>
     </div>
   );
@@ -159,14 +218,127 @@ export default function EcotrackWorkspaceView({ onOpenSettings }: { onOpenSettin
 // -----------------------------------------------------------------------------
 // ORDERS TAB
 // -----------------------------------------------------------------------------
-function OrdersTab() {
+const EMPTY_ORDER_FILTERS: EcotrackOrderFilters = {
+  from: "", to: "", wilaya: "", commune: "", type: "", fragile: "", stopDesk: "",
+};
+
+function AdvancedOrderFilters({
+  value,
+  onApply,
+}: {
+  value: EcotrackOrderFilters;
+  onApply: (filters: EcotrackOrderFilters) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<EcotrackOrderFilters>(value);
+  const { data: wilayas = [] } = useEcotrackWilayas();
+  const { data: communes = [], isLoading: communesLoading } = useEcotrackCommunes(draft.wilaya);
+  const activeCount = Object.values(value).filter(Boolean).length;
+
+  useEffect(() => {
+    if (open) setDraft(value);
+  }, [open, value]);
+
+  const update = (key: keyof EcotrackOrderFilters, next: string) => {
+    setDraft(current => ({
+      ...current,
+      [key]: next,
+      ...(key === "wilaya" ? { commune: "" } : {}),
+    }));
+  };
+
+  return (
+    <div className="relative">
+      <Button type="button" variant="outline" onClick={() => setOpen(current => !current)} className="bg-white">
+        <SlidersHorizontal className="h-4 w-4 me-2" />
+        {t("admin.ecotrackPortal.orders.filters.button")}
+        {activeCount > 0 && <span className="ms-2 rounded-full bg-[#E10600] px-1.5 py-0.5 text-[10px] font-bold text-white">{activeCount}</span>}
+      </Button>
+      {open && (
+        <>
+          <button type="button" aria-label="Close filters" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
+          <div className="absolute end-0 top-12 z-50 w-[min(92vw,420px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900">{t("admin.ecotrackPortal.orders.filters.title")}</h3>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}><X className="h-4 w-4" /></Button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-semibold text-slate-600">
+                <span>{t("admin.ecotrackPortal.orders.filters.from")}</span>
+                <Input type="date" value={draft.from} onChange={event => update("from", event.target.value)} />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-600">
+                <span>{t("admin.ecotrackPortal.orders.filters.to")}</span>
+                <Input type="date" value={draft.to} onChange={event => update("to", event.target.value)} />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-600">
+                <span>{t("admin.ecotrackPortal.forms.wilaya")}</span>
+                <select className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={draft.wilaya} onChange={event => update("wilaya", event.target.value)}>
+                  <option value="">{t("admin.ecotrackPortal.orders.filters.all")}</option>
+                  {wilayas.map((item: any) => <option key={item.wilaya_id} value={String(item.wilaya_id)}>{item.wilaya_name}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-600">
+                <span>{t("admin.ecotrackPortal.forms.commune")}</span>
+                <select disabled={!draft.wilaya || communesLoading} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:bg-slate-100" value={draft.commune} onChange={event => update("commune", event.target.value)}>
+                  <option value="">{t("admin.ecotrackPortal.orders.filters.all")}</option>
+                  {communes.map((item: any, index: number) => {
+                    const communeValue = String(item.commune_id ?? item.id ?? item.code ?? item.nom);
+                    return <option key={`${communeValue}-${index}`} value={communeValue}>{item.nom}</option>;
+                  })}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-600">
+                <span>{t("admin.ecotrackPortal.forms.operationType")}</span>
+                <select className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={draft.type} onChange={event => update("type", event.target.value)}>
+                  <option value="">{t("admin.ecotrackPortal.orders.filters.all")}</option>
+                  <option value="1">{t("admin.ecotrackPortal.forms.delivery")}</option>
+                  <option value="2">{t("admin.ecotrackPortal.forms.exchange")}</option>
+                </select>
+              </label>
+              {(["fragile", "stopDesk"] as const).map(field => (
+                <label key={field} className="space-y-1 text-xs font-semibold text-slate-600">
+                  <span>{t(`admin.ecotrackPortal.forms.${field}`)}</span>
+                  <select className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={draft[field]} onChange={event => update(field, event.target.value)}>
+                    <option value="">{t("admin.ecotrackPortal.orders.filters.all")}</option>
+                    <option value="yes">{t("admin.ecotrackPortal.orders.filters.yes")}</option>
+                    <option value="no">{t("admin.ecotrackPortal.orders.filters.no")}</option>
+                  </select>
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button type="button" variant="ghost" onClick={() => { setDraft(EMPTY_ORDER_FILTERS); onApply(EMPTY_ORDER_FILTERS); setOpen(false); }}>
+                {t("admin.ecotrackPortal.orders.filters.clear")}
+              </Button>
+              <Button type="button" className="bg-[#E10600] text-white hover:bg-[#C50500]" onClick={() => { onApply(draft); setOpen(false); }}>
+                {t("admin.ecotrackPortal.orders.filters.apply")}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function OrdersTab({ status }: { status: string }) {
   const { t } = useTranslation();
   const { toast } = useToast();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [sort, setSort] = useState<EcotrackOrderSort>("updated_desc");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filters, setFilters] = useState<EcotrackOrderFilters>(EMPTY_ORDER_FILTERS);
 
-  const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: "", status: "all" });
+  useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: debouncedSearch, status, sort, ...filters });
   const { data: wilayas = [] } = useEcotrackWilayas();
   const wilayaNames = useMemo(
     () => new Map(wilayas.map((wilaya: any) => [String(wilaya.wilaya_id), wilaya.wilaya_name])),
@@ -179,7 +351,7 @@ function OrdersTab() {
 
   const [selectedParcel, setSelectedParcel] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [detailOrder, setDetailOrder] = useState<any | null>(null);
 
   const handleDelete = (tracking: string) => {
     if (!window.confirm(t("admin.ecotrackPortal.orders.deleteConfirm"))) return;
@@ -211,15 +383,13 @@ function OrdersTab() {
 
   return (
     <div className="flex flex-col h-full p-6">
-      <div className="flex items-center gap-3 mb-4 shrink-0">
-        <Button onClick={() => { setSelectedParcel(null); setIsModalOpen(true); }} className="bg-[#1a237e] hover:bg-[#11185b] text-white shadow-sm">
-          <Plus className="h-4 w-4 mr-2" />
-          {t("admin.ecotrackPortal.orders.addOne")}
-        </Button>
-        <Button onClick={() => setIsBulkModalOpen(true)} variant="outline" className="bg-white border-slate-200 text-slate-700 shadow-sm">
-          <ListPlus className="h-4 w-4 mr-2" />
-          {t("admin.ecotrackPortal.orders.addMultiple")}
-        </Button>
+      <div className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+        <div className="relative min-w-[210px] flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("admin.ecotrackPortal.common.search")} className="pl-9 bg-white" />
+        </div>
+        <AdvancedOrderFilters value={filters} onApply={(next) => { setFilters(next); setPage(1); }} />
+        <OrderSortSelect value={sort} onChange={(value) => { setSort(value); setPage(1); }} />
         {isFetching && !isLoading && (
           <span className="ms-auto inline-flex items-center gap-2 text-xs font-medium text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin text-[#E10600]" />
@@ -278,7 +448,10 @@ function OrdersTab() {
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatDZD(order.montant || 0)}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title={t("admin.ecotrackPortal.orders.details.title")} onClick={() => setDetailOrder(order)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900" title={t("admin.ecotrackPortal.orders.modify")} onClick={() => { setSelectedParcel(order); setIsModalOpen(true); }}>
                           <Edit2 className="h-4 w-4" />
                         </Button>
@@ -287,9 +460,6 @@ function OrdersTab() {
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:text-slate-900" title={t("admin.ecotrackPortal.orders.downloadLabel")} onClick={() => handleDownloadLabel(order.tracking)}>
                           <Download className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 opacity-50 cursor-not-allowed" title={t("admin.ecotrackPortal.orders.validateReturn")}>
-                          <CheckCircle className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" title={t("admin.ecotrackPortal.orders.delete")} onClick={() => handleDelete(order.tracking)}>
                           <Trash2 className="h-4 w-4" />
@@ -310,7 +480,7 @@ function OrdersTab() {
       </div>
 
       {isModalOpen && <OrderFormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} parcel={selectedParcel} isEdit={!!selectedParcel} />}
-      {isBulkModalOpen && <BulkOrderModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />}
+      {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
     </div>
   );
 }
@@ -318,7 +488,7 @@ function OrdersTab() {
 // -----------------------------------------------------------------------------
 // TRACKING TAB
 // -----------------------------------------------------------------------------
-function TrackingTab({ statuses }: { statuses: any[] }) {
+function TrackingTab({ statuses, initialStatus = "all", isHistory = false }: { statuses: any[]; initialStatus?: string; isHistory?: boolean; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
 
@@ -326,18 +496,21 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [sort, setSort] = useState<EcotrackOrderSort>("updated_desc");
+  const [filters, setFilters] = useState<EcotrackOrderFilters>(EMPTY_ORDER_FILTERS);
+  const currentStatus = isHistory ? "all" : initialStatus;
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 500);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data: ordersData, isLoading, isFetching } = useEcotrackOrders({ page, search: debouncedSearch, status: statusFilter });
+  const { data: ordersData, isLoading, isFetching } = useEcotrackOrders({ page, search: debouncedSearch, status: currentStatus, sort, ...filters });
   const returnMutation = useRequestReturnEcotrackOrder();
 
   const [detailTracking, setDetailTracking] = useState<string | null>(null);
   const [noteTracking, setNoteTracking] = useState<string | null>(null);
+  const [detailOrder, setDetailOrder] = useState<any | null>(null);
 
   const handleRequestReturn = (tracking: string) => {
     if (!window.confirm(t("admin.ecotrackPortal.tracking.returnConfirm"))) return;
@@ -347,11 +520,9 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
     });
   };
 
-  const statusOptions = ["all", ...statuses.map((s: any) => s.status)];
-
   return (
     <div className="flex flex-col h-full p-6">
-      <div className="flex flex-col sm:flex-row gap-3 mb-4 shrink-0">
+      <div className="flex flex-wrap gap-2 mb-4 shrink-0">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
@@ -360,25 +531,14 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
             className="pl-9 bg-white shadow-sm"
           />
         </div>
-        <div className="w-full sm:w-64 shrink-0">
-          <label className="sr-only" htmlFor="tracking-status-filter">{t("admin.ecotrackPortal.tracking.filterStatus")}</label>
-          <select
-            id="tracking-status-filter"
-            value={statusFilter}
-            onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}
-            className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <option value="all">{t("admin.ecotrackPortal.tracking.filterStatus")}: {t("admin.ecotrackPortal.common.all")}</option>
-            {statusOptions.filter(status => status !== "all").map(status => {
-              const statInfo = statuses.find((item: any) => item.status === status);
-              return (
-                <option key={status} value={status}>
-                  {humanizeEcotrackStatus(status, t)}{statInfo?.count ? ` (${statInfo.count})` : ""}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        <AdvancedOrderFilters value={filters} onApply={(next) => { setFilters(next); setPage(1); }} />
+        <OrderSortSelect value={sort} onChange={(value) => { setSort(value); setPage(1); }} />
+        {isFetching && !isLoading && (
+          <span className="inline-flex items-center gap-2 self-center text-xs font-medium text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin text-[#E10600]" />
+            {t("admin.ecotrackPortal.orders.refreshing")}
+          </span>
+        )}
       </div>
 
       <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
@@ -400,12 +560,7 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
                   <th className="px-4 py-3 font-semibold text-slate-700 text-right">{t("admin.ecotrackPortal.orders.table.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 relative">
-                {isFetching && (
-                  <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-20">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#E10600]" />
-                  </div>
-                )}
+              <tbody className="divide-y divide-slate-100">
                 {ordersData?.data?.map((order: any) => (
                   <tr key={order.tracking} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-4 py-3">
@@ -420,16 +575,23 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
                       <div className="text-xs text-slate-500 mt-0.5">{order.phone}</div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100" title={t("admin.ecotrackPortal.orders.details.title")} onClick={() => setDetailOrder(order)}>
+                          <Package className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title={t("admin.ecotrackPortal.tracking.trackOne")} onClick={() => setDetailTracking(order.tracking)}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50" title={t("admin.ecotrackPortal.tracking.addNote")} onClick={() => setNoteTracking(order.tracking)}>
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title={t("admin.ecotrackPortal.tracking.requestReturn")} onClick={() => handleRequestReturn(order.tracking)}>
-                          <ArrowLeftRight className="h-4 w-4" />
-                        </Button>
+                        {!isHistory && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50" title={t("admin.ecotrackPortal.tracking.addNote")} onClick={() => setNoteTracking(order.tracking)}>
+                              <MessageSquare className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title={t("admin.ecotrackPortal.tracking.requestReturn")} onClick={() => handleRequestReturn(order.tracking)}>
+                              <ArrowLeftRight className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -443,136 +605,185 @@ function TrackingTab({ statuses }: { statuses: any[] }) {
         </div>
       </div>
 
+      {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
       {detailTracking && <TrackingDetailModal tracking={detailTracking} onClose={() => setDetailTracking(null)} />}
       {noteTracking && <AddNoteModal tracking={noteTracking} onClose={() => setNoteTracking(null)} />}
     </div>
   );
 }
 
-// -----------------------------------------------------------------------------
-// CONFIG TAB
-// -----------------------------------------------------------------------------
-function ConfigTab() {
+function OrderSortSelect({ value, onChange }: {
+  value: EcotrackOrderSort;
+  onChange: (value: EcotrackOrderSort) => void;
+}) {
   const { t } = useTranslation();
+  const options: EcotrackOrderSort[] = [
+    "created_desc", "created_asc", "updated_desc", "updated_asc", "amount_desc", "amount_asc",
+  ];
+  return (
+    <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+      <span className="whitespace-nowrap">{t("admin.ecotrackPortal.orders.sort.label")}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as EcotrackOrderSort)}
+        className="h-9 min-w-48 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20"
+      >
+        {options.map(option => (
+          <option key={option} value={option}>{t(`admin.ecotrackPortal.orders.sort.${option}`)}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
-  const { data: wilayas, isLoading: isLoadingWilayas } = useEcotrackWilayas();
+// -----------------------------------------------------------------------------
+// DESKS
+// -----------------------------------------------------------------------------
+function DesksTab() {
+  const { t } = useTranslation();
   const { data: desks, isLoading: isLoadingDesks } = useEcotrackDesks();
-  const { data: fees, isLoading: isLoadingFees } = useEcotrackFees();
-
-  const [selectedWilaya, setSelectedWilaya] = useState<string>("");
-  const { data: communes, isLoading: isLoadingCommunes } = useEcotrackCommunes(selectedWilaya);
+  const otherDesks = Array.isArray(desks?.other_desks) ? desks.other_desks : [];
 
   return (
-    <div className="p-6 h-full overflow-auto bg-slate-50">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
-
-        {/* Wilayas */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400"/> {t("admin.ecotrackPortal.config.wilayas")}</h3>
-          </div>
-          <div className="flex-1 overflow-auto p-2">
-            {isLoadingWilayas ? <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-slate-400"/></div> : (
-              <ul className="divide-y divide-slate-100 text-sm">
-                {wilayas?.map((w: any) => (
-                  <li key={w.wilaya_id} className="flex justify-between p-2 hover:bg-red-50 rounded-lg cursor-pointer" onClick={() => setSelectedWilaya(String(w.wilaya_id))}>
-                    <span className="font-medium text-slate-800">{w.wilaya_name}</span>
-                    <span className="text-slate-400 text-xs">{t("admin.ecotrackPortal.common.code")} {w.wilaya_id}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+    <div className="p-4 sm:p-6 h-full overflow-auto bg-slate-50">
+      {isLoadingDesks ? (
+        <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#E10600]"/></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-7xl mx-auto">
+          {desks?.my_desk && (() => {
+            const desk = desks.my_desk;
+            const phone = desk.phone || desk.telephone || desk.tel || desk.mobile || desk.location?.phone || desk.location?.telephone || desk.location?.tel || desk.location?.mobile;
+            return (
+              <article className="rounded-2xl border border-red-200 bg-red-50/60 p-5 shadow-sm">
+                <span className="mb-3 inline-flex rounded-full bg-[#E10600] px-2.5 py-1 text-xs font-bold text-white">{t("admin.ecotrackPortal.config.myDesk")}</span>
+                <h3 className="font-bold text-slate-900">{desk.hub_name || desk.name}</h3>
+                <p className="text-sm text-slate-600 mt-2">{desk.location?.commune || desk.commune}, {desk.location?.wilaya || desk.wilaya}</p>
+                <p className="text-sm text-slate-500 mt-1">{desk.location?.adresse || desk.adresse}</p>
+                {phone && <p className="text-sm font-medium text-slate-700 mt-2">{phone}</p>}
+              </article>
+            );
+          })()}
+          {otherDesks.map((desk: any, index: number) => {
+            const phone = desk.phone || desk.telephone || desk.tel || desk.mobile;
+            return (
+              <article key={`${desk.name || index}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="font-bold text-slate-900">{desk.name}</h3>
+                <p className="text-sm text-slate-600 mt-2">{desk.commune}, {desk.wilaya}</p>
+                <p className="text-sm text-slate-500 mt-1">{desk.adresse}</p>
+                {phone && <p className="text-sm font-medium text-slate-700 mt-2">{phone}</p>}
+              </article>
+            );
+          })}
+          {!desks?.my_desk && otherDesks.length === 0 && (
+            <div className="col-span-full py-16 text-center text-slate-500">{t("admin.ecotrackPortal.config.noDesks")}</div>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
 
-        {/* Communes */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400"/> {t("admin.ecotrackPortal.config.communes")}</h3>
-          </div>
-          <div className="flex-1 overflow-auto p-4">
-            {!selectedWilaya ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                <Info className="w-8 h-8 mb-2 opacity-50"/>
-                <p className="text-sm">{t("admin.ecotrackPortal.config.selectWilaya")}</p>
-              </div>
-            ) : isLoadingCommunes ? (
-              <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-slate-400"/></div>
-            ) : (
-              <ul className="divide-y divide-slate-100 text-sm">
-                {communes?.map((c: any, i: number) => (
-                  <li key={i} className="p-2"><span className="font-medium text-slate-700">{c.nom}</span></li>
+// -----------------------------------------------------------------------------
+// SERVICE FEES
+// -----------------------------------------------------------------------------
+function FeesTab() {
+  const { t } = useTranslation();
+  const { data: fees, isLoading: isLoadingFees } = useEcotrackFees();
+  const { data: wilayas = [] } = useEcotrackWilayas();
+  const wilayaNames = useMemo(
+    () => new Map(wilayas.map((wilaya: any) => [String(wilaya.wilaya_id), wilaya.wilaya_name])),
+    [wilayas],
+  );
+  const rows = useMemo(() => {
+    const byWilaya = new Map<string, {
+      wilayaId: string;
+      home?: unknown;
+      stopDesk?: unknown;
+      exchangeHome?: unknown;
+      exchangeStopDesk?: unknown;
+      returnHome?: unknown;
+      returnStopDesk?: unknown;
+    }>();
+
+    for (const [service, serviceRows] of Object.entries(fees || {})) {
+      if (!Array.isArray(serviceRows)) continue;
+      const normalizedService = service
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase();
+
+      for (const fee of serviceRows as any[]) {
+        const wilayaId = String(fee.wilaya_id ?? fee.wilaya ?? "");
+        if (!wilayaId) continue;
+        const row = byWilaya.get(wilayaId) ?? { wilayaId };
+
+        if (normalizedService.includes("livraison") || normalizedService.includes("delivery")) {
+          row.home = fee.tarif;
+          row.stopDesk = fee.tarif_stopdesk;
+        } else if (normalizedService.includes("echange") || normalizedService.includes("exchange")) {
+          row.exchangeHome = fee.tarif;
+          row.exchangeStopDesk = fee.tarif_stopdesk;
+        } else if (normalizedService.includes("retour") || normalizedService.includes("return")) {
+          row.returnHome = fee.tarif;
+          row.returnStopDesk = fee.tarif_stopdesk;
+        }
+
+        byWilaya.set(wilayaId, row);
+      }
+    }
+
+    return Array.from(byWilaya.values()).sort((a, b) =>
+      Number(a.wilayaId) - Number(b.wilayaId) || a.wilayaId.localeCompare(b.wilayaId),
+    );
+  }, [fees]);
+
+  const displayFee = (value: unknown) =>
+    value === null || value === undefined || value === "" ? "—" : `${value} DA`;
+
+  return (
+    <div className="h-full overflow-auto bg-slate-50 p-4 sm:p-6">
+      <div className="min-h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {isLoadingFees ? (
+          <div className="flex min-h-[420px] items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#E10600]"/></div>
+        ) : rows.length === 0 ? (
+          <div className="flex min-h-[420px] items-center justify-center p-8 text-slate-500">{t("admin.ecotrackPortal.config.noFees")}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1080px] text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-[0_1px_0_0_#e2e8f0]">
+                <tr className="border-b border-slate-200">
+                  <th rowSpan={2} className="px-5 py-4 text-start align-middle font-semibold">{t("admin.ecotrackPortal.forms.wilaya")}</th>
+                  <th colSpan={2} className="px-5 py-3 text-center font-bold">{t("admin.ecotrackPortal.config.deliveryFee")}</th>
+                  <th colSpan={2} className="border-s border-slate-200 px-5 py-3 text-center font-bold">{t("admin.ecotrackPortal.config.exchangeFee")}</th>
+                  <th colSpan={2} className="border-s border-slate-200 px-5 py-3 text-center font-bold">{t("admin.ecotrackPortal.config.returnFee")}</th>
+                </tr>
+                <tr>
+                  <th className="px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.homeFee")}</th>
+                  <th className="px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.deskFee")}</th>
+                  <th className="border-s border-slate-200 px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.homeFee")}</th>
+                  <th className="px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.deskFee")}</th>
+                  <th className="border-s border-slate-200 px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.homeFee")}</th>
+                  <th className="px-5 py-3 text-end font-semibold">{t("admin.ecotrackPortal.config.deskFee")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((fee) => (
+                  <tr key={fee.wilayaId} className="hover:bg-slate-50">
+                    <td className="px-5 py-4 font-semibold text-slate-900">
+                      {wilayaNames.get(fee.wilayaId) ?? fee.wilayaId}
+                    </td>
+                    <td className="px-5 py-4 text-end text-slate-700">{displayFee(fee.home)}</td>
+                    <td className="px-5 py-4 text-end text-slate-700">{displayFee(fee.stopDesk)}</td>
+                    <td className="border-s border-slate-100 px-5 py-4 text-end text-slate-700">{displayFee(fee.exchangeHome)}</td>
+                    <td className="px-5 py-4 text-end text-slate-700">{displayFee(fee.exchangeStopDesk)}</td>
+                    <td className="border-s border-slate-100 px-5 py-4 text-end text-slate-700">{displayFee(fee.returnHome)}</td>
+                    <td className="px-5 py-4 text-end text-slate-700">{displayFee(fee.returnStopDesk)}</td>
+                  </tr>
                 ))}
-              </ul>
-            )}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        {/* Desks */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2"><Settings2 className="w-4 h-4 text-slate-400"/> {t("admin.ecotrackPortal.config.desks")}</h3>
-          </div>
-          <div className="flex-1 overflow-auto p-4 bg-slate-50">
-            {isLoadingDesks ? <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-slate-400"/></div> : (
-              <div className="space-y-3">
-                {desks?.my_desk && (
-                  <div className="rounded-xl border border-red-100 bg-red-50/60 p-3">
-                    <p className="font-bold text-slate-900">{desks.my_desk.hub_name}</p>
-                    <p className="text-sm text-slate-600 mt-1">{desks.my_desk.location?.commune}, {desks.my_desk.location?.wilaya}</p>
-                    <p className="text-xs text-slate-500 mt-1">{desks.my_desk.location?.adresse}</p>
-                  </div>
-                )}
-                {(Array.isArray(desks?.other_desks) ? desks.other_desks : []).map((desk: any, index: number) => (
-                  <div key={`${desk.name}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="font-semibold text-slate-900">{desk.name}</p>
-                    <p className="text-sm text-slate-600 mt-1">{desk.commune}, {desk.wilaya}</p>
-                    <p className="text-xs text-slate-500 mt-1">{desk.adresse}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Fees */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2"><Settings2 className="w-4 h-4 text-slate-400"/> {t("admin.ecotrackPortal.config.fees")}</h3>
-          </div>
-          <div className="flex-1 overflow-auto p-4 bg-slate-50">
-            {isLoadingFees ? <div className="flex justify-center p-4"><Loader2 className="w-5 h-5 animate-spin text-slate-400"/></div> : (
-              <div className="space-y-4">
-                {Object.entries(fees || {}).filter(([, value]) => Array.isArray(value)).map(([service, rows]) => (
-                  <div key={service}>
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#E10600] mb-2">{service}</p>
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-100 text-slate-600">
-                          <tr>
-                            <th className="p-2 text-start">{t("admin.ecotrackPortal.forms.wilaya")}</th>
-                            <th className="p-2 text-end">{t("admin.ecotrackPortal.config.homeFee")}</th>
-                            <th className="p-2 text-end">{t("admin.ecotrackPortal.config.deskFee")}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 bg-white">
-                          {(rows as any[]).map((fee: any) => (
-                            <tr key={`${service}-${fee.wilaya_id}`}>
-                              <td className="p-2">{fee.wilaya_id}</td>
-                              <td className="p-2 text-end font-medium">{fee.tarif} DA</td>
-                              <td className="p-2 text-end">{fee.tarif_stopdesk} DA</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
+        )}
       </div>
     </div>
   );
@@ -628,7 +839,7 @@ function ProductsTab() {
 // -----------------------------------------------------------------------------
 // MODALS
 // -----------------------------------------------------------------------------
-function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; onClose: () => void; parcel: any; isEdit: boolean; }) {
+export function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; onClose: () => void; parcel: any; isEdit: boolean; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const createMutation = useCreateEcotrackOrder();
@@ -688,7 +899,7 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
       });
     } else {
       const payload = {
-        nom_client: formData.client, telephone: formData.phone, telephone_2: formData.phone_2,
+        nom_client: formData.client, telephone: normalizeOrderPhone(formData.phone), telephone_2: normalizeOrderPhone(formData.phone_2),
         adresse: formData.adresse, commune: communeVal, code_wilaya: formData.wilaya_id, montant: formData.montant,
         type: Number(formData.type || 1), reference: formData.reference, remarque: formData.remarque,
         produit: formData.products, weight: formData.weight, stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
@@ -794,27 +1005,118 @@ function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; 
   );
 }
 
-function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
+export function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [rows, setRows] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [submissionError, setSubmissionError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mutation = useBulkCreateEcotrackOrders();
   const { data: wilayas = [] } = useEcotrackWilayas();
+  const { data: desks, isLoading: desksLoading } = useEcotrackDesks();
 
   const addRow = () => {
     if (rows.length >= 100) return;
     setRows(prev => [...prev, {
       id: Date.now() + prev.length, reference: "", nom_client: "", telephone: "", telephone_2: "",
       adresse: "", code_wilaya: "", commune: "", montant: "", produit: "", weight: "", type: "1",
-      remarque: "", stop_desk: 0, fragile: 0,
+      remarque: "", stop_desk: 0, fragile: 0, gps_link: "", _commune_valid: 1,
     }]);
   };
   const removeRow = (id: number) => setRows(prev => prev.filter(r => r.id !== id));
   const updateRow = (id: number, field: string, value: string | number) => setRows(prev => prev.map(r => r.id === id ? {
     ...r,
     [field]: value,
-    ...(field === "code_wilaya" ? { commune: "" } : {}),
+    ...(field === "code_wilaya" ? { commune: "", _commune_valid: 0 } : {}),
   } : r));
+
+  const importExcel = async (file: File) => {
+    setIsImporting(true);
+    try {
+      const { readSheet } = await import("read-excel-file/browser");
+      const sheet = await readSheet(file);
+      const normalizeHeader = (value: unknown) => String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+      const headers = (sheet[0] ?? []).map(normalizeHeader);
+      const validTemplate =
+        headers[1]?.includes("nom et prenom du destinataire") &&
+        headers[2]?.startsWith("telephone") &&
+        headers[4]?.includes("code wilaya") &&
+        headers[6]?.includes("commune de livraison") &&
+        headers[7]?.includes("adresse de livraison") &&
+        headers[8]?.startsWith("produit") &&
+        headers[10]?.includes("montant du colis");
+      if (!validTemplate) throw new Error("invalid_template");
+
+      const dataRows = sheet.slice(1).filter(row =>
+        row.slice(0, 18).some(value => value !== null && String(value).trim() !== "")
+      );
+      if (dataRows.length === 0) throw new Error("empty_file");
+      const existingRows = rows.filter(({ id, _commune_valid, ...row }) =>
+        Object.values(row).some(value => value !== "" && value !== 0 && value !== false && value !== null && value !== undefined)
+      );
+      if (dataRows.length + existingRows.length > 100) throw new Error("too_many_rows");
+
+      const isYes = (value: unknown) => {
+        const normalized = String(value ?? "").trim().toLocaleLowerCase();
+        return ["oui", "yes", "true", "1", "x"].includes(normalized);
+      };
+      const conflictingRows: number[] = [];
+      const imported = dataRows.map((row, index) => {
+        const exchange = isYes(row[13]);
+        const pickup = isYes(row[14]);
+        const collection = isYes(row[15]);
+        if ([exchange, pickup, collection].filter(Boolean).length > 1) conflictingRows.push(index + 2);
+        const type = collection ? "4" : pickup ? "3" : exchange ? "2" : "1";
+        const cell = (column: number) => String(row[column] ?? "").trim();
+        return {
+          id: Date.now() + index,
+          reference: cell(0),
+          nom_client: cell(1),
+          telephone: cell(2),
+          telephone_2: cell(3),
+          code_wilaya: cell(4),
+          commune: cell(6),
+          adresse: cell(7),
+          produit: cell(8),
+          weight: cell(9),
+          montant: cell(10),
+          remarque: cell(11),
+          fragile: isYes(row[12]) ? 1 : 0,
+          type,
+          stop_desk: isYes(row[16]) ? 1 : 0,
+          gps_link: cell(17),
+          _commune_valid: 0,
+        };
+      });
+      if (conflictingRows.length) {
+        toast({
+          title: t("admin.ecotrackPortal.orders.bulkModal.conflictingTypes", { rows: conflictingRows.join(", ") }),
+          variant: "destructive",
+        });
+        return;
+      }
+      setRows([...existingRows, ...imported]);
+      setSubmissionError("");
+      toast({ title: t("admin.ecotrackPortal.orders.bulkModal.importSuccess", { count: imported.length }) });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "invalid_template";
+      const key = code === "too_many_rows"
+        ? "tooManyRows"
+        : code === "empty_file"
+          ? "emptyFile"
+          : "invalidTemplate";
+      toast({ title: t(`admin.ecotrackPortal.orders.bulkModal.${key}`), variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const submit = () => {
     if (rows.length === 0) return;
@@ -823,10 +1125,99 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       toast({ title: t("admin.ecotrackPortal.orders.bulkModal.required"), variant: "destructive" });
       return;
     }
-    const orders = rows.map(({ id, ...rest }) => rest);
+    const invalidPhoneRows = rows
+      .map((row, index) => ({
+        row: index + 1,
+        phone: normalizeOrderPhone(row.telephone),
+        phone2: normalizeOrderPhone(row.telephone_2),
+      }))
+      .filter(({ phone, phone2 }) => !/^\d{9,10}$/.test(phone) || (phone2 && !/^\d{9,10}$/.test(phone2)))
+      .map(({ row }) => row);
+    if (invalidPhoneRows.length) {
+      toast({
+        title: t("admin.ecotrackPortal.orders.bulkModal.invalidPhone", { rows: invalidPhoneRows.join(", ") }),
+        variant: "destructive",
+      });
+      return;
+    }
+    const invalidCommuneRows = rows
+      .map((row, index) => row._commune_valid === 0 ? index + 1 : null)
+      .filter((row): row is number => row !== null);
+    if (invalidCommuneRows.length) {
+      toast({
+        title: t("admin.ecotrackPortal.orders.bulkModal.invalidCommunes", { rows: invalidCommuneRows.join(", ") }),
+        variant: "destructive",
+      });
+      return;
+    }
+    const availableDeskCommunes = new Set(
+      (Array.isArray(desks?.other_desks) ? desks.other_desks : [])
+        .map((desk: any) => normalizeEcotrackLookup(desk?.commune))
+        .filter(Boolean),
+    );
+    const homeDeliveryRows = desksLoading
+      ? []
+      : rows
+        .map((row, index) =>
+          Boolean(row.stop_desk) && !availableDeskCommunes.has(normalizeEcotrackLookup(row.commune))
+            ? index + 1
+            : null,
+        )
+        .filter((row): row is number => row !== null);
+    const referenceSeed = Date.now();
+    const preparedRows = rows.map((row, index) => ({
+      ...row,
+      stop_desk: homeDeliveryRows.includes(index + 1) ? 0 : row.stop_desk,
+      reference: String(row.reference ?? "").trim() || `WEASY-${referenceSeed}-${index + 1}`,
+    }));
+    setRows(preparedRows);
+    setSubmissionError("");
+    if (homeDeliveryRows.length) {
+      toast({
+        title: t("admin.ecotrackPortal.orders.bulkModal.stopDeskFallback", {
+          rows: homeDeliveryRows.join(", "),
+        }),
+      });
+    }
+    const orders = preparedRows.map(({ id, _commune_valid, ...rest }) => ({
+      ...rest,
+      _client_id: String(id),
+      telephone: normalizeOrderPhone(rest.telephone),
+      telephone_2: normalizeOrderPhone(rest.telephone_2),
+    }));
     mutation.mutate(orders, {
-      onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
-      onError: (err) => toast({ title: t("admin.ecotrackPortal.common.error"), description: err.message, variant: "destructive" })
+      onSuccess: (result) => {
+        const failures = Array.isArray(result.failures) ? result.failures : [];
+        if (failures.length) {
+          const successfulIds = new Set(
+            (Array.isArray(result.createdItems) ? result.createdItems : [])
+              .map((item: any) => String(item.clientId ?? ""))
+              .filter(Boolean),
+          );
+          const remainingRows = preparedRows.filter(row => !successfulIds.has(String(row.id)));
+          const details = failures
+            .map((failure: any) => `#${failure.index}: ${ecotrackFailureText(failure.details) || t("admin.ecotrackPortal.common.error")}`)
+            .join(" • ");
+          setRows(remainingRows);
+          setSubmissionError(details);
+          toast({
+            title: t("admin.ecotrackPortal.orders.bulkModal.partialSuccess", {
+              success: successfulIds.size,
+              failed: failures.length,
+            }),
+            description: details,
+            variant: "destructive",
+          });
+          return;
+        }
+        setRows([]);
+        toast({ title: t("admin.ecotrackPortal.common.success") });
+        onClose();
+      },
+      onError: (err) => {
+        setSubmissionError(err.message);
+        toast({ title: t("admin.ecotrackPortal.common.error"), description: err.message, variant: "destructive" });
+      }
     });
   };
 
@@ -838,9 +1229,35 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
           <h2 className="text-xl font-bold">{t("admin.ecotrackPortal.orders.bulkModal.title")}</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
         </div>
-        <div className="p-4 flex gap-2 border-b border-slate-100 bg-slate-50">
+        <div className="p-4 flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50">
           <Button variant="outline" onClick={addRow}><Plus className="w-4 h-4 mr-2"/> {t("admin.ecotrackPortal.orders.bulkModal.addRow")}</Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) void importExcel(file);
+            }}
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+            {isImporting
+              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              : <Upload className="w-4 h-4 mr-2" />}
+            {t("admin.ecotrackPortal.orders.bulkModal.importExcel")}
+          </Button>
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            {t("admin.ecotrackPortal.orders.bulkModal.importHint")}
+          </span>
         </div>
+        {submissionError && (
+          <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{submissionError}</span>
+          </div>
+        )}
         <div className="p-0 overflow-auto flex-1 bg-white">
           {rows.length === 0 ? (
             <div className="h-40 flex items-center justify-center text-slate-400">
@@ -865,6 +1282,7 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                    <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.remark")}</th>
                    <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.stopDesk")}</th>
                    <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.fragile")}</th>
+                   <th className="px-2 py-2">{t("admin.ecotrackPortal.forms.mapLink")}</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
@@ -878,8 +1296,8 @@ function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
         </div>
         <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
           <Button variant="ghost" onClick={onClose}>{t("admin.ecotrackPortal.common.cancel")}</Button>
-          <Button onClick={submit} disabled={mutation.isPending || rows.length === 0} className="bg-[#E10600] text-white">
-            {mutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : null}
+          <Button onClick={submit} disabled={mutation.isPending || desksLoading || rows.length === 0} className="bg-[#E10600] text-white">
+            {mutation.isPending || desksLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : null}
             {t("admin.ecotrackPortal.orders.bulkModal.submit")}
           </Button>
         </div>
@@ -897,6 +1315,17 @@ function BulkOrderRow({ row, index, wilayas, updateRow, removeRow }: {
 }) {
   const { t } = useTranslation();
   const { data: communes = [], isLoading: communesLoading } = useEcotrackCommunes(row.code_wilaya);
+  useEffect(() => {
+    if (communesLoading || !row.commune) return;
+    const requested = normalizeEcotrackLookup(row.commune);
+    const match = communes.find((commune: any) => normalizeEcotrackLookup(commune.nom) === requested);
+    if (match) {
+      if (String(match.nom) !== String(row.commune)) updateRow(row.id, "commune", String(match.nom));
+      if (row._commune_valid !== 1) updateRow(row.id, "_commune_valid", 1);
+    } else if (row._commune_valid !== 0) {
+      updateRow(row.id, "_commune_valid", 0);
+    }
+  }, [communes, communesLoading, row.id, row.commune, row._commune_valid, updateRow]);
   const cellInput = (field: string, options: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <Input {...options} className="h-8 min-w-28 text-xs" value={row[field]} onChange={event => updateRow(row.id, field, event.target.value)} />
   );
@@ -928,13 +1357,118 @@ function BulkOrderRow({ row, index, wilayas, updateRow, removeRow }: {
         <select className="h-8 min-w-32 rounded-md border border-input bg-white px-2 text-xs" value={row.type} onChange={event => updateRow(row.id, "type", event.target.value)}>
           <option value="1">{t("admin.ecotrackPortal.forms.delivery")}</option>
           <option value="2">{t("admin.ecotrackPortal.forms.exchange")}</option>
+          <option value="3">{t("admin.ecotrackPortal.forms.pickup")}</option>
+          <option value="4">{t("admin.ecotrackPortal.forms.collection")}</option>
         </select>
       </td>
       <td className="px-2 py-2">{cellInput("remarque")}</td>
       <td className="px-2 py-2 text-center"><input type="checkbox" checked={Boolean(row.stop_desk)} onChange={event => updateRow(row.id, "stop_desk", event.target.checked ? 1 : 0)} /></td>
       <td className="px-2 py-2 text-center"><input type="checkbox" checked={Boolean(row.fragile)} onChange={event => updateRow(row.id, "fragile", event.target.checked ? 1 : 0)} /></td>
+      <td className="px-2 py-2">{cellInput("gps_link", { type: "url" })}</td>
       <td className="px-2 py-2"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeRow(row.id)}><Trash2 className="w-4 h-4"/></Button></td>
     </tr>
+  );
+}
+
+function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void }) {
+  const { t } = useTranslation();
+  const { data: wilayas = [] } = useEcotrackWilayas();
+  const value = (...keys: string[]) => {
+    for (const key of keys) {
+      const candidate = order?.[key];
+      if (candidate !== null && candidate !== undefined && candidate !== "") return candidate;
+    }
+    return "—";
+  };
+  const getRaw = (...keys: string[]) => {
+    for (const key of keys) {
+      const candidate = order?.[key];
+      if (candidate !== null && candidate !== undefined && candidate !== "") return candidate;
+    }
+    return null;
+  };
+  const yesNo = (candidate: unknown) =>
+    Number(candidate) === 1 || candidate === true || String(candidate).toLocaleLowerCase() === "oui"
+      ? t("admin.ecotrackPortal.orders.details.yes")
+      : t("admin.ecotrackPortal.orders.details.no");
+  
+  const rawId = getRaw("wilaya_id", "code_wilaya");
+  const rawName = getRaw("wilaya_name", "wilaya");
+
+  let matchedWilaya = null;
+  if (rawId) {
+    const cleanId = String(rawId).replace(/^DZ/, "").replace(/^0+/, "");
+    matchedWilaya = wilayas.find((w: any) => String(w.wilaya_id).replace(/^DZ/, "").replace(/^0+/, "") === cleanId);
+  }
+  if (!matchedWilaya && rawName) {
+    const searchName = String(rawName).toLowerCase().trim();
+    matchedWilaya = wilayas.find((w: any) => String(w.wilaya_name).toLowerCase().trim() === searchName);
+  }
+
+  let displayWilaya = "—";
+  if (matchedWilaya) {
+    // Determine the most readable code form (prefer just the number if possible, or whatever it is)
+    const code = String(matchedWilaya.wilaya_id).replace(/^DZ/, "").replace(/^0+/, "");
+    displayWilaya = `(${code || matchedWilaya.wilaya_id}, ${matchedWilaya.wilaya_name})`;
+  } else if (rawId && rawName) {
+    displayWilaya = `(${rawId}, ${rawName})`;
+  } else if (rawId) {
+    displayWilaya = `(${rawId})`;
+  } else if (rawName) {
+    displayWilaya = String(rawName);
+  }
+
+  const type = String(value("type_id", "type"));
+  const typeLabel = type === "2"
+    ? t("admin.ecotrackPortal.forms.exchange")
+    : type === "3"
+      ? t("admin.ecotrackPortal.forms.pickup")
+      : type === "4"
+        ? t("admin.ecotrackPortal.forms.collection")
+        : t("admin.ecotrackPortal.forms.delivery");
+  const fields = [
+    [t("admin.ecotrackPortal.orders.table.tracking"), value("tracking")],
+    [t("admin.ecotrackPortal.forms.reference"), value("reference")],
+    [t("admin.ecotrackPortal.forms.client"), value("client", "nom_client")],
+    [t("admin.ecotrackPortal.forms.phone"), value("phone", "tel", "telephone")],
+    [t("admin.ecotrackPortal.forms.phone2"), value("phone_2", "tel2", "telephone_2")],
+    [t("admin.ecotrackPortal.forms.wilaya"), displayWilaya],
+    [t("admin.ecotrackPortal.forms.commune"), value("commune_name", "commune")],
+    [t("admin.ecotrackPortal.forms.address"), value("adresse")],
+    [t("admin.ecotrackPortal.forms.amount"), formatDZD(Number(value("montant")) || 0)],
+    [t("admin.ecotrackPortal.forms.products"), value("products", "product", "produit")],
+    [t("admin.ecotrackPortal.forms.weight"), value("weight")],
+    [t("admin.ecotrackPortal.forms.operationType"), typeLabel],
+    [t("admin.ecotrackPortal.forms.stopDesk"), yesNo(value("stop_desk"))],
+    [t("admin.ecotrackPortal.forms.fragile"), yesNo(value("fragile"))],
+    [t("admin.ecotrackPortal.forms.remark"), value("remarque", "remark")],
+    [t("admin.ecotrackPortal.tracking.status"), humanizeEcotrackStatus(value("status", "global_status"), t)],
+    [t("admin.ecotrackPortal.orders.details.createdAt"), value("created_at", "createdAt")],
+    [t("admin.ecotrackPortal.orders.details.updatedAt"), value("last_updated_at", "updated_at", "updatedAt")],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">{t("admin.ecotrackPortal.orders.details.title")}</h2>
+            <p className="mt-1 font-mono text-xs text-slate-500">{value("tracking")}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
+        </div>
+        <div className="overflow-auto bg-slate-50 p-5">
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {fields.map(([label, fieldValue]) => (
+              <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+                <dd className="mt-1 break-words text-sm font-medium text-slate-800">{String(fieldValue)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </div>
   );
 }
 

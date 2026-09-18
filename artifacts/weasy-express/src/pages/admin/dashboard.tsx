@@ -16,13 +16,19 @@ const AnalyticsView          = lazy(() => import("./AnalyticsView"));
 const AgentApplicationsView  = lazy(() => import("./AgentApplicationsView"));
 const EcotrackSettingsView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackSettingsView"));
 const EcotrackWorkspaceView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackWorkspaceView"));
+const EcotrackDashboardView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDashboardView"));
+const EcotrackReportsView    = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackReportsView"));
+const EcotrackDelaysView     = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDelaysView"));
 import { useTranslation } from "react-i18next";
+import { ChevronDown, ChevronRight, History } from "lucide-react";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { WILAYA_LIST } from "@/lib/wilayas";
+import { useEcotrackDashboard } from "@/hooks/use-ecotrack";
+import { humanizeEcotrackStatus } from "./EcotrackWorkspaceView";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -123,20 +129,56 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-settings";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
   partnerCount, agentApplicationCount, officeCount, isOpen, onClose,
+  isCollapsed = false, toggleCollapse,
 }: {
-  view: SidebarView; setView: (v: SidebarView) => void;
+  view: string; setView: (v: string) => void;
   role: AdminRole; username: string;
   onLogout: () => void; onChangePassword: () => void;
   partnerCount: number; agentApplicationCount: number; officeCount: number;
   isOpen: boolean; onClose: () => void;
+  isCollapsed?: boolean; toggleCollapse?: () => void;
 }) {
   const { t } = useTranslation();
   const isAdmin = role === "admin";
+
+  const { data: ecotrackDashboard } = useEcotrackDashboard({ enabled: role === "expediteur" && !HOSTINGER_PUBLIC_BUILD });
+  const rawStatuses = ecotrackDashboard?.statuses || [];
+  const ecotrackStatuses = useMemo(() => {
+    const ordered = [
+      "prete_a_expedier", "en_ramassage", "vers_station", "en_station",
+      "vers_wilaya", "en_preparation", "en_livraison", "suspendu",
+      "livre_non_encaisse", "encaisse_non_paye", "paiements_prets",
+      "retour_chez_livreur", "retour_en_traitement", "retour_recu",
+    ];
+    const aliases: Record<string, string> = {
+      pret_a_expedier: "prete_a_expedier",
+      vers_hub: "vers_station",
+      en_hub: "en_station",
+      stock_en_preparation: "en_preparation",
+      suspendus: "suspendu",
+      "livré_non_encaissé": "livre_non_encaisse",
+      "encaissé_non_payé": "encaisse_non_paye",
+      paiement_pret: "paiements_prets", "paiement_prêt": "paiements_prets", "paiements_prêts": "paiements_prets",
+      retour_en_transit: "retour_en_traitement",
+      return_received: "retour_recu", retour_en_stock: "retour_recu",
+    };
+    const counts = new Map(ordered.map((status) => [status, 0]));
+    for (const item of rawStatuses) {
+      const raw = String(item.status ?? "").toLocaleLowerCase();
+      const canonical = aliases[raw] ?? raw;
+      if (counts.has(canonical)) counts.set(canonical, (counts.get(canonical) ?? 0) + (Number(item.count) || 0));
+    }
+    return ordered
+      .map((status) => ({ status, count: counts.get(status) ?? 0 }))
+      .filter((item) => item.count > 0);
+  }, [rawStatuses]);
+
+  const [isCommandesOpen, setIsCommandesOpen] = useState(view.startsWith("ecotrack-status-"));
 
   // ── Push notification state ───────────────────────────────────────────────
   const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
@@ -206,33 +248,41 @@ function SidebarInner({
     return sidebarTeamPerms.length === 0 || sidebarTeamPerms.includes(section);
   }
 
-  const navItem = (v: SidebarView, label: string, badge: number, icon: React.ReactNode) => (
+  const navItem = (v: string, label: string, badge: number, icon: React.ReactNode) => (
     <button
       onClick={() => { setView(v); onClose(); }}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+      title={isCollapsed ? label : undefined}
+      className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
         view === v ? "bg-[#E10600] text-white shadow-lg shadow-red-900/30" : "text-white/60 hover:text-white hover:bg-white/5"
       }`}
     >
       {icon}
-      <span>{label}</span>
+      <span className={isCollapsed ? "md:hidden" : ""}>{label}</span>
       {badge > 0 && (
-        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${view === v ? "bg-white/20 text-white" : "bg-white/10 text-white/60"}`}>{badge}</span>
+        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${view === v ? "bg-white/20 text-white" : "bg-white/10 text-white/60"} ${isCollapsed ? "md:hidden" : ""}`}>{badge}</span>
       )}
     </button>
   );
 
   return (
-    <aside className={`fixed inset-y-0 left-0 w-64 bg-[#0F172A] flex flex-col z-40 shadow-xl transition-transform duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
-      <div className="px-5 py-5 border-b border-white/10">
-        <img src={logoWhitePath} alt="Weasy Express" className="h-10 w-auto object-contain" />
-        <p className="text-white/40 text-xs mt-2 font-medium uppercase tracking-widest">{t("admin.sidebar.label")}</p>
+    <aside className={`fixed inset-y-0 left-0 bg-[#0F172A] flex flex-col z-40 shadow-xl transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"} ${isCollapsed ? "w-64 md:w-[72px]" : "w-64"}`}>
+      <div className={`px-5 py-5 border-b border-white/10 flex flex-col ${isCollapsed ? "md:items-center md:px-2" : ""}`}>
+        <img src={logoWhitePath} alt="Weasy Express" className={`object-contain transition-all duration-300 ${isCollapsed ? "h-8 w-12" : "h-10 w-auto"}`} />
+        <p className={`text-white/40 text-xs mt-2 font-medium uppercase tracking-widest ${isCollapsed ? "md:hidden" : ""}`}>{t("admin.sidebar.label")}</p>
       </div>
 
-      <div className="px-5 py-3 border-b border-white/5">
-        <p className="text-white/80 text-xs font-semibold truncate">{username}</p>
-        <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full mt-1 ${ROLE_COLOR[role]}`}>
-          {t(`admin.roles.${role}`)}
-        </span>
+      <div className={`px-5 py-3 border-b border-white/5 flex items-center gap-2 ${isCollapsed ? "md:justify-center md:px-2" : "justify-between"}`}>
+        <div className={isCollapsed ? "md:hidden" : ""}>
+          <p className="text-white/80 text-xs font-semibold truncate">{username}</p>
+          <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full mt-1 ${ROLE_COLOR[role]}`}>
+            {t(`admin.roles.${role}`)}
+          </span>
+        </div>
+        {toggleCollapse && (
+          <button onClick={toggleCollapse} title="Toggle Sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all">
+            <svg className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+          </button>
+        )}
       </div>
 
       {isAdmin ? (
@@ -255,6 +305,9 @@ function SidebarInner({
           <div className="my-2 border-t border-white/5" />
           {navItem("performance", t("admin.sidebar.performance"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
           {navItem("charges", t("admin.charges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -346,8 +399,88 @@ function SidebarInner({
         </nav>
       ) : role === "expediteur" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && navItem("ecotrack", t("admin.ecotrackPortal.nav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7h-3V4H3a2 2 0 00-2 2v11h2a3 3 0 006 0h6a3 3 0 006 0h2v-5l-3-5zM6 19a2 2 0 110-4 2 2 0 010 4zm12 0a2 2 0 110-4 2 2 0 010 4zM17 9h2l2 3h-4V9z" /></svg>
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-dashboard") && navItem("ecotrack-dashboard", t("admin.sidebar.ecotrackDashboard"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isCollapsed && toggleCollapse) {
+                    toggleCollapse();
+                    setIsCommandesOpen(true);
+                    return;
+                  }
+                  setIsCommandesOpen((open) => !open);
+                }}
+                aria-expanded={isCommandesOpen}
+                title={isCollapsed ? t("admin.ecotrackPortal.nav") : undefined}
+                className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  view.startsWith("ecotrack-status-")
+                    ? "bg-white/10 text-white"
+                    : "text-white/60 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7h-3V4H3a2 2 0 00-2 2v11h2a3 3 0 006 0h6a3 3 0 006 0h2v-5l-3-5zM6 19a2 2 0 110-4 2 2 0 010 4zm12 0a2 2 0 110-4 2 2 0 010 4zM17 9h2l2 3h-4V9z" /></svg>
+                <span className={`flex-1 text-start ${isCollapsed ? "md:hidden" : ""}`}>{t("admin.ecotrackPortal.nav")}</span>
+                <span className={isCollapsed ? "md:hidden" : ""}>
+                  {isCommandesOpen
+                    ? <ChevronDown className="h-4 w-4 shrink-0" />
+                    : <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />}
+                </span>
+              </button>
+              {isCommandesOpen && !isCollapsed && (
+                <div className="ms-5 mt-1 space-y-0.5 border-s border-white/10 ps-2">
+                  {ecotrackStatuses.map((item: any) => {
+                    const status = String(item.status);
+                    const statusView = `ecotrack-status-${status}`;
+                    const active = view === statusView;
+                    return (
+                      <button
+                        type="button"
+                        key={status}
+                        onClick={() => { setView(statusView); onClose(); }}
+                        className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors ${
+                          active
+                            ? "bg-[#E10600] text-white font-semibold"
+                            : "text-white/55 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-start" title={humanizeEcotrackStatus(status, t)}>
+                          {humanizeEcotrackStatus(status, t)}
+                        </span>
+                        {Number(item.count) > 0 && (
+                          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                            active ? "bg-white/20 text-white" : "bg-white/10 text-white/50"
+                          }`}>
+                            {item.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && navItem("ecotrack-history", t("admin.ecotrackPortal.history"), 0,
+            <History className="w-5 h-5 shrink-0" />
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-desks") && navItem("ecotrack-desks", t("admin.ecotrackPortal.desksNav"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-fees") && navItem("ecotrack-fees", t("admin.ecotrackPortal.feesNav"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6v12m3-9.5c-.7-.9-1.7-1.5-3-1.5-1.7 0-3 1-3 2.5s1.3 2.2 3 2.5 3 1 3 2.5-1.3 2.5-3 2.5c-1.3 0-2.4-.6-3-1.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-products") && navItem("ecotrack-products", t("admin.ecotrackPortal.productsNav"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-reports") && navItem("ecotrack-reports", t("admin.sidebar.ecotrackReports"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-delays") && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
           {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
@@ -372,8 +505,8 @@ function SidebarInner({
         <div className="flex-1" />
       )}
 
-      <div className="px-3 pb-5 space-y-1 border-t border-white/10 pt-4">
-        <div className="flex items-center gap-1 px-3 pb-2">
+      <div className={`px-3 pb-5 space-y-1 border-t border-white/10 pt-4 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
+        <div className={`gap-1 pb-2 ${isCollapsed ? "hidden" : "flex items-center px-3"}`}>
           {SUPPORTED_LANGUAGES.map((lng) => (
             <button
               key={lng}
@@ -391,7 +524,7 @@ function SidebarInner({
             onClick={toggleNotifications}
             disabled={notifLoading}
             title={notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 ${
+            className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 ${
               notifEnabled ? "text-[#E10600] hover:bg-white/5" : "text-white/50 hover:text-white hover:bg-white/5"
             }`}
           >
@@ -402,17 +535,19 @@ function SidebarInner({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               )}
             </svg>
-            {notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
-            {notifLoading && <span className="ml-auto w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+            <span className={isCollapsed ? "md:hidden" : ""}>
+              {notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+            </span>
+            {notifLoading && <span className={`w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin ${isCollapsed ? "absolute top-1 right-1" : "ml-auto"}`} />}
           </button>
         )}
-        <button onClick={onChangePassword} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all">
+        <button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-          {t("admin.sidebar.changePassword")}
+          <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.changePassword")}</span>
         </button>
-        <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all">
+        <button onClick={onLogout} title={t("admin.sidebar.logout")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-          {t("admin.sidebar.logout")}
+          <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.logout")}</span>
         </button>
       </div>
     </aside>
@@ -2773,18 +2908,21 @@ export default function AdminDashboard() {
   const username = localStorage.getItem(isExpediteurPath ? "exp_username" : "admin_username") ?? "user";
   const isTeam = localStorage.getItem(isExpediteurPath ? "exp_is_team" : "admin_is_team") === "1";
   const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem(isExpediteurPath ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
+  const effectiveTeamPerms = teamPerms.includes("ecotrack") && !teamPerms.includes("ecotrack-dashboard")
+    ? ["ecotrack-dashboard", ...teamPerms]
+    : teamPerms;
 
   // For team sub-accounts, restrict allowed sections to what the parent granted
   const EXPEDITEUR_SECTIONS: SidebarView[] = HOSTINGER_PUBLIC_BUILD
     ? ["queue", "payouts", "team"]
-    : ["ecotrack", "queue", "payouts", "team", "ecotrack-settings"];
+    : ["ecotrack-dashboard", "ecotrack", "ecotrack-desks", "ecotrack-fees", "ecotrack-products", "ecotrack-reports", "ecotrack-delays", "queue", "payouts", "team", "ecotrack-settings"];
   const EXPEDITEUR_TEAM_SECTIONS: SidebarView[] = HOSTINGER_PUBLIC_BUILD
     ? ["queue", "payouts", "team"]
-    : ["ecotrack", "queue", "payouts", "team"];
+    : ["ecotrack-dashboard", "ecotrack", "ecotrack-desks", "ecotrack-fees", "ecotrack-products", "ecotrack-reports", "ecotrack-delays", "queue", "payouts", "team"];
   const OFFICE_SECTIONS: SidebarView[] = ["office-dashboard", "queue", "returns", "merchants", "payouts", "messaging", "team", "analytics"];
   const allowedSections: SidebarView[] = (role === "expediteur" && isTeam)
     ? (teamPerms.length > 0
-      ? EXPEDITEUR_TEAM_SECTIONS.filter(s => teamPerms.includes(s))
+      ? EXPEDITEUR_TEAM_SECTIONS.filter(s => effectiveTeamPerms.includes(s))
       : EXPEDITEUR_TEAM_SECTIONS)
     : role === "office" && isTeam && teamPerms.length > 0
     ? OFFICE_SECTIONS.filter(s => teamPerms.includes(s))
@@ -2801,27 +2939,45 @@ export default function AdminDashboard() {
     : "dashboard";
   const viewStorageKey = `weasy:${isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
   const permittedViews = useMemo<SidebarView[]>(() => {
-    if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
+    if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "ecotrack-delays", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
     if (role === "office") return allowedSections;
     if (role === "finance") return ["charges", "commissions", "workers", "decharges"];
     if (role === "commercial") return ["partners"];
     if (role === "ticket_manager") return ["queue"];
     return allowedSections;
   }, [role, allowedSections]);
-  const [view, setViewState] = useState<SidebarView>(() => {
-    const saved = localStorage.getItem(viewStorageKey) as SidebarView | null;
-    return saved && permittedViews.includes(saved) ? saved : defaultView;
+
+  const isPermitted = useCallback((v: string) => {
+    if ((permittedViews as string[]).includes(v)) return true;
+    if (v.startsWith("ecotrack-status-") && (permittedViews as string[]).includes("ecotrack")) return true;
+    if (v === "ecotrack-history" && (permittedViews as string[]).includes("ecotrack")) return true;
+    return false;
+  }, [permittedViews]);
+
+  const [view, setViewState] = useState<string>(() => {
+    const saved = localStorage.getItem(viewStorageKey) as string | null;
+    return saved && isPermitted(saved) ? saved : defaultView;
   });
-  const setView = useCallback((next: SidebarView) => {
-    const safe = permittedViews.includes(next) ? next : defaultView;
+  const setView = useCallback((next: string) => {
+    const safe = isPermitted(next) ? next : defaultView;
     localStorage.setItem(viewStorageKey, safe);
     setViewState(safe);
-  }, [defaultView, permittedViews, viewStorageKey]);
+  }, [defaultView, isPermitted, viewStorageKey]);
   useEffect(() => {
-    if (!permittedViews.includes(view)) setView(defaultView);
-  }, [view, permittedViews, defaultView, setView]);
+    if (!isPermitted(view)) setView(defaultView);
+  }, [view, isPermitted, defaultView, setView]);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem("admin_sidebar_collapsed") === "1";
+  });
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem("admin_sidebar_collapsed", next ? "1" : "0");
+      return next;
+    });
+  }, []);
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);
@@ -3012,12 +3168,21 @@ export default function AdminDashboard() {
         agentApplicationCount={agentApplications.filter((application) => application.status === "pending").length}
         officeCount={offices.length}
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        isCollapsed={isCollapsed} toggleCollapse={toggleCollapse}
       />
-      <main className="flex-1 md:ml-64 min-h-screen overflow-y-auto pt-14 md:pt-0">
+      <main className={`flex-1 min-h-screen overflow-y-auto pt-14 md:pt-0 transition-all duration-300 ${isCollapsed ? "md:ml-[72px]" : "md:ml-64"}`}>
         <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
-            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-dashboard" && EcotrackDashboardView ? <EcotrackDashboardView onOpenOrderSearch={() => setView("ecotrack-history")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus="prete_a_expedier" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view.startsWith("ecotrack-status-") && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus={view.replace("ecotrack-status-", "")} onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-desks" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="desks" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-fees" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="fees" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-products" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="products" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-reports" && EcotrackReportsView ? <EcotrackReportsView /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-delays" && EcotrackDelaysView ? <EcotrackDelaysView role="expediteur" /> :
             view === "payouts"    ? <PayoutsRequestView onUnauth={unauth} /> :
             view === "team"       ? <TeamView onUnauth={unauth} /> :
             view === "analytics"  ? <AnalyticsView onUnauth={unauth} /> :
@@ -3053,6 +3218,8 @@ export default function AdminDashboard() {
             <OfficesView offices={offices} loading={officesLoading} error={officesError} onRefresh={fetchOffices} onUnauth={unauth} />
           ) : view === "performance" ? (
             <PerformanceView onUnauth={unauth} />
+          ) : view === "ecotrack-delays" && EcotrackDelaysView && !HOSTINGER_PUBLIC_BUILD ? (
+            <EcotrackDelaysView role="admin" />
           ) : view === "charges" ? (
             <ChargesView onUnauth={unauth} />
           ) : view === "commissions" ? (

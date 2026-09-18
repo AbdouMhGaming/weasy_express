@@ -39,11 +39,17 @@ Ecotrack tracking details are split across endpoints: `/get/tracking/info` retur
 
 **How to apply:** Merge both sources by their complete date/time, retain unmatched rows, and preserve unknown non-empty fields for display so new upstream detail fields do not disappear.
 
-Ecotrack order synchronization is server-driven: saving a token and API startup trigger a full import, then complete background cycles continue automatically while the UI polls the local cache.
+Ecotrack order synchronization is server-driven: saving a token and API startup resume the one-time full import, then background refreshes fetch only the newest pages while the UI polls the local cache.
 
 **Why:** Browser-triggered partial syncs left most pages unloaded and stopped when the user closed the page. Ecotrack also rate-limits bursts with short 429 retry windows.
 
-**How to apply:** Pace order-list requests at roughly one per second, honor `Retry-After`, bulk-upsert each page, serialize each account with a MySQL advisory lock, and only reconcile deletions after a complete cycle.
+**How to apply:** Pace order-list requests at roughly one per second, honor `Retry-After`, bulk-upsert each page, serialize each account with a MySQL advisory lock, and only reconcile deletions after the initial complete cycle. Never restart a full-history scan every minute.
+
+Hostinger’s shared MySQL user has a strict hourly connection-handshake quota. Keep the application pool small and long-lived.
+
+**Why:** Repeated deployment/startup and importer activity exhausted `max_connections_per_hour`, simultaneously breaking sync and every dashboard query.
+
+**How to apply:** Use no more than three pooled connections with a long idle timeout, batch cache inserts, and avoid code that creates independent pools or reconnects for each sync page.
 
 Ecotrack `/get/orders` silently defaults to non-archived orders created in the last 90 days; pagination can be complete while older active orders and status counts are still missing.
 
@@ -56,3 +62,27 @@ Successful Ecotrack mutations must update the local order cache before respondin
 **Why:** Waiting for the background cycle hid create/update/delete results after refresh, and Ecotrack keys bulk-create results by reference, so blank or repeated references collide and can associate multiple rows with one tracking/label.
 
 **How to apply:** Cache creates and edits synchronously, delete cached rows synchronously, then await browser list/dashboard invalidation. Correlate each bulk result through its unique submitted reference.
+
+Ecotrack can leave an order's raw `status` as `encaisse_non_paye` after assigning it to a payment batch. A non-null `payment_id` is the discriminator for the separate `paiements_prets` filter state.
+
+**Why:** Production data showed both payment stages sharing the same raw status; using that field alone collapsed “Encaissé non payé” and “Paiement prêt” into one filter and badge.
+
+**How to apply:** When caching orders, derive `paiements_prets` only when the normalized raw status is `encaisse_non_paye` and `payment_id` is non-null. Return the derived cache status to list clients.
+
+Ecotrack bulk creation can partially succeed inside an HTTP 200 response. Exchange orders (`type=2`) intentionally produce two labels: one outgoing label and one exchange/return label.
+
+**Why:** Treating a partial response as one generic failure left successful rows available for retry and created duplicates. A two-label exchange PDF was mistaken for duplicate label generation.
+
+**How to apply:** Correlate every bulk result to its client row, remove successes, retain failures with upstream field messages, and preserve stable references for retries. Do not crop exchange PDFs; users wanting one label must submit a delivery order (`type=1`).
+
+STOP DESK is valid only when Ecotrack lists a relay office for the destination commune. If an imported row requests STOP DESK where none exists, keep the commune and switch that row to home delivery.
+
+**Why:** Changing the commune would misroute the parcel, while forwarding `stop_desk=1` makes Ecotrack reject the order with “Aucun bureau n'est disponible”.
+
+**How to apply:** Load Ecotrack's live `other_desks` list before bulk submission, compare normalized commune names, set `stop_desk=0` for unavailable communes, and clearly warn which rows were changed.
+
+Cached Ecotrack orders identify their commune with `commune_id`; the commune display name is commonly absent from raw order JSON.
+
+**Why:** Filtering cached orders by a selected commune name returned no matches even though the destination existed; production-shaped cache rows contained only the ID.
+
+**How to apply:** Order-list filters must submit the selected commune's real Ecotrack ID and compare it to `commune_id`. Keep name matching only as a compatibility fallback.

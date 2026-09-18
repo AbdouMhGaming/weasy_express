@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { startEcotrackLiveSync } from "./lib/ecotrackSync";
+import { ensureEcotrackStorage, startEcotrackLiveSync } from "./lib/ecotrackSync";
 
 const rawPort = process.env["PORT"];
 const parsed = rawPort ? Number(rawPort) : NaN;
@@ -15,9 +15,14 @@ process.on("unhandledRejection", (err) => {
   logger.error({ err }, "unhandledRejection");
 });
 
-const server = app.listen(port, host, () => {
+const server = app.listen(port, host, async () => {
   logger.info({ port, host }, "Server listening");
-  startEcotrackLiveSync();
+  try {
+    await ensureEcotrackStorage();
+    startEcotrackLiveSync();
+  } catch (err) {
+    logger.error({ err }, "Ecotrack storage initialization failed");
+  }
 });
 
 server.on("error", (err) => {

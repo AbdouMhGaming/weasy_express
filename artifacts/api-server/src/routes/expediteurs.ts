@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
-import { encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
+import { decryptEcotrackToken, encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
 import { clearEcotrackRuntimeCache } from "../lib/ecotrackRuntimeCache";
 import { queueEcotrackFullSync, withEcotrackAccountLock } from "../lib/ecotrackSync";
 
@@ -45,15 +45,24 @@ router.get("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
   const conn = await pool.getConnection();
   try {
     const [[credential]] = await conn.execute(
-      `SELECT token_hint, connection_status, last_validated_at, updated_at
+      `SELECT token_ciphertext, token_iv, token_auth_tag, token_hint, connection_status, last_validated_at, updated_at
        FROM expediteur_ecotrack_credentials WHERE expediteur_id = ? LIMIT 1`,
       [account.id],
     ) as any;
+    let decryptable = false;
+    if (credential) {
+      try {
+        decryptEcotrackToken(credential.token_ciphertext, credential.token_iv, credential.token_auth_tag);
+        decryptable = true;
+      } catch {
+        decryptable = false;
+      }
+    }
     res.json({
       ok: true,
-      connected: Boolean(credential),
+      connected: Boolean(credential) && decryptable,
       tokenHint: credential?.token_hint ?? null,
-      status: credential?.connection_status ?? "disconnected",
+      status: credential && !decryptable ? "reconnect_required" : credential?.connection_status ?? "disconnected",
       lastValidatedAt: credential?.last_validated_at ?? null,
       updatedAt: credential?.updated_at ?? null,
     });

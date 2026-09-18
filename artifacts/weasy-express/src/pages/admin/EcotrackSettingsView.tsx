@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { API_BASE, expediteurHeaders } from "@/lib/api";
+import { API_BASE, expediteurHeaders, readApiJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -30,7 +30,7 @@ export default function EcotrackSettingsView() {
       const response = await fetch(`${API_BASE}/api/expediteur/ecotrack/settings`, {
         headers: expediteurHeaders(),
       });
-      const body = await response.json();
+      const body = await readApiJson(response);
       if (!response.ok || !body.ok) throw new Error(body.error ?? "load_failed");
       setConnection(body);
     } catch {
@@ -52,7 +52,7 @@ export default function EcotrackSettingsView() {
         headers: expediteurHeaders(),
         body: JSON.stringify({ token: token.trim() }),
       });
-      const body = await response.json();
+      const body = await readApiJson(response);
       if (!response.ok || !body.ok) {
         const key = body.error === "ecotrack_not_allowed"
           ? "notAllowed"
@@ -69,7 +69,13 @@ export default function EcotrackSettingsView() {
       setMessage({ type: "success", text: t("admin.ecotrack.saved") });
       await load();
     } catch (error) {
-      const key = error instanceof Error ? error.message : "invalid";
+      const allowedKeys = new Set(["notAllowed", "rootAccountRequired", "unavailable", "invalid"]);
+      const errorKey = error instanceof Error ? error.message : "invalid";
+      const key = allowedKeys.has(errorKey)
+        ? errorKey
+        : errorKey === "server_update_required" || errorKey === "invalid_server_response"
+          ? "serverUpdateRequired"
+          : "invalid";
       setMessage({ type: "error", text: t(`admin.ecotrack.${key}`) });
     } finally {
       setSaving(false);

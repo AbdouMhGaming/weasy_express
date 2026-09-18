@@ -32,6 +32,13 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use("/api", router);
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    ok: false,
+    error: "api_route_not_found",
+    path: req.path,
+  });
+});
 
 // In production, optionally serve a built SPA from STATIC_DIR (or ./public next to the bundle).
 const staticDirEnv = process.env["STATIC_DIR"];

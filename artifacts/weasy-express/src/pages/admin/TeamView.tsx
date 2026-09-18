@@ -29,7 +29,12 @@ const HOSTINGER_PUBLIC_BUILD = import.meta.env.VITE_HOSTINGER_BUILD === "true";
 
 const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
   expediteur: [
-    ...(!HOSTINGER_PUBLIC_BUILD ? [{ key: "ecotrack", label: "Ecotrack" }] : []),
+    ...(!HOSTINGER_PUBLIC_BUILD ? [
+      { key: "ecotrack", label: "Commandes" },
+      { key: "ecotrack-desks", label: "Desks" },
+      { key: "ecotrack-fees", label: "Service fees" },
+      { key: "ecotrack-products", label: "Produit" },
+    ] : []),
     { key: "queue",   label: "Queue" },
     { key: "payouts", label: "Payouts" },
     { key: "team",    label: "Team" },

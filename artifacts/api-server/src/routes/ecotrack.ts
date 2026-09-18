@@ -51,12 +51,26 @@ async function credentials(req: AuthedRequest) {
        WHERE expediteur_id=? LIMIT 1`, [account.id],
     ) as any;
     if (!row) throw new EcotrackError("Ecotrack is not connected", 409, null);
-    return { expediteurId: account.id as number, token: ecotrackToken(row.token_ciphertext, row.token_iv, row.token_auth_tag) };
+    try {
+      return { expediteurId: account.id as number, token: ecotrackToken(row.token_ciphertext, row.token_iv, row.token_auth_tag) };
+    } catch {
+      throw new EcotrackError("Ecotrack credential must be reconnected", 409, null, true);
+    }
   } finally { conn.release(); }
 }
 function tracking(value: unknown) {
   const result = String(value ?? "").trim();
   return result.length > 0 && result.length <= 255 ? result : null;
+}
+function parsedOrder(value: unknown): Record<string, any> {
+  if (value && typeof value === "object" && !Buffer.isBuffer(value)) return value as Record<string, any>;
+  const raw = Buffer.isBuffer(value) ? value.toString("utf8") : String(value ?? "");
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 function error(res: any, e: unknown) {
   const x = e instanceof EcotrackError ? e : new EcotrackError("Internal error", 500, null);
@@ -74,12 +88,162 @@ function compact(body: any, allowed: string[]) {
   }
   return result;
 }
+function analyticsDate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+function normalizedStatus(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+function statusCategory(value: unknown) {
+  const status = normalizedStatus(value);
+  if (status.includes("retour") || status.includes("return")) return "returned";
+  if (status.includes("annul") || status.includes("cancel")) return "cancelled";
+  if (status.includes("echec") || status.includes("failed") || status.includes("refus")) return "failed";
+  if (
+    status === "delivered" || status.includes("livre") || status.includes("livred") ||
+    status.includes("encaisse") || status.includes("paye") || status.includes("paiement")
+  ) return "delivered";
+  if (
+    status.includes("ramassage") || status.includes("hub") || status.includes("wilaya") ||
+    status.includes("livraison") || status.includes("transit") || status.includes("picked") ||
+    status.includes("carrier") || status.includes("driver")
+  ) return "inTransit";
+  return "pending";
+}
+function percentChange(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
 const createFields = ["reference", "nom_client", "telephone", "telephone_2", "adresse", "code_postal", "commune", "code_wilaya", "montant", "remarque", "produit", "stock", "quantite", "produit_a_recuperer", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
 const updateFields = ["tracking", "reference", "client", "tel", "tel2", "adresse", "code_postal", "commune", "wilaya", "montant", "remarque", "product", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
 
 async function upstream(req: AuthedRequest) { return credentials(req); }
 
 router.use("/expediteur/ecotrack", adminAuth);
+router.use("/admin/ecotrack", adminAuth);
+
+const wilayaExpression = `CAST(COALESCE(
+  JSON_UNQUOTE(JSON_EXTRACT(c.raw_order, '$.wilaya_id')),
+  JSON_UNQUOTE(JSON_EXTRACT(c.raw_order, '$.code_wilaya'))
+) AS UNSIGNED)`;
+
+router.get("/expediteur/ecotrack/reports", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId } = await credentials(req);
+    const from = analyticsDate(req.query.from), to = analyticsDate(req.query.to);
+    const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
+    const where = ["c.expediteur_id=?"];
+    const params: any[] = [expediteurId];
+    if (from) { where.push("DATE(COALESCE(c.created_at_remote,c.fetched_at))>=?"); params.push(from); }
+    if (to) { where.push("DATE(COALESCE(c.created_at_remote,c.fetched_at))<=?"); params.push(to); }
+    if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }
+    const status = "LOWER(COALESCE(c.status_value,''))";
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        `SELECT ${wilayaExpression} wilayaId,
+          COUNT(*) total,
+          SUM(${status} IN ('en_ramassage','vers_station','vers_hub','en_station','en_hub','vers_wilaya','en_preparation','stock_en_preparation')) inTransit,
+          SUM(${status}='en_livraison') inDelivery,
+          SUM(${status} IN ('suspendu','suspendus')) suspended,
+          SUM(${status} IN ('retour_en_traitement','retour_en_transit','retour_recu','retour_en_stock','return_received')) returnsProcessing,
+          SUM(${status} IN (
+            'livre_non_encaisse','livré_non_encaissé','livred','delivered',
+            'encaisse_non_paye','encaissé_non_payé','encaissed','collected',
+            'paiements_prets','paiement_pret','paiement_prêt','paiements_prêts',
+            'paiement_archive','paiement_archivé','payed','paid'
+          )) delivered,
+          SUM(${status} LIKE '%retour%' OR ${status} LIKE '%return%') returns
+         FROM expediteur_ecotrack_order_cache c
+         WHERE ${where.join(" AND ")}
+         GROUP BY ${wilayaExpression} ORDER BY wilayaId`,
+        params,
+      ) as any;
+      return res.json({ ok: true, rows: rows.map((row: any) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value) || 0]))) });
+    } finally { conn.release(); }
+  } catch (e) { return error(res, e); }
+});
+
+router.get("/expediteur/ecotrack/delays", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId } = await credentials(req);
+    const requestedStatus = normalizedStatus(req.query.status);
+    const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
+    const search = String(req.query.search ?? "").trim().slice(0, 255);
+    const where = ["c.expediteur_id=?", "c.status_value IN ('vers_wilaya','en_livraison')"];
+    const params: any[] = [expediteurId];
+    if (requestedStatus === "vers_wilaya" || requestedStatus === "en_livraison") { where.push("c.status_value=?"); params.push(requestedStatus); }
+    if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }
+    if (search) { where.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR c.phone LIKE ?)"); params.push(...Array(3).fill(`%${search}%`)); }
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.execute(
+        `SELECT c.raw_order, c.tracking, c.client_name, c.status_value status, ${wilayaExpression} wilayaId,
+          COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at) enteredAt,
+          TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW()) elapsedHours,
+          CASE WHEN c.status_value='vers_wilaya' THEN t.vers_wilaya_hours ELSE t.en_livraison_hours END thresholdHours
+         FROM expediteur_ecotrack_order_cache c
+         JOIN ecotrack_delay_thresholds t ON t.wilaya_id=${wilayaExpression}
+         LEFT JOIN (
+           SELECT expediteur_id,tracking,status_value,MAX(occurred_at) entered_at
+           FROM expediteur_ecotrack_status_history GROUP BY expediteur_id,tracking,status_value
+         ) h ON h.expediteur_id=c.expediteur_id AND h.tracking=c.tracking AND h.status_value=c.status_value
+         WHERE ${where.join(" AND ")}
+         HAVING elapsedHours > thresholdHours
+         ORDER BY elapsedHours DESC`,
+        params,
+      ) as any;
+      return res.json({ ok: true, orders: rows.map((row: any) => ({ ...parsedOrder(row.raw_order), tracking: row.tracking, client: row.client_name, status: row.status, wilayaId: Number(row.wilayaId), enteredAt: row.enteredAt, elapsedHours: Number(row.elapsedHours), thresholdHours: Number(row.thresholdHours) })) });
+    } finally { conn.release(); }
+  } catch (e) { return error(res, e); }
+});
+
+router.get("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "admin") return res.status(403).json({ ok: false, error: "forbidden" });
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.execute(
+      `SELECT t.wilaya_id wilayaId,t.vers_wilaya_hours versWilayaHours,t.en_livraison_hours enLivraisonHours,
+        SUM(c.status_value='vers_wilaya' AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.vers_wilaya_hours) versWilayaOverdue,
+        SUM(c.status_value='en_livraison' AND TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW())>t.en_livraison_hours) enLivraisonOverdue
+       FROM ecotrack_delay_thresholds t
+       LEFT JOIN expediteur_ecotrack_order_cache c ON ${wilayaExpression}=t.wilaya_id AND c.status_value IN ('vers_wilaya','en_livraison')
+       LEFT JOIN (
+         SELECT expediteur_id,tracking,status_value,MAX(occurred_at) entered_at
+         FROM expediteur_ecotrack_status_history GROUP BY expediteur_id,tracking,status_value
+       ) h ON h.expediteur_id=c.expediteur_id AND h.tracking=c.tracking AND h.status_value=c.status_value
+       GROUP BY t.wilaya_id,t.vers_wilaya_hours,t.en_livraison_hours ORDER BY t.wilaya_id`,
+    ) as any;
+    return res.json({ ok: true, rows });
+  } finally { conn.release(); }
+});
+
+router.put("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "admin") return res.status(403).json({ ok: false, error: "forbidden" });
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 58) : [];
+  const valid = rows.map((row: any) => ({
+    wilayaId: Math.floor(Number(row.wilayaId)),
+    vers: Math.floor(Number(row.versWilayaHours)),
+    delivery: Math.floor(Number(row.enLivraisonHours)),
+  })).filter((row: any) => row.wilayaId >= 1 && row.wilayaId <= 58 && row.vers >= 1 && row.vers <= 8760 && row.delivery >= 1 && row.delivery <= 8760);
+  if (!valid.length) return res.status(400).json({ ok: false, error: "invalid_thresholds" });
+  const conn = await pool.getConnection();
+  try {
+    await conn.execute(
+      `INSERT INTO ecotrack_delay_thresholds (wilaya_id,vers_wilaya_hours,en_livraison_hours)
+       VALUES ${valid.map(() => "(?,?,?)").join(",")}
+       ON DUPLICATE KEY UPDATE vers_wilaya_hours=VALUES(vers_wilaya_hours),en_livraison_hours=VALUES(en_livraison_hours)`,
+      valid.flatMap((row: any) => [row.wilayaId, row.vers, row.delivery]),
+    );
+    return res.json({ ok: true });
+  } finally { conn.release(); }
+});
 
 router.get("/expediteur/ecotrack/dashboard", async (req: AuthedRequest, res) => {
   try {
@@ -93,16 +257,200 @@ router.get("/expediteur/ecotrack/dashboard", async (req: AuthedRequest, res) => 
         FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? GROUP BY status_value`, [expediteurId]) as any;
       const [recent] = await conn.execute(`SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE expediteur_id=?
         ORDER BY COALESCE(last_updated_at_remote, created_at_remote) DESC, fetched_at DESC LIMIT 10`, [expediteurId]) as any;
-      const [[state]] = await conn.execute("SELECT next_page, last_page, last_synced_at, blocked_until FROM expediteur_ecotrack_sync_state WHERE expediteur_id=?", [expediteurId]) as any;
+      const [[state]] = await conn.execute("SELECT next_page, last_page, last_synced_at, blocked_until, last_error, last_error_at FROM expediteur_ecotrack_sync_state WHERE expediteur_id=?", [expediteurId]) as any;
       const sync = state
         ? {
             ...state,
             complete: state.last_page !== null && Number(state.next_page) === 1 && Boolean(state.last_synced_at),
           }
         : { next_page: 1, last_page: null, last_synced_at: null, blocked_until: null, complete: false };
-      return res.json({ ok: true, totals: { orders: Number(total.total), montant: Number(total.amount), tarifPrestation: Number(total.prestationFees), tarifRetour: Number(total.returnFees) }, statuses, recentOrders: recent.map((r: any) => JSON.parse(r.raw_order)), sync });
+      return res.json({ ok: true, totals: { orders: Number(total.total), montant: Number(total.amount), tarifPrestation: Number(total.prestationFees), tarifRetour: Number(total.returnFees) }, statuses, recentOrders: recent.map((r: any) => parsedOrder(r.raw_order)), sync });
     } finally { conn.release(); }
   } catch (e) { return error(res, e); }
+});
+
+router.get("/expediteur/ecotrack/analytics", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId } = await credentials(req);
+    const from = analyticsDate(req.query.from);
+    const to = analyticsDate(req.query.to);
+    const wilaya = String(req.query.wilaya ?? "").trim().slice(0, 16);
+    const status = String(req.query.status ?? "").trim().slice(0, 255);
+    const dateExpression = "DATE(COALESCE(created_at_remote, fetched_at))";
+    const wilayaExpression = `COALESCE(
+      JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.wilaya_id')),
+      JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.code_wilaya'))
+    )`;
+    const where = ["expediteur_id=?"];
+    const params: any[] = [expediteurId];
+    if (from) { where.push(`${dateExpression} >= ?`); params.push(from); }
+    if (to) { where.push(`${dateExpression} <= ?`); params.push(to); }
+    if (wilaya) { where.push(`${wilayaExpression} = ?`); params.push(wilaya.replace(/^DZ/i, "").replace(/^0+/, "") || "0"); }
+    if (status) { where.push("status_value=?"); params.push(status); }
+    const whereSql = where.join(" AND ");
+
+    let previousWhereSql: string | null = null;
+    let previousParams: any[] = [];
+    if (from && to) {
+      const start = new Date(`${from}T00:00:00Z`);
+      const end = new Date(`${to}T00:00:00Z`);
+      if (start <= end) {
+        const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+        const previousEnd = new Date(start.getTime() - 86_400_000);
+        const previousStart = new Date(previousEnd.getTime() - (days - 1) * 86_400_000);
+        const previousWhere = ["expediteur_id=?", `${dateExpression} >= ?`, `${dateExpression} <= ?`];
+        previousParams = [
+          expediteurId,
+          previousStart.toISOString().slice(0, 10),
+          previousEnd.toISOString().slice(0, 10),
+        ];
+        if (wilaya) { previousWhere.push(`${wilayaExpression} = ?`); previousParams.push(wilaya.replace(/^DZ/i, "").replace(/^0+/, "") || "0"); }
+        if (status) { previousWhere.push("status_value=?"); previousParams.push(status); }
+        previousWhereSql = previousWhere.join(" AND ");
+      }
+    }
+
+    const summarySelect = `COUNT(*) orders, COALESCE(SUM(montant),0) amount,
+      COALESCE(AVG(montant),0) averageAmount, COALESCE(SUM(tarif_prestation),0) serviceFees,
+      COALESCE(SUM(tarif_retour),0) returnFees`;
+    const conn = await pool.getConnection();
+    try {
+      const [[summary]] = await conn.execute(
+        `SELECT ${summarySelect} FROM expediteur_ecotrack_order_cache WHERE ${whereSql}`,
+        params,
+      ) as any;
+      const [statusRows] = await conn.execute(
+        `SELECT status_value status, COUNT(*) count, COALESCE(SUM(montant),0) amount
+         FROM expediteur_ecotrack_order_cache WHERE ${whereSql}
+         GROUP BY status_value ORDER BY count DESC`,
+        params,
+      ) as any;
+      const [trendRows] = await conn.execute(
+        `SELECT ${dateExpression} date, status_value status, COUNT(*) count,
+          COALESCE(SUM(montant),0) amount, COALESCE(SUM(tarif_prestation),0) fees
+         FROM expediteur_ecotrack_order_cache WHERE ${whereSql}
+         GROUP BY ${dateExpression}, status_value ORDER BY date ASC`,
+        params,
+      ) as any;
+      const [wilayaRows] = await conn.execute(
+        `SELECT ${wilayaExpression} wilayaId, status_value status, COUNT(*) count,
+          COALESCE(SUM(montant),0) amount
+         FROM expediteur_ecotrack_order_cache WHERE ${whereSql}
+         GROUP BY ${wilayaExpression}, status_value`,
+        params,
+      ) as any;
+      const [dimensionRows] = await conn.execute(
+        `SELECT
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.type_id')), JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.type')), 'unknown') orderType,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.stop_desk')), '0') stopDesk,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.products')), JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.product')), JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.produit')), '') product,
+          COUNT(*) count, COALESCE(SUM(montant),0) amount
+         FROM expediteur_ecotrack_order_cache WHERE ${whereSql}
+         GROUP BY orderType, stopDesk, product`,
+        params,
+      ) as any;
+      const [recentRows] = await conn.execute(
+        `SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE ${whereSql}
+         ORDER BY COALESCE(last_updated_at_remote, created_at_remote, fetched_at) DESC LIMIT 8`,
+        params,
+      ) as any;
+
+      let previous: any = { orders: 0, amount: 0, averageAmount: 0, serviceFees: 0, returnFees: 0 };
+      if (previousWhereSql) {
+        const [[row]] = await conn.execute(
+          `SELECT ${summarySelect} FROM expediteur_ecotrack_order_cache WHERE ${previousWhereSql}`,
+          previousParams,
+        ) as any;
+        previous = row;
+      }
+
+      const outcomes = { delivered: 0, returned: 0, cancelled: 0, failed: 0, inTransit: 0, pending: 0 };
+      for (const row of statusRows as any[]) outcomes[statusCategory(row.status) as keyof typeof outcomes] += Number(row.count);
+      const trendMap = new Map<string, any>();
+      for (const row of trendRows as any[]) {
+        const date = row.date instanceof Date
+          ? row.date.toISOString().slice(0, 10)
+          : String(row.date ?? "").slice(0, 10);
+        const point = trendMap.get(date) ?? { date, orders: 0, amount: 0, fees: 0, delivered: 0, returned: 0 };
+        point.orders += Number(row.count);
+        point.amount += Number(row.amount);
+        point.fees += Number(row.fees);
+        const category = statusCategory(row.status);
+        if (category === "delivered") point.delivered += Number(row.count);
+        if (category === "returned") point.returned += Number(row.count);
+        trendMap.set(date, point);
+      }
+      const wilayaMap = new Map<string, any>();
+      for (const row of wilayaRows as any[]) {
+        const id = String(row.wilayaId ?? "").replace(/^0+/, "");
+        if (!id) continue;
+        const point = wilayaMap.get(id) ?? { wilayaId: id, total: 0, delivered: 0, returned: 0, amount: 0 };
+        point.total += Number(row.count);
+        point.amount += Number(row.amount);
+        const category = statusCategory(row.status);
+        if (category === "delivered") point.delivered += Number(row.count);
+        if (category === "returned") point.returned += Number(row.count);
+        wilayaMap.set(id, point);
+      }
+      const orderTypes = new Map<string, number>();
+      const deliveryModes = { home: 0, stopDesk: 0 };
+      const products = new Map<string, { name: string; count: number; amount: number }>();
+      for (const row of dimensionRows as any[]) {
+        orderTypes.set(String(row.orderType), (orderTypes.get(String(row.orderType)) ?? 0) + Number(row.count));
+        deliveryModes[String(row.stopDesk) === "1" ? "stopDesk" : "home"] += Number(row.count);
+        const product = String(row.product ?? "").trim();
+        if (product) {
+          const current = products.get(product) ?? { name: product, count: 0, amount: 0 };
+          current.count += Number(row.count);
+          current.amount += Number(row.amount);
+          products.set(product, current);
+        }
+      }
+
+      const orders = Number(summary.orders);
+      const delivered = outcomes.delivered;
+      const amount = Number(summary.amount);
+      const serviceFees = Number(summary.serviceFees);
+      const returnFees = Number(summary.returnFees);
+      return res.json({
+        ok: true,
+        filters: { from, to, wilaya: wilaya || null, status: status || null },
+        summary: {
+          orders,
+          amount,
+          averageAmount: Number(summary.averageAmount),
+          serviceFees,
+          returnFees,
+          netAmount: amount - serviceFees - returnFees,
+          successRate: orders ? Math.round((delivered / orders) * 1000) / 10 : 0,
+          returnRate: orders ? Math.round((outcomes.returned / orders) * 1000) / 10 : 0,
+        },
+        comparison: previousWhereSql ? {
+          orders: percentChange(orders, Number(previous.orders)),
+          amount: percentChange(amount, Number(previous.amount)),
+          averageAmount: percentChange(Number(summary.averageAmount), Number(previous.averageAmount)),
+          serviceFees: percentChange(serviceFees, Number(previous.serviceFees)),
+        } : { orders: null, amount: null, averageAmount: null, serviceFees: null },
+        outcomes,
+        statuses: statusRows.map((row: any) => ({ status: row.status, count: Number(row.count), amount: Number(row.amount) })),
+        trend: [...trendMap.values()],
+        byWilaya: [...wilayaMap.values()]
+          .map((item) => ({
+            ...item,
+            successRate: item.total ? Math.round((item.delivered / item.total) * 1000) / 10 : 0,
+          }))
+          .sort((a, b) => b.total - a.total),
+        orderTypes: [...orderTypes].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count),
+        deliveryModes,
+        products: [...products.values()].sort((a, b) => b.count - a.count),
+        recentOrders: recentRows.map((row: any) => parsedOrder(row.raw_order)),
+      });
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    return error(res, e);
+  }
 });
 
 router.post("/expediteur/ecotrack/sync", async (req: AuthedRequest, res) => {
@@ -120,14 +468,77 @@ router.get("/expediteur/ecotrack/orders", async (req: AuthedRequest, res) => {
   try {
     const { expediteurId } = await upstream(req); const page = Math.max(1, Math.min(100000, Number(req.query.page) || 1));
     const search = String(req.query.search ?? "").trim().slice(0, 255), status = String(req.query.status ?? "").trim().slice(0, 255);
+    const from = analyticsDate(req.query.from), to = analyticsDate(req.query.to);
+    const wilaya = String(req.query.wilaya ?? "").trim().slice(0, 16);
+    const commune = String(req.query.commune ?? "").trim().slice(0, 255);
+    const type = String(req.query.type ?? "").trim().slice(0, 16);
+    const fragile = String(req.query.fragile ?? "").trim();
+    const stopDesk = String(req.query.stop_desk ?? "").trim();
+    const sort = String(req.query.sort ?? "updated_desc");
+    const orderBy = ({
+      created_desc: "COALESCE(created_at_remote, fetched_at) DESC, fetched_at DESC",
+      created_asc: "COALESCE(created_at_remote, fetched_at) ASC, fetched_at ASC",
+      updated_desc: "COALESCE(last_updated_at_remote, created_at_remote, fetched_at) DESC, fetched_at DESC",
+      updated_asc: "COALESCE(last_updated_at_remote, created_at_remote, fetched_at) ASC, fetched_at ASC",
+      amount_desc: "montant DESC, COALESCE(last_updated_at_remote, created_at_remote, fetched_at) DESC",
+      amount_asc: "montant ASC, COALESCE(last_updated_at_remote, created_at_remote, fetched_at) DESC",
+    } as Record<string, string>)[sort] ?? "COALESCE(last_updated_at_remote, created_at_remote, fetched_at) DESC, fetched_at DESC";
     const conn = await pool.getConnection(); try {
       const where = ["expediteur_id=?"]; const params: any[] = [expediteurId];
-      if (status) { where.push("status_value=?"); params.push(status); }
+      if (status) {
+        const aliases: Record<string, string[]> = {
+          prete_a_expedier: ["prete_a_expedier", "pret_a_expedier"],
+          vers_station: ["vers_station", "vers_hub"],
+          en_station: ["en_station", "en_hub"],
+          en_preparation: ["en_preparation", "stock_en_preparation"],
+          suspendu: ["suspendu", "suspendus"],
+          livre_non_encaisse: ["livre_non_encaisse", "livré_non_encaissé"],
+          encaisse_non_paye: ["encaisse_non_paye", "encaissé_non_payé"],
+          paiements_prets: ["paiements_prets", "paiement_pret", "paiement_prêt", "paiements_prêts"],
+          retour_en_traitement: ["retour_en_traitement", "retour_en_transit"],
+          retour_recu: ["retour_recu", "return_received", "retour_en_stock"],
+        };
+        const values = aliases[status] ?? [status];
+        where.push(`status_value IN (${values.map(() => "?").join(",")})`);
+        params.push(...values);
+      }
       if (search) { where.push("(tracking LIKE ? OR reference_value LIKE ? OR client_name LIKE ? OR phone LIKE ?)"); params.push(...Array(4).fill(`%${search}%`)); }
+      if (from) { where.push("DATE(COALESCE(created_at_remote, fetched_at)) >= ?"); params.push(from); }
+      if (to) { where.push("DATE(COALESCE(created_at_remote, fetched_at)) <= ?"); params.push(to); }
+      if (wilaya) {
+        where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.wilaya_id')), JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.code_wilaya'))) = ?");
+        params.push(wilaya.replace(/^DZ/i, "").replace(/^0+/, "") || "0");
+      }
+      if (commune) {
+        where.push(`(
+          JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.commune_id')) = ?
+          OR LOWER(COALESCE(
+            JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.commune_name')),
+            JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.commune'))
+          )) = LOWER(?)
+        )`);
+        params.push(commune);
+        params.push(commune);
+      }
+      if (type) {
+        where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.type_id')), JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.type'))) = ?");
+        params.push(type);
+      }
+      if (fragile === "yes" || fragile === "no") {
+        where.push(`LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.fragile')), '0')) IN (${fragile === "yes" ? "'1','true'" : "'0','false'"})`);
+      }
+      if (stopDesk === "yes" || stopDesk === "no") {
+        where.push(`LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.stop_desk')), '0')) IN (${stopDesk === "yes" ? "'1','true'" : "'0','false'"})`);
+      }
       const [[count]] = await conn.execute(`SELECT COUNT(*) total FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")}`, params) as any;
-      const [rows] = await conn.execute(`SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")}
-        ORDER BY COALESCE(last_updated_at_remote, created_at_remote) DESC, fetched_at DESC LIMIT ? OFFSET ?`, [...params, PAGE_SIZE, (page - 1) * PAGE_SIZE]) as any;
-      const total = Number(count.total); return res.json({ ok: true, data: rows.map((r: any) => JSON.parse(r.raw_order)), pagination: { current_page: page, per_page: PAGE_SIZE, total, last_page: Math.max(1, Math.ceil(total / PAGE_SIZE)) }, source: "cache" });
+      const [rows] = await conn.execute(`SELECT raw_order, status_value FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")}
+        ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...params, PAGE_SIZE, (page - 1) * PAGE_SIZE]) as any;
+      const total = Number(count.total); return res.json({
+        ok: true,
+        data: rows.map((r: any) => ({ ...parsedOrder(r.raw_order), status: r.status_value })),
+        pagination: { current_page: page, per_page: PAGE_SIZE, total, last_page: Math.max(1, Math.ceil(total / PAGE_SIZE)) },
+        source: "cache",
+      });
     } finally { conn.release(); }
   } catch (e) { return error(res, e); }
 });
@@ -187,10 +598,62 @@ router.get("/expediteur/ecotrack/orders/:tracking/commune", async (req: AuthedRe
 async function mutation(req: AuthedRequest, res: any, path: string, method: string, params: any, body?: any) {
   try { const { token } = await upstream(req); const result = await ecotrackRequest(token, path, { method, params, body }); return res.json({ ok: true, result: result.body }); } catch (e) { return error(res, e); }
 }
-function createdTracking(body: any) {
-  return tracking(body?.tracking ?? body?.data?.tracking ?? body?.order?.tracking ?? body?.result?.tracking);
+function createdTracking(body: any, depth = 0): string | null {
+  if (depth > 5 || body === undefined || body === null) return null;
+  if (typeof body === "string" || typeof body === "number") return tracking(body);
+  if (typeof body !== "object") return null;
+
+  for (const key of ["tracking", "tracking_number", "trackingNumber"]) {
+    const value = body[key];
+    if (typeof value === "string" || typeof value === "number") {
+      const id = tracking(value);
+      if (id) return id;
+    }
+  }
+  for (const key of ["data", "order", "result", "parcel", "colis"]) {
+    const id = createdTracking(body[key], depth + 1);
+    if (id) return id;
+  }
+  return null;
+}
+function bulkResults(body: any) {
+  const candidates = [
+    body?.results,
+    body?.data?.results,
+    body?.result?.results,
+    body?.data,
+    body?.result,
+  ];
+  return candidates.find((value) => value && typeof value === "object") ?? {};
+}
+function bulkResultFor(results: any, item: any, index: number) {
+  if (Array.isArray(results)) return results[index];
+  const reference = String(item.reference ?? "");
+  if (Object.prototype.hasOwnProperty.call(results, reference)) return results[reference];
+  if (Object.prototype.hasOwnProperty.call(results, String(index))) return results[String(index)];
+
+  const lowerReference = reference.toLocaleLowerCase();
+  const matchingKey = Object.keys(results).find((key) => key.toLocaleLowerCase() === lowerReference);
+  if (matchingKey !== undefined) return results[matchingKey];
+
+  return Object.values(results).find((value: any) =>
+    String(value?.reference ?? value?.order?.reference ?? "").toLocaleLowerCase() === lowerReference
+  );
+}
+function normalizedPhone(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  return digits.startsWith("213") && digits.length === 12 ? `0${digits.slice(3)}` : digits;
+}
+function normalizedCreateOrder(item: any) {
+  const order = compact(item, createFields);
+  if (order.telephone !== undefined) order.telephone = normalizedPhone(order.telephone);
+  if (order.telephone_2 !== undefined) order.telephone_2 = normalizedPhone(order.telephone_2);
+  return order;
 }
 function cachedCreatedOrder(item: any, id: string) {
+  const now = new Date().toISOString().slice(0, 19).replace("T", " ");
   return {
     tracking: id,
     reference: item.reference ?? null,
@@ -208,8 +671,8 @@ function cachedCreatedOrder(item: any, id: string) {
     stop_desk: item.stop_desk ?? 0,
     fragile: item.fragile ?? 0,
     status: "en_preparation",
-    created_at: new Date().toISOString(),
-    last_updated_at: new Date().toISOString(),
+    created_at: now,
+    last_updated_at: now,
   };
 }
 async function patchCachedOrder(expediteurId: number, id: string, changes: any) {
@@ -220,7 +683,7 @@ async function patchCachedOrder(expediteurId: number, id: string, changes: any) 
       [expediteurId, id],
     ) as any;
     if (!row) return;
-    const current = JSON.parse(row.raw_order);
+    const current = parsedOrder(row.raw_order);
     await cacheOrders(expediteurId, [{
       ...current,
       reference: changes.reference ?? current.reference,
@@ -258,7 +721,8 @@ async function refreshCachedOrder(expediteurId: number, token: string, id: strin
 router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res) => {
   try {
     const { expediteurId, token } = await upstream(req);
-    const item = compact(req.body, createFields);
+    const item = normalizedCreateOrder(req.body);
+    if (!item.reference) item.reference = `WEASY-${Date.now()}-1`;
     const result = await ecotrackRequest(token, "/api/v1/create/order", { method: "POST", body: item });
     const id = createdTracking(result.body);
     if (id) await cacheOrders(expediteurId, [cachedCreatedOrder(item, id)]);
@@ -266,13 +730,13 @@ router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res)
   } catch (e) { return error(res, e); }
 });
 router.post("/expediteur/ecotrack/create/orders", async (req: AuthedRequest, res) => {
-  const items = Array.isArray(req.body?.orders) ? req.body.orders : Object.values(req.body?.orders ?? {});
+  const items: any[] = Array.isArray(req.body?.orders) ? req.body.orders : Object.values(req.body?.orders ?? {});
   if (!items.length || items.length > 100) return res.status(400).json({ ok: false, error: "orders_must_contain_1_to_100_items" });
   try {
     const { expediteurId, token } = await upstream(req);
     const usedReferences = new Set<string>();
-    const submitted = items.map((item: any, index: number) => {
-      const order = compact(item, createFields);
+    const submitted: any[] = items.map((item: any, index: number) => {
+      const order = normalizedCreateOrder(item);
       const original = String(order.reference ?? "").trim();
       let reference = original || `WEASY-${Date.now()}-${index + 1}`;
       let suffix = 2;
@@ -282,22 +746,35 @@ router.post("/expediteur/ecotrack/create/orders", async (req: AuthedRequest, res
     });
     const result = await ecotrackRequest(token, "/api/v1/create/orders", {
       method: "POST",
-      body: { orders: Object.fromEntries(submitted.map((item, index) => [index, item])) },
+      body: { orders: Object.fromEntries(submitted.map((item: any, index: number) => [index, item])) },
     });
-    const results = result.body?.results && typeof result.body.results === "object" ? result.body.results : {};
-    const created = submitted.flatMap((item) => {
-      const id = createdTracking(results[item.reference]);
-      return id ? [cachedCreatedOrder(item, id)] : [];
+    const results = bulkResults(result.body);
+    const resolved: Array<{ item: any; response: any; index: number; clientId: string }> = submitted.map((item: any, index: number) => ({
+      item,
+      response: bulkResultFor(results, item, index),
+      index,
+      clientId: String(items[index]?._client_id ?? ""),
+    }));
+    const createdItems = resolved.flatMap(({ item, response, index, clientId }) => {
+      const id = createdTracking(response);
+      return id ? [{ index: index + 1, clientId, reference: item.reference, tracking: id, cached: cachedCreatedOrder(item, id) }] : [];
     });
+    const created = createdItems.map((item) => item.cached);
     if (created.length) await cacheOrders(expediteurId, created);
-    const failures = submitted
-      .filter((item) => !createdTracking(results[item.reference]))
-      .map((item) => ({ reference: item.reference, details: results[item.reference] ?? "missing_result" }));
+    const failures = resolved
+      .filter(({ response }) => !createdTracking(response))
+      .map(({ item, response, index, clientId }) => ({
+        index: index + 1,
+        clientId,
+        reference: item.reference,
+        details: response ?? "missing_result",
+      }));
     return res.json({
       ok: created.length > 0 && failures.length === 0,
       ...(failures.length ? { error: "some_orders_failed" } : {}),
       result: result.body,
       created: created.map((item) => item.tracking),
+      createdItems: createdItems.map(({ cached, ...item }) => item),
       failures,
     });
   } catch (e) { return error(res, e); }

@@ -4,9 +4,18 @@ const ECOTRACK_BASE_URL = "https://wasseliexpress.ecotrack.dz";
 const TOKEN_CONTEXT = "weasy-express:ecotrack-token:v1";
 
 function encryptionKey(): Buffer {
-  const source = process.env.SESSION_SECRET;
-  if (!source || source.length < 16) {
-    throw new Error("SESSION_SECRET must be configured to encrypt Ecotrack tokens");
+  const sessionSecret = process.env.SESSION_SECRET;
+  const adminSecret = process.env.ADMIN_SECRET;
+  const dbPassword = process.env.DB_PASS;
+  const source = sessionSecret && sessionSecret.length >= 16
+    ? `session:${sessionSecret}`
+    : adminSecret && adminSecret.length >= 16
+      ? `admin:${adminSecret}`
+      : dbPassword
+        ? `database:${process.env.DB_HOST ?? ""}\0${process.env.DB_NAME ?? ""}\0${process.env.DB_USER ?? ""}\0${dbPassword}`
+        : null;
+  if (!source) {
+    throw new Error("A stable server secret or database password is required to encrypt Ecotrack tokens");
   }
   return Buffer.from(crypto.hkdfSync("sha256", source, "weasy-express", TOKEN_CONTEXT, 32));
 }

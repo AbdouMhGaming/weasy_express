@@ -5,6 +5,18 @@ export const API_BASE: string =
     ? envApiUrl.replace(/\/$/, "")
     : import.meta.env.BASE_URL.replace(/\/$/, "");
 
+export async function readApiJson(response: Response): Promise<any> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error("server_update_required");
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("invalid_server_response");
+  }
+}
+
 export function adminHeaders(): Record<string, string> {
   // When on the expediteur portal, use the separate expediteur session token
   // so an admin session logged in simultaneously never leaks its privileges.

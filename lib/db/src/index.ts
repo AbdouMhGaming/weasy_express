@@ -21,8 +21,14 @@ export const pool = mysql.createPool({
   password: password ?? "",
   port,
   waitForConnections: true,
-  connectionLimit: 10,
+  // Hostinger shared MySQL limits connection handshakes per hour. Keep a
+  // small, long-lived pool instead of cycling the default ten connections.
+  connectionLimit: 3,
+  maxIdle: 3,
+  idleTimeout: 43_200_000,
+  queueLimit: 0,
   enableKeepAlive: true,
+  keepAliveInitialDelay: 10_000,
 });
 
 export const db = drizzle(pool, { schema, mode: "default" });

@@ -8,6 +8,84 @@ const REQUEST_PACING_MS = 1_100;
 const accountSyncs = new Map<number, Promise<EcotrackSyncResult>>();
 const cycleStartedAt = new Map<number, Date>();
 
+export async function ensureEcotrackStorage() {
+  const conn = await pool.getConnection();
+  try {
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS expediteur_ecotrack_order_cache (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        expediteur_id INT NOT NULL,
+        tracking VARCHAR(255) NOT NULL,
+        reference_value VARCHAR(255) NULL,
+        client_name VARCHAR(255) NULL,
+        phone VARCHAR(64) NULL,
+        status_value VARCHAR(255) NULL,
+        montant DECIMAL(14,2) NULL,
+        tarif_prestation DECIMAL(14,2) NULL,
+        tarif_retour DECIMAL(14,2) NULL,
+        created_at_remote DATETIME NULL,
+        last_updated_at_remote DATETIME NULL,
+        raw_order JSON NOT NULL,
+        fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_ecotrack_cache_expediteur_tracking (expediteur_id, tracking),
+        KEY ix_ecotrack_cache_expediteur_status (expediteur_id, status_value),
+        KEY ix_ecotrack_cache_expediteur_fetched (expediteur_id, fetched_at)
+      )
+    `);
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS expediteur_ecotrack_sync_state (
+        expediteur_id INT NOT NULL,
+        next_page INT NOT NULL DEFAULT 1,
+        last_page INT NULL,
+        last_synced_at TIMESTAMP NULL DEFAULT NULL,
+        blocked_until TIMESTAMP NULL DEFAULT NULL,
+        last_error TEXT NULL,
+        last_error_at TIMESTAMP NULL DEFAULT NULL,
+        PRIMARY KEY (expediteur_id)
+      )
+    `);
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS expediteur_ecotrack_status_history (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        expediteur_id INT NOT NULL,
+        tracking VARCHAR(255) NOT NULL,
+        status_value VARCHAR(255) NOT NULL,
+        occurred_at DATETIME NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_ecotrack_status_event (expediteur_id, tracking, status_value, occurred_at),
+        KEY ix_ecotrack_status_current (expediteur_id, status_value, occurred_at)
+      )
+    `);
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS ecotrack_delay_thresholds (
+        wilaya_id INT NOT NULL,
+        vers_wilaya_hours INT NOT NULL DEFAULT 48,
+        en_livraison_hours INT NOT NULL DEFAULT 72,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (wilaya_id)
+      )
+    `);
+    const thresholdRows = Array.from({ length: 58 }, (_, index) => `(${index + 1},48,72)`).join(",");
+    await conn.execute(`
+      INSERT IGNORE INTO ecotrack_delay_thresholds (wilaya_id, vers_wilaya_hours, en_livraison_hours)
+      VALUES ${thresholdRows}
+    `);
+    const [errorColumn] = await conn.execute(
+      "SHOW COLUMNS FROM expediteur_ecotrack_sync_state LIKE 'last_error'",
+    ) as any;
+    if (!errorColumn.length) {
+      await conn.execute(
+        "ALTER TABLE expediteur_ecotrack_sync_state ADD COLUMN last_error TEXT NULL, ADD COLUMN last_error_at TIMESTAMP NULL DEFAULT NULL",
+      );
+    }
+    logger.info("Ecotrack storage ready");
+  } finally {
+    conn.release();
+  }
+}
+
 export type EcotrackSyncResult = {
   pagesFetched: number;
   nextPage: number;
@@ -20,6 +98,26 @@ export type EcotrackSyncResult = {
 function tracking(value: unknown) {
   const result = String(value ?? "").trim();
   return result.length > 0 && result.length <= 255 ? result : null;
+}
+
+function mysqlDateTime(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function cachedOrderStatus(order: any) {
+  const status = order?.status ?? order?.process_state_id ?? null;
+  const normalized = String(status ?? "")
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_");
+  const paymentId = order?.payment_id;
+  const hasPaymentBatch = paymentId !== undefined && paymentId !== null && paymentId !== "" && paymentId !== "null";
+  return normalized === "encaisse_non_paye" && hasPaymentBatch ? "paiements_prets" : status;
 }
 
 function delay(ms: number) {
@@ -56,24 +154,49 @@ export async function cacheOrders(expediteurId: number, orders: any[]) {
     if (!id) return [];
     return [[
       expediteurId, id, order.reference ?? null, order.client ?? null, order.phone ?? null,
-      order.status ?? order.process_state_id ?? null, order.montant ?? null,
-      order.tarif_prestation ?? null, order.tarif_retour ?? null, order.created_at ?? null,
-      order.last_updated_at ?? null, JSON.stringify(order),
+      cachedOrderStatus(order), order.montant ?? null,
+      order.tarif_prestation ?? null, order.tarif_retour ?? null, mysqlDateTime(order.created_at),
+      mysqlDateTime(order.last_updated_at), JSON.stringify(order),
     ]];
   });
   if (!rows.length) return;
-  const placeholders = rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())").join(",");
   const conn = await pool.getConnection();
   try {
-    await conn.execute(
-      `INSERT INTO expediteur_ecotrack_order_cache
-       (expediteur_id, tracking, reference_value, client_name, phone, status_value, montant, tarif_prestation, tarif_retour, created_at_remote, last_updated_at_remote, raw_order, fetched_at)
-       VALUES ${placeholders}
-       ON DUPLICATE KEY UPDATE reference_value=VALUES(reference_value), client_name=VALUES(client_name), phone=VALUES(phone),
-        status_value=VALUES(status_value), montant=VALUES(montant), tarif_prestation=VALUES(tarif_prestation), tarif_retour=VALUES(tarif_retour), created_at_remote=VALUES(created_at_remote),
-        last_updated_at_remote=VALUES(last_updated_at_remote), raw_order=VALUES(raw_order), fetched_at=NOW()`,
-      rows.flat(),
-    );
+    // Keep statements small for shared-hosting packet and placeholder limits.
+    for (let offset = 0; offset < rows.length; offset += 25) {
+      const batch = rows.slice(offset, offset + 25);
+      const trackings = batch.map((row) => row[1]);
+      const [existingRows] = await conn.execute(
+        `SELECT tracking, status_value FROM expediteur_ecotrack_order_cache
+         WHERE expediteur_id=? AND tracking IN (${trackings.map(() => "?").join(",")})`,
+        [expediteurId, ...trackings],
+      ) as any;
+      const existingStatuses = new Map(existingRows.map((row: any) => [String(row.tracking), String(row.status_value ?? "")]));
+      const historyRows = batch.flatMap((row) => {
+        const currentStatus = String(row[5] ?? "");
+        if (!currentStatus || existingStatuses.get(String(row[1])) === currentStatus) return [];
+        const occurredAt = row[10] ?? row[9] ?? mysqlDateTime(new Date());
+        return [[expediteurId, row[1], currentStatus, occurredAt]];
+      });
+      if (historyRows.length) {
+        await conn.execute(
+          `INSERT IGNORE INTO expediteur_ecotrack_status_history
+           (expediteur_id, tracking, status_value, occurred_at)
+           VALUES ${historyRows.map(() => "(?,?,?,?)").join(",")}`,
+          historyRows.flat(),
+        );
+      }
+      const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())").join(",");
+      await conn.execute(
+        `INSERT INTO expediteur_ecotrack_order_cache
+         (expediteur_id, tracking, reference_value, client_name, phone, status_value, montant, tarif_prestation, tarif_retour, created_at_remote, last_updated_at_remote, raw_order, fetched_at)
+         VALUES ${placeholders}
+         ON DUPLICATE KEY UPDATE reference_value=VALUES(reference_value), client_name=VALUES(client_name), phone=VALUES(phone),
+          status_value=VALUES(status_value), montant=VALUES(montant), tarif_prestation=VALUES(tarif_prestation), tarif_retour=VALUES(tarif_retour), created_at_remote=VALUES(created_at_remote),
+          last_updated_at_remote=VALUES(last_updated_at_remote), raw_order=VALUES(raw_order), fetched_at=NOW()`,
+        batch.flat(),
+      );
+    }
   } finally {
     conn.release();
   }
@@ -164,9 +287,9 @@ async function syncChunk(
   const db = await pool.getConnection();
   try {
     await db.execute(
-      `INSERT INTO expediteur_ecotrack_sync_state (expediteur_id,next_page,last_page,last_synced_at,blocked_until)
-       VALUES (?,?,?,NOW(),NULL)
-       ON DUPLICATE KEY UPDATE next_page=VALUES(next_page),last_page=VALUES(last_page),last_synced_at=NOW(),blocked_until=NULL`,
+      `INSERT INTO expediteur_ecotrack_sync_state (expediteur_id,next_page,last_page,last_synced_at,blocked_until,last_error,last_error_at)
+       VALUES (?,?,?,NOW(),NULL,NULL,NULL)
+       ON DUPLICATE KEY UPDATE next_page=VALUES(next_page),last_page=VALUES(last_page),last_synced_at=NOW(),blocked_until=NULL,last_error=NULL,last_error_at=NULL`,
       [expediteurId, page, lastPage],
     );
     if (page === 1) {
@@ -189,7 +312,7 @@ async function syncChunk(
 export function syncEcotrackAccount(
   expediteurId: number,
   token: string,
-  options: { fullCycle?: boolean } = {},
+  options: { fullCycle?: boolean; recentOnly?: boolean } = {},
 ): Promise<EcotrackSyncResult> {
   const existing = accountSyncs.get(expediteurId);
   if (existing) return existing;
@@ -201,6 +324,33 @@ export function syncEcotrackAccount(
       startDate: "2020-01-01",
       endDate: new Date(Date.now() + 24 * 60 * 60_000).toISOString().slice(0, 10),
     };
+    if (options.recentOnly) {
+      let lastPage: number | null = null;
+      let pagesFetched = 0;
+      for (let page = 1; page <= 2; page++) {
+        const result = await ecotrackRequest(token, "/api/v1/get/orders", {
+          params: { page, start_date: dateRange.startDate, end_date: dateRange.endDate },
+        });
+        const body = result.body ?? {};
+        await cacheOrders(expediteurId, Array.isArray(body.data) ? body.data : []);
+        lastPage = Number(body.last_page) || page;
+        pagesFetched++;
+        if (page >= lastPage) break;
+        await delay(REQUEST_PACING_MS);
+      }
+      const db = await pool.getConnection();
+      try {
+        await db.execute(
+          `UPDATE expediteur_ecotrack_sync_state
+           SET next_page=1,last_synced_at=NOW(),blocked_until=NULL,last_error=NULL,last_error_at=NULL
+           WHERE expediteur_id=?`,
+          [expediteurId],
+        );
+      } finally {
+        db.release();
+      }
+      return { pagesFetched, nextPage: 1, lastPage, complete: true };
+    }
     let result: EcotrackSyncResult;
     do {
       result = await syncChunk(expediteurId, token, dateRange);
@@ -216,6 +366,20 @@ export function syncEcotrackAccount(
       logger.warn({ expediteurId, totalPages }, "Ecotrack full sync safety limit reached");
     }
     return { ...result, pagesFetched: totalPages };
+  }).catch(async (error) => {
+    const message = error instanceof Error ? error.message.slice(0, 1000) : "Ecotrack synchronization failed";
+    const conn = await pool.getConnection();
+    try {
+      await conn.execute(
+        `INSERT INTO expediteur_ecotrack_sync_state (expediteur_id,next_page,last_error,last_error_at)
+         VALUES (?,1,?,NOW())
+         ON DUPLICATE KEY UPDATE last_error=VALUES(last_error),last_error_at=NOW()`,
+        [expediteurId, message],
+      );
+    } finally {
+      conn.release();
+    }
+    throw error;
   }).finally(() => {
     accountSyncs.delete(expediteurId);
   });
@@ -254,7 +418,11 @@ async function runLiveSync(fullCycle = false) {
         credential.token_iv,
         credential.token_auth_tag,
       );
-      const result = await syncEcotrackAccount(expediteurId, token, { fullCycle });
+      const result = await syncEcotrackAccount(
+        expediteurId,
+        token,
+        fullCycle ? { fullCycle: true } : { recentOnly: true },
+      );
       if (result.pagesFetched > 0) {
         logger.info(
           { expediteurId, pagesFetched: result.pagesFetched, nextPage: result.nextPage },
@@ -274,7 +442,7 @@ export function startEcotrackLiveSync() {
     });
   };
   const initialTimer = setTimeout(() => run(true), 3_000);
-  const interval = setInterval(() => run(true), LIVE_SYNC_INTERVAL_MS);
+  const interval = setInterval(() => run(false), LIVE_SYNC_INTERVAL_MS);
   initialTimer.unref();
   interval.unref();
   return () => {
