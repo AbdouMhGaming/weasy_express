@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { OrderFormModal, BulkOrderModal, OrderDetailsModal } from "./EcotrackWorkspaceView";
+import { OrderFormModal, BulkOrderModal, OrderDetailsModal, TrackingDetailModal } from "./EcotrackWorkspaceView";
 import { useToast } from "@/hooks/use-toast";
 
 const ECOTRACK_STATUS_KEYS: Record<string, string> = {
@@ -170,6 +170,7 @@ export default function EcotrackDashboardView() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [selectedParcel, setSelectedParcel] = useState<any | null>(null);
   const [detailOrder, setDetailOrder] = useState<any | null>(null);
+  const [detailTracking, setDetailTracking] = useState("");
   const fabRef = useRef<HTMLDivElement>(null);
   const quickSearchInputRef = useRef<HTMLInputElement>(null);
 
@@ -801,6 +802,15 @@ export default function EcotrackDashboardView() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setDetailTracking(order.tracking)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-violet-600 transition hover:bg-violet-50 hover:text-violet-700"
+                            title={t("admin.ecotrackPortal.tracking.trackOne")}
+                            data-testid={`quick-action-tracking-${order.tracking}`}
+                          >
+                            <Activity className="h-4 w-4" />
+                          </button>
                           {isReadyToShip && (
                             <>
                               <button
@@ -910,6 +920,7 @@ export default function EcotrackDashboardView() {
       {isModalOpen && <OrderFormModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedParcel(null); }} parcel={selectedParcel} isEdit={Boolean(selectedParcel)} />}
       {isBulkModalOpen && <BulkOrderModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />}
       {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
+      {detailTracking && <TrackingDetailModal tracking={detailTracking} onClose={() => setDetailTracking("")} />}
       
       <style>{`
         .map-container svg { width: 100%; height: 100%; object-fit: contain; }

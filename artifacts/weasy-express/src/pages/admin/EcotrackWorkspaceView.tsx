@@ -1472,7 +1472,7 @@ export function OrderDetailsModal({ order, onClose }: { order: any; onClose: () 
   );
 }
 
-function TrackingDetailModal({ tracking, onClose }: { tracking: string; onClose: () => void; }) {
+export function TrackingDetailModal({ tracking, onClose }: { tracking: string; onClose: () => void; }) {
   const { t } = useTranslation();
   const { data, isLoading } = useEcotrackOrderDetail(tracking);
 
