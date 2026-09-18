@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackDelays, useEcotrackDelayThresholds, useUpdateEcotrackDelayThresholds } from "@/hooks/use-ecotrack";
-import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck } from "lucide-react";
+import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,9 @@ function ExpediteurDelaysView({ t }: { t: any }) {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  type DelaySortKey = "enteredAt" | "elapsedHours";
+  const [sortKey, setSortKey] = useState<DelaySortKey>("elapsedHours");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
@@ -49,6 +52,28 @@ function ExpediteurDelaysView({ t }: { t: any }) {
     () => new Map(WILAYA_LIST.map((wilaya) => [String(Number(wilaya.code.replace("DZ", ""))), wilaya.name])),
     [],
   );
+  const sortedOrders = useMemo(() => {
+    const orders = [...(delaysData?.orders || [])];
+    return orders.sort((a: any, b: any) => {
+      const aValue = sortKey === "enteredAt" ? new Date(a.enteredAt || 0).getTime() : Number(a.elapsedHours) || 0;
+      const bValue = sortKey === "enteredAt" ? new Date(b.enteredAt || 0).getTime() : Number(b.elapsedHours) || 0;
+      const difference = aValue - bValue;
+      return sortDirection === "asc" ? difference : -difference;
+    });
+  }, [delaysData?.orders, sortKey, sortDirection]);
+  const toggleSort = (key: DelaySortKey) => {
+    if (sortKey === key) setSortDirection(direction => direction === "desc" ? "asc" : "desc");
+    else {
+      setSortKey(key);
+      setSortDirection("desc");
+    }
+  };
+  const SortIcon = ({ column }: { column: DelaySortKey }) => {
+    if (sortKey !== column) return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />;
+    return sortDirection === "desc"
+      ? <ArrowDown className="h-3.5 w-3.5 text-[#E10600]" />
+      : <ArrowUp className="h-3.5 w-3.5 text-[#E10600]" />;
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
@@ -133,12 +158,20 @@ function ExpediteurDelaysView({ t }: { t: any }) {
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.destination")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.recipient")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.tracking.status")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.enteredAt")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.delays.elapsedHours")}</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">
+                    <button type="button" onClick={() => toggleSort("enteredAt")} className={`inline-flex items-center gap-1.5 ${sortKey === "enteredAt" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-entered-at">
+                      {t("admin.ecotrackPortal.delays.enteredAt")} <SortIcon column="enteredAt" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">
+                    <button type="button" onClick={() => toggleSort("elapsedHours")} className={`inline-flex items-center gap-1.5 ${sortKey === "elapsedHours" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-elapsed-hours">
+                      {t("admin.ecotrackPortal.delays.elapsedHours")} <SortIcon column="elapsedHours" />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {delaysData.orders.map((order: any) => (
+                {sortedOrders.map((order: any) => (
                   <tr key={order.tracking} className="hover:bg-slate-50 transition-colors" data-testid="overdue-row">
                     <td className="px-4 py-3 font-mono font-bold text-slate-900">{order.tracking}</td>
                     <td className="px-4 py-3 font-medium text-slate-700">
@@ -274,7 +307,7 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
               </Button>
             </>
           ) : (
-            <Button data-testid="edit-thresholds" onClick={() => setIsEditing(true)} className="bg-slate-800 text-white hover:bg-slate-900">
+            <Button data-testid="edit-thresholds" onClick={() => setIsEditing(true)} className="bg-[#E10600] text-white hover:bg-red-700">
               <Edit2 className="w-4 h-4 mr-2" />
               {t("admin.ecotrackPortal.common.edit")}
             </Button>

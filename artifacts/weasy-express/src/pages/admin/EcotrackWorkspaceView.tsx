@@ -1531,7 +1531,7 @@ export function TrackingDetailModal({ tracking, onClose }: { tracking: string; o
   );
 }
 
-function AddNoteModal({ tracking, onClose }: { tracking: string; onClose: () => void; }) {
+export function AddNoteModal({ tracking, onClose }: { tracking: string; onClose: () => void; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [note, setNote] = useState("");
