@@ -449,6 +449,7 @@ const ar: Translations = {
       subtitle: "تسجيل الدخول للوصول إلى لوحة التحكم",
       username: "اسم المستخدم",
       password: "كلمة المرور",
+      rememberMe30Days: "تذكرني لمدة 30 يوماً",
       submit: "تسجيل الدخول",
       submitting: "جارٍ تسجيل الدخول…",
       wrongCredentials: "بيانات الاعتماد غير صحيحة. تحقق من اسم المستخدم وكلمة المرور.",

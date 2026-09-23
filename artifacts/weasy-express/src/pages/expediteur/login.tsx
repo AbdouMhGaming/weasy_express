@@ -15,6 +15,7 @@ export default function ExpediteurLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,7 +25,7 @@ export default function ExpediteurLogin() {
       const res = await fetch(`${API_BASE}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, rememberMe }),
       });
       const data = (await res.json()) as {
         ok: boolean; token?: string; role?: string;
@@ -141,6 +142,17 @@ export default function ExpediteurLogin() {
                   </button>
                 </div>
               </div>
+
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 accent-[#E10600]"
+                  data-testid="expediteur-remember-me"
+                />
+                <span>{t("admin.login.rememberMe30Days")}</span>
+              </label>
 
               <button
                 type="submit"

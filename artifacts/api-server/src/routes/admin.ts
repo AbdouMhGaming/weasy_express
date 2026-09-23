@@ -28,9 +28,10 @@ const router: IRouter = Router();
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 router.post("/admin/login", async (req, res) => {
-  const body = (req.body ?? {}) as { username?: unknown; password?: unknown };
+  const body = (req.body ?? {}) as { username?: unknown; password?: unknown; rememberMe?: unknown };
   const username = typeof body.username === "string" ? body.username.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const rememberMe = body.rememberMe === true;
   if (!username || !password) {
     res.status(400).json({ ok: false, error: "missing_fields" }); return;
   }
@@ -72,7 +73,7 @@ router.post("/admin/login", async (req, res) => {
       }
     } finally { conn.release(); }
   } catch { /* non-fatal */ }
-  const token = generateToken(username, result.role!, (extraUserData as any).parentUsername);
+  const token = generateToken(username, result.role!, (extraUserData as any).parentUsername, rememberMe);
   res.json({ ok: true, token, role: result.role, ...(commercialSettings ?? {}), ...extraUserData });
 });
 

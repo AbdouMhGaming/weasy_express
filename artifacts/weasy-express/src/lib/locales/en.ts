@@ -449,6 +449,7 @@ const en: Translations = {
       subtitle: "Sign in to access the dashboard",
       username: "Username",
       password: "Password",
+      rememberMe30Days: "Remember me for 30 days",
       submit: "Sign in",
       submitting: "Signing in…",
       wrongCredentials: "Incorrect credentials. Check your username and password.",

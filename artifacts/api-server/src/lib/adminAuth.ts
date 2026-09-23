@@ -17,7 +17,9 @@ const scryptAsync = promisify<
 
 const ADMIN_SECRET =
   process.env.ADMIN_SECRET ?? "weasy-admin-default-secret-change-me";
-const TOKEN_TTL = 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TOKEN_TTL = DAY_MS;
+const REMEMBERED_TOKEN_TTL = 30 * DAY_MS;
 
 // ── Password hashing ──────────────────────────────────────────────────────────
 
@@ -75,10 +77,11 @@ export async function updateAdminPassword(
 // ── HMAC session tokens ───────────────────────────────────────────────────────
 
 // dataUsername is the parent's username for team sub-accounts; equals username for root accounts.
-export function generateToken(username: string, role: string, dataUsername?: string): string {
+export function generateToken(username: string, role: string, dataUsername?: string, rememberMe = false): string {
   const data = dataUsername && dataUsername !== username ? dataUsername : "";
+  const ttl = rememberMe ? REMEMBERED_TOKEN_TTL : TOKEN_TTL;
   // Use ";" as field separator — dots are valid in usernames and would break parsing
-  const payload = `${Date.now()};${username};${role};${data}`;
+  const payload = `${Date.now()};${username};${role};${data};${ttl}`;
   const sig = crypto
     .createHmac("sha256", ADMIN_SECRET)
     .update(payload)
@@ -107,8 +110,12 @@ export function verifyToken(token: string): {
     const username = parts[1];
     const role = parts[2];
     const dataUsername = parts[3] || undefined; // empty string → undefined (root account)
+    // Tokens issued before Remember me was added have no embedded TTL and retain
+    // the original 24-hour lifetime.
+    const embeddedTtl = Number(parts[4]);
+    const ttl = embeddedTtl === REMEMBERED_TOKEN_TTL ? REMEMBERED_TOKEN_TTL : TOKEN_TTL;
     const age = Date.now() - ts;
-    if (isNaN(age) || age > TOKEN_TTL || age < 0) return { valid: false };
+    if (isNaN(age) || age > ttl || age < 0) return { valid: false };
     const expected = crypto
       .createHmac("sha256", ADMIN_SECRET)
       .update(payload)

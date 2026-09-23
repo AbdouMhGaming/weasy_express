@@ -447,6 +447,7 @@ const fr = {
       subtitle: "Connectez-vous pour accéder au tableau de bord",
       username: "Nom d'utilisateur",
       password: "Mot de passe",
+      rememberMe30Days: "Se souvenir de moi pendant 30 jours",
       submit: "Se connecter",
       submitting: "Connexion en cours…",
       wrongCredentials: "Identifiants incorrects. Vérifiez votre nom d'utilisateur et mot de passe.",
