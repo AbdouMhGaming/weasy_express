@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { API_BASE, authenticatedFetch, expediteurHeaders, readApiJson } from "@/lib/api";
+import { API_BASE, authenticatedFetch, adminHeaders, readApiJson } from "@/lib/api";
 
 const BASE = `${API_BASE}/api/expediteur/ecotrack`;
+const getDynamicBase = () => {
+  if (typeof window === "undefined") return BASE;
+  if (window.location.pathname.startsWith("/suivi")) return `${API_BASE}/api/suivi/ecotrack`;
+  if (window.location.pathname.startsWith("/admin")) return `${API_BASE}/api/admin/ecotrack`;
+  return BASE;
+};
 const fetch = authenticatedFetch;
 
 // Dashboard
@@ -14,7 +20,7 @@ export function useEcotrackReports(filters: { from?: string; to?: string; wilaya
       if (filters.to) searchParams.set("to", filters.to);
       if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
       const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
-      const res = await fetch(`${BASE}/reports${suffix}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/reports${suffix}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -28,7 +34,7 @@ export function useEcotrackDashboard(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["ecotrack", "dashboard"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/dashboard`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/dashboard`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -56,7 +62,7 @@ export function useEcotrackAnalytics(filters: EcotrackAnalyticsFilters) {
       if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
       if (filters.status) searchParams.set("status", filters.status);
       const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
-      const res = await fetch(`${BASE}/analytics${suffix}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/analytics${suffix}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -71,7 +77,7 @@ export function useEcotrackSync() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch(`${BASE}/sync`, { method: "POST", headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/sync`, { method: "POST", headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "actionFailed");
@@ -97,13 +103,14 @@ export type EcotrackOrderFilters = {
 };
 
 export function useEcotrackOrders(
-  params: { page: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters,
+  params: { page: number; pageSize?: number; search: string; status: string; sort?: EcotrackOrderSort } & EcotrackOrderFilters,
   options?: { enabled?: boolean; refetchInterval?: number | false },
 ) {
   return useQuery({
     queryKey: ["ecotrack", "orders", params],
     queryFn: async () => {
       const searchParams = new URLSearchParams({ page: params.page.toString() });
+      if (params.pageSize) searchParams.set("pageSize", params.pageSize.toString());
       if (params.search) searchParams.set("search", params.search);
       if (params.status && params.status !== "all") searchParams.set("status", params.status);
       if (params.sort) searchParams.set("sort", params.sort);
@@ -115,7 +122,7 @@ export function useEcotrackOrders(
       if (params.fragile) searchParams.set("fragile", params.fragile);
       if (params.stopDesk) searchParams.set("stop_desk", params.stopDesk);
 
-      const res = await fetch(`${BASE}/orders?${searchParams.toString()}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/orders?${searchParams.toString()}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -127,93 +134,59 @@ export function useEcotrackOrders(
 }
 
 // Order details
-export function useEcotrackOrderDetail(tracking: string) {
+export function useEcotrackOrderDetail(tracking: string, expediteurId?: number | string) {
   return useQuery({
-    queryKey: ["ecotrack", "order", tracking],
+    queryKey: ["ecotrack", "order", tracking, expediteurId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/orders/${tracking}`, { headers: expediteurHeaders() });
+      let url = `${getDynamicBase()}/orders/${tracking}/history`;
+      if (expediteurId && typeof window !== "undefined" && !window.location.pathname.startsWith("/expediteurs")) {
+        url += `?expediteurId=${expediteurId}`;
+      }
+      const res = await fetch(url, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
-      const infoEnvelope = body.info?.data ?? body.info ?? {};
-      const info = infoEnvelope[tracking] ?? infoEnvelope;
-      const updatesEnvelope = body.updates?.data ?? body.updates ?? {};
-      const updates = updatesEnvelope[tracking] ?? updatesEnvelope;
-      const activity = [
-        ...(Array.isArray(info?.activity) ? info.activity : []),
-        ...(Array.isArray(updates?.activity) ? updates.activity : []),
-      ];
-      const updateRows = Array.isArray(updates)
-        ? updates
-        : Array.isArray(updates?.updates)
-          ? updates.updates
-          : Array.isArray(updates?.data)
-            ? updates.data
-            : [];
-      const dateParts = (event: any) => {
-        const createdAt = String(event?.created_at ?? event?.createdAt ?? "").trim();
-        const [createdDate = "", createdTime = ""] = createdAt.split(/\s+/, 2);
-        return {
-          date: String(event?.date ?? createdDate).trim(),
-          time: String(event?.time ?? createdTime).trim(),
-        };
-      };
-      const timestampKey = (event: any) => {
-        const { date, time } = dateParts(event);
-        return `${date} ${time}`.trim();
-      };
-      const updatesByTimestamp = new Map<string, any[]>();
-      updateRows.forEach((row: any) => {
-        const key = timestampKey(row);
-        const rows = updatesByTimestamp.get(key) ?? [];
-        rows.push(row);
-        updatesByTimestamp.set(key, rows);
+
+      const info = body.order ?? {};
+      const events: any[] = [];
+
+      (body.statusHistory || []).forEach((sh: any) => {
+        const createdAt = sh.created_at || sh.createdAt || "";
+        const [date = "", time = ""] = createdAt.split(" ");
+        events.push({
+          type: "status",
+          status: sh.status,
+          date, time,
+          station: sh.station,
+          scanLocation: sh.scanLocation,
+          reason: sh.reason,
+          details: sh.details,
+          author: sh.auteur || sh.author,
+          driver: sh.livreur || sh.driver,
+          comments: sh.commentaires || sh.comments,
+          remark: sh.remarque || sh.remark,
+          timestamp: new Date(createdAt || 0).getTime(),
+          original: sh
+        });
       });
-      const knownKeys = new Set([
-        "status", "activity", "reason", "date", "time", "created_at", "createdAt",
-        "station", "scanLocation", "details", "postponed_to", "livreur", "driver",
-        "commentaires", "comments", "remarque", "remark", "tracking",
-      ]);
-      const normalizeEvent = (event: any, update: any = {}) => {
-        const { date, time } = dateParts(event?.date || event?.created_at ? event : update);
-        const metadata = Object.entries({ ...event, ...update })
-          .filter(([key, value]) => !knownKeys.has(key) && value !== null && value !== undefined && value !== "")
-          .map(([key, value]) => ({ key, value: typeof value === "object" ? JSON.stringify(value) : String(value) }));
-        return {
-          status: event?.status ?? event?.activity ?? event?.reason ?? update?.status ?? update?.activity ?? update?.reason ?? "",
-          date,
-          time,
-          station: update?.station ?? event?.station ?? event?.scanLocation ?? "",
-          scanLocation: update?.scanLocation ?? event?.scanLocation ?? "",
-          reason: update?.reason ?? event?.reason ?? "",
-          details: update?.details ?? event?.details ?? "",
-          postponedTo: update?.postponed_to ?? event?.postponed_to ?? null,
-          driver: update?.livreur ?? update?.driver ?? event?.livreur ?? event?.driver ?? "",
-          comments: update?.commentaires ?? update?.comments ?? event?.commentaires ?? event?.comments ?? "",
-          remark: update?.remarque ?? update?.remark ?? event?.remarque ?? event?.remark ?? "",
-          metadata,
-        };
-      };
-      const events = activity.map((event: any) => {
-        const key = timestampKey(event);
-        const matchingUpdates = updatesByTimestamp.get(key) ?? [];
-        const update = matchingUpdates.shift() ?? {};
-        if (matchingUpdates.length) updatesByTimestamp.set(key, matchingUpdates);
-        else updatesByTimestamp.delete(key);
-        return normalizeEvent(event, update);
+
+      (body.remarks || []).forEach((rm: any) => {
+        const createdAt = rm.created_at || rm.createdAt || "";
+        const [date = "", time = ""] = createdAt.split(" ");
+        events.push({
+          type: "remark",
+          content: rm.content,
+          author: rm.author,
+          role: rm.role,
+          date, time,
+          timestamp: new Date(createdAt || 0).getTime(),
+          original: rm
+        });
       });
-      for (const remainingRows of updatesByTimestamp.values()) {
-        remainingRows.forEach((row: any) => events.push(normalizeEvent(row)));
-      }
-      events.sort((a: any, b: any) =>
-        `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
-      );
-      return {
-        ...body,
-        info,
-        updates,
-        events,
-      };
+
+      events.sort((a, b) => a.timestamp - b.timestamp);
+
+      return { info, events, ...body };
     },
     enabled: !!tracking,
     refetchInterval: 30_000,
@@ -229,7 +202,7 @@ export function useEcotrackDelays(filters: { status?: string; wilaya?: string; s
       if (filters.wilaya) searchParams.set("wilaya", filters.wilaya);
       if (filters.search) searchParams.set("search", filters.search);
       const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
-      const res = await fetch(`${BASE}/delays${suffix}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${getDynamicBase()}/delays${suffix}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -244,8 +217,8 @@ export function useEcotrackDelayThresholds() {
     queryKey: ["ecotrack", "delay-thresholds"],
     queryFn: async () => {
       const token = localStorage.getItem("admin_token") || "";
-      const res = await fetch(`${API_BASE}/api/admin/ecotrack/delay-thresholds`, { 
-        headers: { "Authorization": `Bearer ${token}` } 
+      const res = await fetch(`${API_BASE}/api/admin/ecotrack/delay-thresholds`, {
+        headers: { "Authorization": `Bearer ${token}` }
       });
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -279,7 +252,7 @@ export function useEcotrackWilayas() {
   return useQuery({
     queryKey: ["ecotrack", "wilayas"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/wilayas`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/wilayas`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       const raw = Array.isArray(body.data) ? body.data : body.data?.data;
@@ -297,7 +270,7 @@ export function useEcotrackCommunes(wilaya_id?: string) {
     queryKey: ["ecotrack", "communes", wilaya_id],
     queryFn: async () => {
       if (!wilaya_id) return [];
-      const res = await fetch(`${BASE}/communes?wilaya_id=${wilaya_id}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/communes?wilaya_id=${wilaya_id}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       // Ecotrack returns communes as an object keyed by string
@@ -315,7 +288,7 @@ export function useEcotrackOrderCommune(tracking?: string, wilayaId?: string) {
   return useQuery({
     queryKey: ["ecotrack", "order-commune", tracking, wilayaId],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/orders/${encodeURIComponent(tracking!)}/commune?wilaya_id=${encodeURIComponent(wilayaId!)}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/orders/${encodeURIComponent(tracking!)}/commune?wilaya_id=${encodeURIComponent(wilayaId!)}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "commune_lookup_failed");
@@ -330,7 +303,7 @@ export function useEcotrackDesks() {
   return useQuery({
     queryKey: ["ecotrack", "desks"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/desks`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/desks`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       return body.data?.data ?? body.data ?? { my_desk: null, other_desks: [] };
@@ -342,7 +315,7 @@ export function useEcotrackFees() {
   return useQuery({
     queryKey: ["ecotrack", "fees"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/fees`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/fees`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       return body.data?.data ?? body.data ?? {};
@@ -354,7 +327,7 @@ export function useEcotrackProducts(page = 1) {
   return useQuery({
     queryKey: ["ecotrack", "products", page],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/products?page=${page}`, { headers: expediteurHeaders() });
+      const res = await fetch(`${BASE}/products?page=${page}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       const raw = body.data?.data ?? body.data;
@@ -370,7 +343,7 @@ export function useCreateEcotrackOrder() {
     mutationFn: async (data: any) => {
       const res = await fetch(`${BASE}/create/order`, {
         method: "POST",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
         body: JSON.stringify(data),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
@@ -393,7 +366,7 @@ export function useBulkCreateEcotrackOrders() {
     mutationFn: async (orders: any[]) => {
       const res = await fetch(`${BASE}/create/orders`, {
         method: "POST",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
         body: JSON.stringify({ orders }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
@@ -418,7 +391,7 @@ export function useUpdateEcotrackOrder() {
     mutationFn: async (data: any) => {
       const res = await fetch(`${BASE}/update/order`, {
         method: "PUT",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
         body: JSON.stringify(data),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
@@ -442,7 +415,7 @@ export function useDeleteEcotrackOrder() {
     mutationFn: async (tracking: string) => {
       const res = await fetch(`${BASE}/order?tracking=${tracking}`, {
         method: "DELETE",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
@@ -465,7 +438,7 @@ export function useValidateEcotrackOrder() {
     mutationFn: async ({ tracking, ask_collection }: { tracking: string; ask_collection: boolean }) => {
       const res = await fetch(`${BASE}/validate`, {
         method: "POST",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
         body: JSON.stringify({ tracking, ask_collection }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
@@ -486,11 +459,14 @@ export function useValidateEcotrackOrder() {
 export function useAddEcotrackNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ tracking, content }: { tracking: string; content: string }) => {
-      const res = await fetch(`${BASE}/note`, {
+    mutationFn: async ({ tracking, content, expediteurId }: { tracking: string; content: string; expediteurId?: number | string }) => {
+      const payload: any = { tracking, content };
+      if (expediteurId) payload.expediteurId = expediteurId;
+
+      const res = await fetch(`${getDynamicBase()}/note`, {
         method: "POST",
-        headers: expediteurHeaders(),
-        body: JSON.stringify({ tracking, content }),
+        headers: adminHeaders(),
+        body: JSON.stringify(payload),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
@@ -498,7 +474,7 @@ export function useAddEcotrackNote() {
       return body;
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", vars.tracking] });
+      queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", vars.tracking] }); queryClient.invalidateQueries({ queryKey: ["ecotrack", "notifications"] });
     },
   });
 }
@@ -509,7 +485,7 @@ export function useRequestReturnEcotrackOrder() {
     mutationFn: async (tracking: string) => {
       const res = await fetch(`${BASE}/return-request`, {
         method: "POST",
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
         body: JSON.stringify({ tracking }),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
@@ -531,7 +507,7 @@ export function useLabelEcotrackOrder() {
   return useMutation({
     mutationFn: async (tracking: string) => {
       const res = await fetch(`${BASE}/orders/${tracking}/label`, {
-        headers: expediteurHeaders(),
+        headers: adminHeaders(),
       });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       if (!res.ok) {
@@ -542,5 +518,55 @@ export function useLabelEcotrackOrder() {
       const blob = await res.blob();
       return URL.createObjectURL(blob);
     },
+  });
+}
+
+export function useEcotrackNotifications() {
+  return useQuery({
+    queryKey: ["ecotrack", "notifications"],
+    queryFn: async () => {
+      const res = await fetch(`${getDynamicBase()}/notifications`, { headers: adminHeaders() });
+      if (!res.ok) return { notifications: [], unreadCount: 0 };
+      const body = await res.json();
+      return {
+        notifications: body.notifications || [],
+        unreadCount: body.unreadCount || 0
+      };
+    },
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number | string) => {
+      await fetch(`${getDynamicBase()}/notifications/${id}/read`, {
+        method: "PUT",
+        headers: adminHeaders()
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ecotrack", "notifications"] });
+    },
+  });
+}
+
+export function useEcotrackFailures(params: { page: number; pageSize?: number; search: string; wilaya?: string }) {
+  return useQuery({
+    queryKey: ["ecotrack", "failures", params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams({ page: params.page.toString() });
+      if (params.pageSize) searchParams.set("pageSize", params.pageSize.toString());
+      if (params.search) searchParams.set("search", params.search);
+      if (params.wilaya) searchParams.set("wilaya", params.wilaya);
+
+      const res = await fetch(`${getDynamicBase()}/failures?${searchParams.toString()}`, { headers: adminHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      return body;
+    },
+    refetchInterval: 30_000,
   });
 }

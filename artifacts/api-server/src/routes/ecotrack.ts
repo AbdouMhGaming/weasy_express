@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
-import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
+import { adminAuth, hasTeamPermission, suiviAuth, type AuthedRequest } from "../lib/adminAuth";
+import { recordRemark } from "../lib/ecotrackEvents";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
 import { cacheOrders, syncEcotrackAccount } from "../lib/ecotrackSync";
 import {
@@ -127,6 +128,7 @@ async function upstream(req: AuthedRequest) { return credentials(req); }
 
 router.use("/expediteur/ecotrack", adminAuth);
 router.use("/admin/ecotrack", adminAuth);
+router.use("/suivi/ecotrack", suiviAuth);
 
 const wilayaExpression = `CAST(COALESCE(
   JSON_UNQUOTE(JSON_EXTRACT(c.raw_order, '$.wilaya_id')),
@@ -215,6 +217,84 @@ router.get("/expediteur/ecotrack/delays", async (req: AuthedRequest, res) => {
       return res.json({ ok: true, orders: rows.map((row: any) => ({ ...parsedOrder(row.raw_order), tracking: row.tracking, client: row.client_name, status: row.status, wilayaId: Number(row.wilayaId), enteredAt: row.enteredAt, elapsedHours: Number(row.elapsedHours), thresholdHours: Number(row.thresholdHours) })) });
     } finally { conn.release(); }
   } catch (e) { return error(res, e); }
+});
+
+/** Cross-expediteur operational delay list for superadmin and suivi readers. */
+async function allDelayedOrders(req: AuthedRequest, res: any) {
+  if (req.adminRole !== "admin" && req.adminRole !== "suivi" && !hasTeamPermission(req, "ecotrack")) {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  const requestedStatus = normalizedStatus(req.query.status);
+  const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
+  const search = String(req.query.search ?? "").trim().slice(0, 255);
+  const owner = String(req.query.expediteur ?? req.query.owner ?? "").trim().slice(0, 100);
+  const where = ["c.status_value IN ('vers_wilaya','en_livraison','suspendu','suspendus') OR c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%'"];
+  const params: any[] = [];
+  const filters: string[] = [`(${where[0]})`];
+  if (requestedStatus === "vers_wilaya" || requestedStatus === "en_livraison") { filters.push("c.status_value=?"); params.push(requestedStatus); }
+  else if (requestedStatus === "suspendu") { filters.push("c.status_value IN ('suspendu','suspendus')"); }
+  else if (requestedStatus === "retour") { filters.push("(c.status_value LIKE 'retour\\_%' OR c.status_value LIKE 'return\\_%')"); }
+  if (wilaya) { filters.push(`${wilayaExpression}=?`); params.push(wilaya); }
+  if (owner) { filters.push("a.username=?"); params.push(owner); }
+  if (search) { filters.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR c.phone LIKE ? OR a.username LIKE ?)"); params.push(...Array(4).fill(`%${search}%`)); }
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.execute(
+        `SELECT c.raw_order,c.expediteur_id expediteurId,c.tracking,c.client_name,c.status_value status,a.username expediteur,
+        ${wilayaExpression} wilayaId,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at) enteredAt,
+        TIMESTAMPDIFF(HOUR,COALESCE(h.entered_at,c.last_updated_at_remote,c.created_at_remote,c.fetched_at),NOW()) elapsedHours,
+        CASE WHEN c.status_value='vers_wilaya' THEN t.vers_wilaya_hours
+          WHEN c.status_value='en_livraison' THEN t.en_livraison_hours
+          WHEN c.status_value IN ('suspendu','suspendus') THEN t.suspendu_hours ELSE t.retour_hours END thresholdHours
+       FROM expediteur_ecotrack_order_cache c
+       JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
+       JOIN ecotrack_delay_thresholds t ON t.wilaya_id=${wilayaExpression}
+       LEFT JOIN (SELECT expediteur_id,tracking,status_value,MAX(occurred_at) entered_at
+         FROM expediteur_ecotrack_status_history GROUP BY expediteur_id,tracking,status_value) h
+         ON h.expediteur_id=c.expediteur_id AND h.tracking=c.tracking AND h.status_value=c.status_value
+       WHERE ${filters.join(" AND ")} HAVING elapsedHours > thresholdHours ORDER BY elapsedHours DESC`,
+      params,
+    ) as any;
+    return res.json({ ok: true, orders: rows.map((row: any) => ({
+      ...parsedOrder(row.raw_order), tracking: row.tracking, client: row.client_name, status: row.status,
+      expediteurId: Number(row.expediteurId), expediteur: row.expediteur, wilayaId: Number(row.wilayaId), enteredAt: row.enteredAt,
+      elapsedHours: Number(row.elapsedHours), thresholdHours: Number(row.thresholdHours),
+    })) });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
+}
+router.get("/admin/ecotrack/delays", allDelayedOrders);
+router.get("/suivi/ecotrack/delays", allDelayedOrders);
+
+router.get("/suivi/ecotrack/failures", async (req: AuthedRequest, res: any) => {
+  const page = Math.max(1, Math.min(10000, Number(req.query.page) || 1));
+  const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 50));
+  const search = String(req.query.search ?? "").trim().slice(0, 255);
+  const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
+  const conn = await pool.getConnection();
+  try {
+    const params: any[] = [];
+    const where = [
+      `(JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.remarque')) IS NOT NULL
+        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.commentaires')) IS NOT NULL
+        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.comment')) IS NOT NULL
+        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.comments')) IS NOT NULL
+        OR EXISTS (SELECT 1 FROM expediteur_ecotrack_remarks r WHERE r.expediteur_id=c.expediteur_id AND r.tracking=c.tracking))`,
+    ];
+    if (search) { where.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR a.username LIKE ?)"); params.push(...Array(3).fill(`%${search}%`)); }
+    if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }
+    const [[count]] = await conn.execute(
+      `SELECT COUNT(*) total FROM expediteur_ecotrack_order_cache c JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur' WHERE ${where.join(" AND ")}`,
+      params,
+    ) as any;
+    const [rows] = await conn.execute(
+      `SELECT c.raw_order,c.expediteur_id expediteurId,c.tracking,c.status_value status,a.username expediteur,c.last_updated_at_remote updatedAt
+       FROM expediteur_ecotrack_order_cache c JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
+       WHERE ${where.join(" AND ")} ORDER BY c.last_updated_at_remote DESC,c.fetched_at DESC LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    ) as any;
+    const total = Number(count?.total ?? 0);
+    return res.json({ ok: true, orders: rows.map((row: any) => ({ ...parsedOrder(row.raw_order), tracking: row.tracking, status: row.status, expediteurId: Number(row.expediteurId), expediteur: row.expediteur, updatedAt: row.updatedAt })), pagination: { current_page: page, per_page: pageSize, total, last_page: Math.max(1, Math.ceil(total / pageSize)) } });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
 });
 
 router.get("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) => {
@@ -838,7 +918,225 @@ router.post("/expediteur/ecotrack/validate", async (req: AuthedRequest, res) => 
     return res.json({ ok: true, result: result.body });
   } catch (e) { return error(res, e); }
 });
-router.post("/expediteur/ecotrack/note", (req: AuthedRequest, res) => mutation(req, res, "/api/v1/add/maj", "POST", compact(req.body, ["tracking", "content"])));
+async function addRemark(req: AuthedRequest, res: any, forcedOwnerId?: number) {
+  const payload = compact(req.body, ["tracking", "content"]);
+  const id = tracking(payload.tracking);
+  const content = String(payload.content ?? "").trim().slice(0, 5000);
+  if (!id || !content) return res.status(400).json({ ok: false, error: "tracking_and_content_required" });
+  try {
+    let expediteurId: number;
+    let token: string;
+    if (!forcedOwnerId && req.adminRole === "suivi") {
+      const requestedOwner = Number(req.body?.expediteurId ?? req.body?.ownerId);
+      if (!Number.isInteger(requestedOwner) || requestedOwner <= 0) {
+        return res.status(400).json({ ok: false, error: "expediteurId_required" });
+      }
+      const conn = await pool.getConnection();
+      try {
+        const [[owner]] = await conn.execute(
+          `SELECT c.expediteur_id id FROM expediteur_ecotrack_order_cache c
+           JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
+           WHERE c.expediteur_id=? AND c.tracking=? LIMIT 1`, [requestedOwner, id],
+        ) as any;
+        forcedOwnerId = owner?.id ? Number(owner.id) : undefined;
+      } finally { conn.release(); }
+      if (!forcedOwnerId) return res.status(404).json({ ok: false, error: "order_not_found" });
+    }
+    if (forcedOwnerId) {
+      const conn = await pool.getConnection();
+      try {
+        const [[order]] = await conn.execute(
+          "SELECT tracking FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=? LIMIT 1",
+          [forcedOwnerId, id],
+        ) as any;
+        if (!order) return res.status(404).json({ ok: false, error: "order_not_found" });
+        const [[credential]] = await conn.execute(
+          `SELECT token_ciphertext,token_iv,token_auth_tag FROM expediteur_ecotrack_credentials WHERE expediteur_id=? LIMIT 1`,
+          [forcedOwnerId],
+        ) as any;
+        if (!credential) return res.status(409).json({ ok: false, error: "ecotrack_not_connected" });
+        expediteurId = forcedOwnerId;
+        token = ecotrackToken(credential.token_ciphertext, credential.token_iv, credential.token_auth_tag);
+      } finally { conn.release(); }
+    } else {
+      const credentialsResult = await upstream(req);
+      expediteurId = credentialsResult.expediteurId;
+      token = credentialsResult.token;
+    }
+    // Preserve Ecotrack's existing add/maj contract: this endpoint consumes
+    // tracking/content as request parameters, not a JSON body.
+    const result = await ecotrackRequest(token, "/api/v1/add/maj", { method: "POST", params: { tracking: id, content } });
+    await recordRemark({
+      expediteurId, tracking: id, content,
+      authorUsername: req.adminUsername ?? "unknown", authorRole: req.adminRole ?? "unknown",
+    });
+    return res.json({ ok: true, result: result.body });
+  } catch (e) { return error(res, e); }
+}
+router.post("/expediteur/ecotrack/note", (req: AuthedRequest, res) => addRemark(req, res));
+router.post("/suivi/ecotrack/note", (req: AuthedRequest, res) => addRemark(req, res));
+router.post("/admin/ecotrack/note", (req: AuthedRequest, res) => {
+  if (!hasTeamPermission(req, "ecotrack")) return res.status(403).json({ ok: false, error: "forbidden" });
+  const owner = Number(req.body?.expediteurId);
+  if (!Number.isInteger(owner) || owner <= 0) return res.status(400).json({ ok: false, error: "expediteurId_required" });
+  return addRemark(req, res, owner);
+});
+
+async function orderHistory(req: AuthedRequest, res: any) {
+  if (req.adminRole === "admin_team" && !hasTeamPermission(req, "ecotrack")) {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  const id = tracking(req.params.tracking);
+  if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+  const conn = await pool.getConnection();
+  try {
+    let ownerId: number | null = null;
+    if (req.adminRole === "expediteur") {
+      const account = await accountFor(req);
+      ownerId = account?.id ?? null;
+    } else if (req.adminRole === "admin" || req.adminRole === "admin_team" || req.adminRole === "suivi") {
+      const requestedOwner = Number(req.query.expediteurId ?? req.query.ownerId);
+      if (!Number.isInteger(requestedOwner) || requestedOwner <= 0) {
+        return res.status(400).json({ ok: false, error: "expediteurId_required" });
+      }
+      const [[owner]] = await conn.execute(
+        `SELECT c.expediteur_id id FROM expediteur_ecotrack_order_cache c
+         JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
+          WHERE c.expediteur_id=? AND c.tracking=? LIMIT 1`, [requestedOwner, id],
+      ) as any;
+      ownerId = owner?.id ?? null;
+    }
+    if (!ownerId) return res.status(404).json({ ok: false, error: "order_not_found" });
+    const [[row]] = await conn.execute(
+      "SELECT raw_order,status_value status,client_name,phone FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=? LIMIT 1",
+      [ownerId, id],
+    ) as any;
+    if (!row) return res.status(404).json({ ok: false, error: "order_not_found" });
+    const [remarks] = await conn.execute(
+      `SELECT id,tracking,author_username author,author_role role,content,created_at createdAt
+       FROM expediteur_ecotrack_remarks WHERE expediteur_id=? AND tracking=? ORDER BY created_at ASC`,
+      [ownerId, id],
+    ) as any;
+    const [statusHistory] = await conn.execute(
+      `SELECT status_value status,occurred_at occurredAt FROM expediteur_ecotrack_status_history
+       WHERE expediteur_id=? AND tracking=? ORDER BY occurred_at ASC`, [ownerId, id],
+    ) as any;
+    const order = { ...parsedOrder(row.raw_order), tracking: id, status: row.status, client: row.client_name, phone: row.phone };
+    return res.json({ ok: true, tracking: id, ownerId, order, updates: Array.isArray(order.updates) ? order.updates : [], remarks, statusHistory });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
+}
+router.get("/expediteur/ecotrack/orders/:tracking/history", orderHistory);
+router.get("/admin/ecotrack/orders/:tracking/history", orderHistory);
+router.get("/suivi/ecotrack/orders/:tracking/history", orderHistory);
+
+async function notificationScope(req: AuthedRequest, conn: any) {
+  if (req.adminRole === "admin" || req.adminRole === "suivi") return null;
+  if (req.adminRole === "expediteur") {
+    const account = await accountFor(req);
+    return account?.id ?? -1;
+  }
+  return -1;
+}
+function notificationReader(req: AuthedRequest) {
+  return { username: req.adminUsername ?? "", audience: req.portalAudience ?? req.adminRole ?? "unknown" };
+}
+async function listNotifications(req: AuthedRequest, res: any) {
+  const conn = await pool.getConnection();
+  try {
+    const scope = await notificationScope(req, conn);
+    const reader = notificationReader(req);
+    const where = scope === null ? "" : "WHERE n.expediteur_id=?";
+    const params: any[] = scope === null ? [] : [scope];
+    const unread = String(req.query.unread ?? "") === "1" || String(req.query.unread ?? "") === "true";
+    const finalWhere = unread ? (where ? `${where} AND nr.notification_id IS NULL` : "WHERE nr.notification_id IS NULL") : where;
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const [rows] = await conn.execute(
+      `SELECT n.id,n.tracking,n.event_type eventType,n.title,n.body,n.author_username author,n.author_role role,
+        n.created_at createdAt,nr.read_at readAt,a.username expediteur
+       FROM expediteur_ecotrack_notifications n
+       LEFT JOIN admins a ON a.id=n.expediteur_id
+       LEFT JOIN expediteur_ecotrack_notification_reads nr ON nr.notification_id=n.id AND nr.reader_username=? AND nr.reader_audience=?
+       ${finalWhere} ORDER BY n.created_at DESC LIMIT ?`,
+      [reader.username, reader.audience, ...params, limit],
+    ) as any;
+    const [[count]] = await conn.execute(
+      `SELECT COUNT(*) total FROM expediteur_ecotrack_notifications n
+       LEFT JOIN expediteur_ecotrack_notification_reads nr ON nr.notification_id=n.id AND nr.reader_username=? AND nr.reader_audience=?
+       ${scope === null ? "WHERE nr.notification_id IS NULL" : "WHERE n.expediteur_id=? AND nr.notification_id IS NULL"}`,
+      scope === null ? [reader.username, reader.audience] : [reader.username, reader.audience, scope],
+    ) as any;
+    return res.json({ ok: true, notifications: rows, unreadCount: Number(count.total) });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
+}
+async function markNotificationRead(req: AuthedRequest, res: any) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: "invalid_id" });
+  const conn = await pool.getConnection();
+  try {
+    const scope = await notificationScope(req, conn);
+    const reader = notificationReader(req);
+    const where = scope === null ? "id=?" : "id=? AND expediteur_id=?";
+    const params = scope === null ? [id] : [id, scope];
+    const [[notification]] = await conn.execute(`SELECT id FROM expediteur_ecotrack_notifications WHERE ${where} LIMIT 1`, params) as any;
+    if (!notification) return res.status(404).json({ ok: false, error: "notification_not_found" });
+    await conn.execute(
+      `INSERT INTO expediteur_ecotrack_notification_reads (notification_id,reader_username,reader_audience)
+       VALUES (?,?,?) ON DUPLICATE KEY UPDATE read_at=NOW()`,
+      [id, reader.username, reader.audience],
+    );
+    return res.json({ ok: true });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
+}
+async function notificationDetail(req: AuthedRequest, res: any) {
+  const id = Number(req.params.id);
+  const conn = await pool.getConnection();
+  try {
+    const scope = await notificationScope(req, conn);
+    const reader = notificationReader(req);
+    const where = scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?";
+    const params = scope === null ? [id] : [id, scope];
+    const [[notification]] = await conn.execute(
+      `SELECT n.*,nr.read_at readerReadAt,a.username expediteur FROM expediteur_ecotrack_notifications n
+       LEFT JOIN admins a ON a.id=n.expediteur_id
+       LEFT JOIN expediteur_ecotrack_notification_reads nr ON nr.notification_id=n.id AND nr.reader_username=? AND nr.reader_audience=?
+       WHERE ${where} LIMIT 1`, [reader.username, reader.audience, ...params],
+    ) as any;
+    if (!notification) return res.status(404).json({ ok: false, error: "notification_not_found" });
+    const [[orderRow]] = await conn.execute(
+      "SELECT raw_order,status_value status,client_name,phone FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=? LIMIT 1",
+      [notification.expediteur_id, notification.tracking],
+    ) as any;
+    const [remarks] = await conn.execute(
+      `SELECT id,author_username author,author_role role,content,created_at createdAt
+       FROM expediteur_ecotrack_remarks WHERE expediteur_id=? AND tracking=? ORDER BY created_at ASC`,
+      [notification.expediteur_id, notification.tracking],
+    ) as any;
+    const [statusHistory] = await conn.execute(
+      `SELECT status_value status,occurred_at occurredAt FROM expediteur_ecotrack_status_history
+       WHERE expediteur_id=? AND tracking=? ORDER BY occurred_at ASC`,
+      [notification.expediteur_id, notification.tracking],
+    ) as any;
+    await conn.execute(
+      `INSERT INTO expediteur_ecotrack_notification_reads (notification_id,reader_username,reader_audience)
+       VALUES (?,?,?) ON DUPLICATE KEY UPDATE read_at=read_at`,
+      [id, reader.username, reader.audience],
+    );
+    return res.json({
+      ok: true, notification,
+      order: orderRow ? { ...parsedOrder(orderRow.raw_order), tracking: notification.tracking, status: orderRow.status, client: orderRow.client_name, phone: orderRow.phone } : null,
+      remarks, statusHistory,
+    });
+  } catch (e) { return error(res, e); } finally { conn.release(); }
+}
+router.get("/expediteur/ecotrack/notifications", listNotifications);
+router.get("/admin/ecotrack/notifications", listNotifications);
+router.get("/suivi/ecotrack/notifications", listNotifications);
+router.put("/expediteur/ecotrack/notifications/:id/read", markNotificationRead);
+router.put("/admin/ecotrack/notifications/:id/read", markNotificationRead);
+router.put("/suivi/ecotrack/notifications/:id/read", markNotificationRead);
+router.get("/expediteur/ecotrack/notifications/:id", notificationDetail);
+router.get("/admin/ecotrack/notifications/:id", notificationDetail);
+router.get("/suivi/ecotrack/notifications/:id", notificationDetail);
 router.post("/expediteur/ecotrack/return-request", async (req: AuthedRequest, res) => {
   try {
     const { expediteurId, token } = await upstream(req);

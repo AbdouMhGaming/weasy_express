@@ -457,12 +457,20 @@ const ar: Translations = {
       expediteurBlocked: "هذه البوابة مخصصة للمسؤولين فقط. يجب على المرسلين تسجيل الدخول عبر /expediteurs.",
       footer: "Weasy Express · لوحة الإدارة",
     },
+    notifications: {
+      title: "الإشعارات",
+      unread: "غير مقروءة",
+      empty: "لا توجد إشعارات",
+      newRemark: "ملاحظة متابعة جديدة",
+      update: "تحديث الطلب",
+    },
     sidebar: {
       label: "الإدارة",
       dashboard: "لوحة التحكم",
       ecotrackDashboard: "لوحة التحكم",
       ecotrackReports: "تقارير إحصائية",
       ecotrackDelays: "التأخيرات",
+      ecotrackFailures: "فشل التسليم",
       partners: "المرسلون",
       agentApplications: "طلبات الوكلاء",
       offices: "المكاتب",
@@ -1665,6 +1673,7 @@ const ar: Translations = {
         moreResults: "{{count}} طلبات مطابقة إضافية",
       },
       delays: {
+        days: "الأيام المنقضية",
         title: "التأخيرات",
         subtitle: "الطلبات المتأخرة في النقل أو التوصيل أو التعليق أو الإرجاع",
         noDelays: "لم يتم العثور على طلبات متأخرة",
@@ -1884,6 +1893,14 @@ const ar: Translations = {
       usernamePh: "اسم المستخدم",
       accessDenied: "الوصول مرفوض. هذه البوابة مخصصة لحسابات المرسلين فقط.",
       footer: "Weasy Express · بوابة المرسل",
+    },
+  },
+  suivi: {
+    login: {
+      title: "بوابة المتابعة",
+      subtitle: "سجّل الدخول لمتابعة الطلبات المتأخرة وحالات فشل التسليم",
+      usernamePh: "اسم المستخدم",
+      footer: "Weasy Express · بوابة المتابعة",
     },
   },
 };

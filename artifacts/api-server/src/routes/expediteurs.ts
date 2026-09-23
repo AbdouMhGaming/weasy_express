@@ -6,6 +6,11 @@ import { clearEcotrackRuntimeCache } from "../lib/ecotrackRuntimeCache";
 import { queueEcotrackFullSync, withEcotrackAccountLock } from "../lib/ecotrackSync";
 
 const router = Router();
+const TEAM_PERMISSIONS: Record<string, string[]> = {
+  office: ["office-dashboard","expediteurs","queue","payouts","team","returns","merchants","messaging","analytics"],
+  expediteur: ["ecotrack","ecotrack-desks","ecotrack-fees","ecotrack-products","queue","payouts","team"],
+  admin_team: ["ecotrack","team","expediteurs","queue","payouts","returns","merchants","messaging","analytics","users"],
+};
 // Scope the guard to this router's non-admin prefix. /admin routes are already
 // protected by the admin router's ticket-manager guard.
 router.use("/expediteur", adminAuth, (req, res, next) => {
@@ -390,6 +395,21 @@ router.get("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
   const conn = await pool.getConnection();
   try {
     let rows: any[];
+    const page = Math.max(1, Math.min(10000, Number(req.query.page) || 1));
+    const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize ?? req.query.per_page) || 50));
+    const search = String(req.query.search ?? "").trim().slice(0, 100);
+    const parentRole = String(req.query.parent_role ?? req.query.parentRole ?? "").trim();
+    const parentUsername = String(req.query.parent_username ?? req.query.parentUsername ?? "").trim().slice(0, 100);
+    const where = ["a.parent_id IS NOT NULL"];
+    const params: any[] = [];
+    if (search) { where.push("a.username LIKE ?"); params.push(`%${search}%`); }
+    if (role === "admin") {
+      if (parentRole && ["admin","office","expediteur"].includes(parentRole)) { where.push("p.role=?"); params.push(parentRole); }
+      if (parentUsername) { where.push("p.username=?"); params.push(parentUsername); }
+    } else {
+      where.push("a.parent_id = (SELECT id FROM admins WHERE username = ? LIMIT 1)");
+      params.push(username);
+    }
     if (role === "admin") {
       // super admin sees all team accounts with full parent info
       [rows] = await conn.execute(
@@ -397,8 +417,9 @@ router.get("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
                 p.username AS parent_username, p.role AS parent_role, p.office_hub AS parent_hub
          FROM admins a
          LEFT JOIN admins p ON a.parent_id = p.id
-         WHERE a.parent_id IS NOT NULL
-         ORDER BY a.created_at DESC`
+         WHERE ${where.join(" AND ")}
+         ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
       ) as any;
     } else {
       // expediteur/office sees only their own sub-accounts
@@ -406,12 +427,37 @@ router.get("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
       if (!me) { rows = []; }
       else {
         [rows] = await conn.execute(
-          "SELECT id, username, role, permissions, created_at AS createdAt FROM admins WHERE parent_id = ? ORDER BY created_at DESC",
-          [me.id]
+          `SELECT id, username, role, permissions, created_at AS createdAt FROM admins
+           WHERE parent_id = ? ${search ? "AND username LIKE ?" : ""} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+          search ? [me.id, `%${search}%`, pageSize, (page - 1) * pageSize] : [me.id, pageSize, (page - 1) * pageSize],
         ) as any;
       }
     }
-    res.json({ ok: true, accounts: rows });
+    const [[totalRow]] = await conn.execute(
+      role === "admin" ? `SELECT COUNT(*) total FROM admins a LEFT JOIN admins p ON a.parent_id=p.id WHERE ${where.join(" AND ")}` : `SELECT COUNT(*) total FROM admins WHERE parent_id=(SELECT id FROM admins WHERE username=? LIMIT 1)${search ? " AND username LIKE ?" : ""}` ,
+      role === "admin" ? params : (search ? [username, `%${search}%`] : [username]),
+    ) as any;
+    res.json({ ok: true, accounts: rows, pagination: { current_page: page, per_page: pageSize, total: Number(totalRow?.total ?? rows.length), last_page: Math.max(1, Math.ceil(Number(totalRow?.total ?? rows.length) / pageSize)) } });
+  } finally { conn.release(); }
+});
+
+router.get("/admin/team/parents", adminAuth, async (req: AuthedRequest, res) => {
+  if ((req as AuthedRequest).adminRole !== "admin") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize ?? req.query.per_page) || 100));
+  const search = String(req.query.search ?? "").trim().slice(0, 100);
+  const where = ["parent_id IS NULL", "role IN ('admin','office','expediteur')"];
+  const params: any[] = [];
+  if (search) { where.push("username LIKE ?"); params.push(`%${search}%`); }
+  const conn = await pool.getConnection();
+  try {
+    const [[totalRow]] = await conn.execute(`SELECT COUNT(*) total FROM admins WHERE ${where.join(" AND ")}`, params) as any;
+    const [rows] = await conn.execute(
+      `SELECT id,username,role,office_hub AS officeHub FROM admins WHERE ${where.join(" AND ")}
+       ORDER BY username ASC LIMIT ? OFFSET ?`, [...params, pageSize, (page - 1) * pageSize],
+    ) as any;
+    const total = Number(totalRow?.total ?? 0);
+    return res.json({ ok: true, parents: rows, pagination: { current_page: page, per_page: pageSize, total, last_page: Math.max(1, Math.ceil(total / pageSize)) } });
   } finally { conn.release(); }
 });
 
@@ -424,7 +470,7 @@ router.post("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
   const body = req.body ?? {};
   const newUsername = String(body.username ?? "").trim().slice(0, 100);
   const password    = String(body.password ?? "");
-  const permissions = Array.isArray(body.permissions) ? body.permissions as string[] : [];
+  const requestedPermissions = Array.isArray(body.permissions) ? body.permissions as string[] : [];
   if (!newUsername || password.length < 8) return res.status(400).json({ ok: false, error: "invalid_fields" });
   const conn = await pool.getConnection();
   try {
@@ -440,17 +486,18 @@ router.post("/admin/team", adminAuth, async (req: AuthedRequest, res) => {
         "SELECT id, role, office_hub FROM admins WHERE username = ? AND parent_id IS NULL LIMIT 1",
         [parentUname]
       ) as any;
-      if (!parent) return res.status(400).json({ ok: false, error: "parent_not_found" });
+      if (!parent || !["admin","office","expediteur"].includes(parent.role)) return res.status(400).json({ ok: false, error: "parent_not_found" });
       parentId   = parent.id;
-      insertRole = parent.role;
+       insertRole = parent.role === "admin" ? "admin_team" : parent.role;
       officeHub  = parent.office_hub ?? null;
     } else {
       const [[me]] = await conn.execute("SELECT id, office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
       if (!me) return res.status(400).json({ ok: false, error: "creator_not_found" });
       parentId   = me.id;
-      insertRole = role;
+       insertRole = role;
       officeHub  = me.office_hub ?? null;
     }
+    const permissions = requestedPermissions.filter((key) => (TEAM_PERMISSIONS[insertRole] ?? []).includes(String(key)));
 
     // check username unique
     const [ex] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [newUsername]) as any;
@@ -478,7 +525,7 @@ router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
   if (newPassword && newPassword.length < 8) return res.status(400).json({ ok: false, error: "password_too_short" });
   const conn = await pool.getConnection();
   try {
-    const [[target]] = await conn.execute("SELECT parent_id FROM admins WHERE id = ? LIMIT 1", [id]) as any;
+    const [[target]] = await conn.execute("SELECT parent_id, role FROM admins WHERE id = ? LIMIT 1", [id]) as any;
     if (!target || target.parent_id === null) return res.status(404).json({ ok: false, error: "not_found" });
     if (role !== "admin") {
       const [[me]] = await conn.execute("SELECT id FROM admins WHERE username = ? LIMIT 1", [username]) as any;
@@ -490,10 +537,10 @@ router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
         "SELECT id, role, office_hub FROM admins WHERE username = ? AND parent_id IS NULL LIMIT 1",
         [parentUname]
       ) as any;
-      if (!newParent) return res.status(400).json({ ok: false, error: "parent_not_found" });
+       if (!newParent || !["admin", "office", "expediteur"].includes(newParent.role)) return res.status(400).json({ ok: false, error: "parent_not_found" });
       await conn.execute(
         "UPDATE admins SET parent_id = ?, role = ?, office_hub = ? WHERE id = ?",
-        [newParent.id, newParent.role, newParent.office_hub ?? null, id]
+        [newParent.id, newParent.role === "admin" ? "admin_team" : newParent.role, newParent.office_hub ?? null, id]
       );
     }
     if (newPassword) {
@@ -501,7 +548,8 @@ router.put("/admin/team/:id", adminAuth, async (req: AuthedRequest, res) => {
       await conn.execute("UPDATE admins SET password_hash = ? WHERE id = ?", [hash, id]);
     }
     if (permissions !== null) {
-      await conn.execute("UPDATE admins SET permissions = ? WHERE id = ?", [JSON.stringify(permissions), id]);
+      const safePermissions = permissions.filter((key) => (TEAM_PERMISSIONS[target.role] ?? []).includes(String(key)));
+      await conn.execute("UPDATE admins SET permissions = ? WHERE id = ?", [JSON.stringify(safePermissions), id]);
     }
     res.json({ ok: true });
   } finally { conn.release(); }

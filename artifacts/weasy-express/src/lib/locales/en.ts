@@ -457,12 +457,20 @@ const en: Translations = {
       expediteurBlocked: "This portal is for administrators only. Expediteurs must log in at /expediteurs.",
       footer: "Weasy Express · Admin Dashboard",
     },
+    notifications: {
+      title: "Notifications",
+      unread: "unread",
+      empty: "No notifications",
+      newRemark: "New follow-up remark",
+      update: "Order update",
+    },
     sidebar: {
       label: "Administration",
       dashboard: "Dashboard",
       ecotrackDashboard: "Dashboard",
       ecotrackReports: "Statistical Reports",
       ecotrackDelays: "Delays",
+      ecotrackFailures: "Delivery failures",
       partners: "Expediteurs",
       agentApplications: "Agent requests",
       offices: "Offices",
@@ -1665,6 +1673,7 @@ const en: Translations = {
         moreResults: "{{count}} more matching orders",
       },
       delays: {
+        days: "Elapsed days",
         title: "Delays",
         subtitle: "Overdue orders across transit, delivery, suspended, and return statuses",
         noDelays: "No overdue orders found",
@@ -1884,6 +1893,14 @@ const en: Translations = {
       usernamePh: "Username",
       accessDenied: "Access denied. This portal is for expediteur accounts only.",
       footer: "Weasy Express · Expediteur Portal",
+    },
+  },
+  suivi: {
+    login: {
+      title: "Follow-up Portal",
+      subtitle: "Sign in to review delayed orders and delivery failures",
+      usernamePh: "Username",
+      footer: "Weasy Express · Follow-up Portal",
     },
   },
 };

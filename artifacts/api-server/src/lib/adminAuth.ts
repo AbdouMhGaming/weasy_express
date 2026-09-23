@@ -77,11 +77,19 @@ export async function updateAdminPassword(
 // ── HMAC session tokens ───────────────────────────────────────────────────────
 
 // dataUsername is the parent's username for team sub-accounts; equals username for root accounts.
-export function generateToken(username: string, role: string, dataUsername?: string, rememberMe = false): string {
+export type PortalAudience = "admin" | "expediteur" | "suivi";
+
+export function generateToken(
+  username: string,
+  role: string,
+  dataUsername?: string,
+  rememberMe = false,
+  audience: PortalAudience = role === "expediteur" ? "expediteur" : role === "suivi" ? "suivi" : "admin",
+): string {
   const data = dataUsername && dataUsername !== username ? dataUsername : "";
   const ttl = rememberMe ? REMEMBERED_TOKEN_TTL : TOKEN_TTL;
   // Use ";" as field separator — dots are valid in usernames and would break parsing
-  const payload = `${Date.now()};${username};${role};${data};${ttl}`;
+  const payload = `${Date.now()};${username};${role};${data};${ttl};${audience}`;
   const sig = crypto
     .createHmac("sha256", ADMIN_SECRET)
     .update(payload)
@@ -94,6 +102,7 @@ export function verifyToken(token: string): {
   username?: string;
   role?: string;
   dataUsername?: string;
+  audience?: PortalAudience;
 } {
   try {
     const decoded = Buffer.from(token, "base64url").toString("utf8");
@@ -114,6 +123,8 @@ export function verifyToken(token: string): {
     // the original 24-hour lifetime.
     const embeddedTtl = Number(parts[4]);
     const ttl = embeddedTtl === REMEMBERED_TOKEN_TTL ? REMEMBERED_TOKEN_TTL : TOKEN_TTL;
+    const audience = parts[5] as PortalAudience | undefined;
+    if (audience && !["admin", "expediteur", "suivi"].includes(audience)) return { valid: false };
     const age = Date.now() - ts;
     if (isNaN(age) || age > ttl || age < 0) return { valid: false };
     const expected = crypto
@@ -125,7 +136,7 @@ export function verifyToken(token: string): {
       Buffer.from(sig, "hex"),
       Buffer.from(expected, "hex"),
     );
-    return ok ? { valid: true, username, role, dataUsername } : { valid: false };
+    return ok ? { valid: true, username, role, dataUsername, audience: audience ?? (role === "expediteur" ? "expediteur" : "admin") } : { valid: false };
   } catch {
     return { valid: false };
   }
@@ -135,13 +146,21 @@ export type AuthedRequest = Request & {
   adminUsername?: string;   // the logged-in account's own username
   adminRole?: string;
   adminDataUsername?: string; // parent's username for team accounts (= adminUsername for root)
+  portalAudience?: PortalAudience;
+  teamPermissions?: string[];
 };
 
-export function adminAuth(
+export function hasTeamPermission(req: Request, permission: string): boolean {
+  const auth = req as AuthedRequest;
+  return auth.adminRole === "admin" ||
+    (auth.adminRole === "admin_team" && auth.teamPermissions?.includes(permission) === true);
+}
+
+export async function adminAuth(
   req: Request,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   const auth = (req.headers["authorization"] as string) ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const result = verifyToken(token);
@@ -153,6 +172,40 @@ export function adminAuth(
   (req as AuthedRequest).adminRole         = result.role;
   // If a dataUsername was embedded (team member), use it; otherwise fall back to own username.
   (req as AuthedRequest).adminDataUsername = result.dataUsername ?? result.username;
+  // Legacy tokens remain usable for their historical role, but a dedicated
+  // suivi token can never enter the shared admin/expediteur routes.
+  if (result.audience === "suivi" || result.role === "suivi") {
+    res.status(401).json({ ok: false, error: "wrong_portal" });
+    return;
+  }
+  if (result.role === "admin_team") {
+    const [rows] = await db.select({ permissions: adminsTable.permissions })
+      .from(adminsTable).where(eq(adminsTable.username, result.username!)).limit(1);
+    try {
+      (req as AuthedRequest).teamPermissions = rows[0]?.permissions
+        ? JSON.parse(rows[0].permissions) : [];
+    } catch {
+      (req as AuthedRequest).teamPermissions = [];
+    }
+  }
+  (req as AuthedRequest).portalAudience = result.audience;
+  next();
+}
+
+/** Authentication guard for the isolated suivi portal. */
+export function suiviAuth(req: Request, res: Response, next: NextFunction): void {
+  const auth = (req.headers["authorization"] as string) ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const result = verifyToken(token);
+  if (!token || !result.valid || result.role !== "suivi" || result.audience !== "suivi") {
+    res.status(401).json({ ok: false, error: "unauthorized" });
+    return;
+  }
+  const request = req as AuthedRequest;
+  request.adminUsername = result.username;
+  request.adminRole = result.role;
+  request.adminDataUsername = result.dataUsername ?? result.username;
+  request.portalAudience = "suivi";
   next();
 }
 

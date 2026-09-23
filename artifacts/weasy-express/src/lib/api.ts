@@ -18,10 +18,14 @@ export async function readApiJson(response: Response): Promise<any> {
 }
 
 export function adminHeaders(): Record<string, string> {
-  // When on the expediteur portal, use the separate expediteur session token
-  // so an admin session logged in simultaneously never leaks its privileges.
+  const isSuiviPath = typeof window !== "undefined" && window.location.pathname.startsWith("/suivi");
   const isExpPath = typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs");
-  const token = localStorage.getItem(isExpPath ? "exp_token" : "admin_token") ?? "";
+
+  let token = "";
+  if (isSuiviPath) token = localStorage.getItem("suivi_token") ?? "";
+  else if (isExpPath) token = localStorage.getItem("exp_token") ?? "";
+  else token = localStorage.getItem("admin_token") ?? "";
+
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -45,10 +49,16 @@ let sessionExpiryRedirectStarted = false;
 export function expireCurrentSession(): never {
   if (typeof window !== "undefined" && !sessionExpiryRedirectStarted) {
     sessionExpiryRedirectStarted = true;
+    const isSuiviPath = window.location.pathname.startsWith("/suivi");
     const isExpPath = window.location.pathname.startsWith("/expediteurs");
 
     localStorage.removeItem("push_enabled");
-    if (isExpPath) {
+    if (isSuiviPath) {
+      localStorage.removeItem("suivi_token");
+      localStorage.removeItem("suivi_role");
+      localStorage.removeItem("suivi_username");
+      window.location.replace("/suivi/login");
+    } else if (isExpPath) {
       localStorage.removeItem("exp_token");
       localStorage.removeItem("exp_role");
       localStorage.removeItem("exp_username");
@@ -73,21 +83,19 @@ export async function authenticatedFetch(input: RequestInfo | URL, init?: Reques
   return response;
 }
 
+const _isSuiviPath = () =>
+  typeof window !== "undefined" && window.location.pathname.startsWith("/suivi");
 const _isExpPath = () =>
   typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs");
 
-/**
- * Returns the current session role.
- * On /expediteurs reads exp_role; everywhere else reads admin_role.
- */
 export function getSessionRole(): string {
-  return localStorage.getItem(_isExpPath() ? "exp_role" : "admin_role") ?? "";
+  if (_isSuiviPath()) return localStorage.getItem("suivi_role") ?? "";
+  if (_isExpPath()) return localStorage.getItem("exp_role") ?? "";
+  return localStorage.getItem("admin_role") ?? "";
 }
 
-/**
- * Returns the current session username.
- * On /expediteurs reads exp_username; everywhere else reads admin_username.
- */
 export function getSessionUsername(): string {
-  return localStorage.getItem(_isExpPath() ? "exp_username" : "admin_username") ?? "";
+  if (_isSuiviPath()) return localStorage.getItem("suivi_username") ?? "";
+  if (_isExpPath()) return localStorage.getItem("exp_username") ?? "";
+  return localStorage.getItem("admin_username") ?? "";
 }

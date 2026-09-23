@@ -28,7 +28,7 @@ const router: IRouter = Router();
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 router.post("/admin/login", async (req, res) => {
-  const body = (req.body ?? {}) as { username?: unknown; password?: unknown; rememberMe?: unknown };
+  const body = (req.body ?? {}) as { username?: unknown; password?: unknown; rememberMe?: unknown; portal?: unknown };
   const username = typeof body.username === "string" ? body.username.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const rememberMe = body.rememberMe === true;
@@ -44,6 +44,18 @@ router.post("/admin/login", async (req, res) => {
   }
   if (!result.valid) {
     res.status(401).json({ ok: false, error: "invalid_credentials" }); return;
+  }
+  // A portal-specific caller can ask the server to enforce its audience.
+  // Keep the omitted value backward-compatible with the existing Expediteur UI.
+  const requestedPortal = body.portal === "admin" || body.portal === "expediteur" ? body.portal : null;
+  if (requestedPortal === "admin" && result.role === "expediteur") {
+    res.status(403).json({ ok: false, error: "wrong_portal" }); return;
+  }
+  if (requestedPortal === "expediteur" && result.role !== "expediteur") {
+    res.status(403).json({ ok: false, error: "wrong_portal" }); return;
+  }
+  if (result.role === "suivi") {
+    res.status(403).json({ ok: false, error: "wrong_portal" }); return;
   }
   let commercialSettings: { allowedPartnerStatuses: string | null; canChangePartnerStatus: boolean } | null = null;
   let extraUserData: { officeHub?: string; isTeam?: boolean; permissions?: string[] } = {};
@@ -73,8 +85,31 @@ router.post("/admin/login", async (req, res) => {
       }
     } finally { conn.release(); }
   } catch { /* non-fatal */ }
-  const token = generateToken(username, result.role!, (extraUserData as any).parentUsername, rememberMe);
+  const token = generateToken(username, result.role!, (extraUserData as any).parentUsername, rememberMe,
+    result.role === "expediteur" ? "expediteur" : "admin");
   res.json({ ok: true, token, role: result.role, ...(commercialSettings ?? {}), ...extraUserData });
+});
+
+/** Dedicated suivi login. It never accepts an admin/expediteur account. */
+router.post("/suivi/login", async (req, res) => {
+  const body = (req.body ?? {}) as { username?: unknown; password?: unknown; rememberMe?: unknown };
+  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!username || !password) {
+    res.status(400).json({ ok: false, error: "missing_fields" }); return;
+  }
+  try {
+    const result = await verifyAdminCredentials(username, password);
+    if (!result.valid || result.role !== "suivi") {
+      res.status(401).json({ ok: false, error: "invalid_credentials" }); return;
+    }
+    const rememberMe = body.rememberMe === true;
+    const token = generateToken(username, "suivi", undefined, rememberMe, "suivi");
+    res.json({ ok: true, token, role: "suivi" });
+  } catch (err) {
+    req.log.error({ err }, "DB error during suivi login");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
 });
 
 router.post("/admin/verify", adminAuth, (req, res) => {
@@ -116,16 +151,52 @@ router.use("/admin", adminAuth, (req, res, next) => {
   next();
 });
 
+// Team accounts are deny-by-default. Their permissions are loaded from the
+// database by adminAuth (never trusted from the session token).
+const ADMIN_TEAM_SECTIONS: Array<[string, string]> = [
+  ["/ecotrack", "ecotrack"], ["/team", "team"],
+  ["/expediteurs", "expediteurs"], ["/users", "users"],
+  ["/payout", "payouts"], ["/partners", "merchants"],
+  ["/tickets", "messaging"], ["/analytics", "analytics"],
+  ["/returns", "returns"], ["/queue", "queue"],
+];
+export function adminTeamSection(path: string): string | null {
+  const normalized = path.replace(/^\/api\/admin(?=\/|$)/, "").replace(/^\/admin(?=\/|$)/, "") || "/";
+  return ADMIN_TEAM_SECTIONS.find(([prefix]) => normalized === prefix || normalized.startsWith(`${prefix}/`))?.[1] ?? null;
+}
+router.use("/admin", (req, res, next) => {
+  const request = req as AuthedRequest;
+  if (request.adminRole !== "admin_team") return next();
+  const section = adminTeamSection(`${req.baseUrl}${req.path}`);
+  if (!section || !request.teamPermissions?.includes(section)) {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  next();
+});
+
 // ── Admin management (super admin only) ───────────────────────────────────────
 
 router.get("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
+  const page = Math.max(1, Math.min(10000, Number(req.query.page) || 1));
+  const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 50));
+  const search = String(req.query.search ?? "").trim().slice(0, 100);
+  const roleFilter = String(req.query.role ?? "").trim();
   try {
     const conn = await pool.getConnection();
     try {
+      const where = ["parent_id IS NULL"];
+      const params: unknown[] = [];
+      if (search) { where.push("username LIKE ?"); params.push(`%${search}%`); }
+      if (["admin","office","finance","commercial","ticket_manager","suivi","expediteur"].includes(roleFilter)) {
+        where.push("role = ?"); params.push(roleFilter);
+      }
+      const [[count]] = await conn.execute(`SELECT COUNT(*) total FROM admins WHERE ${where.join(" AND ")}`, params) as any;
       const [rows] = await conn.execute(
-        "SELECT id, username, role, phone, email, office_hub, allowed_partner_statuses, can_change_partner_status, parent_id, created_at AS createdAt FROM admins WHERE parent_id IS NULL ORDER BY created_at ASC"
+        `SELECT id, username, role, phone, email, office_hub, allowed_partner_statuses, can_change_partner_status, parent_id, created_at AS createdAt
+         FROM admins WHERE ${where.join(" AND ")} ORDER BY created_at ASC LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
       );
-      res.json({ ok: true, admins: rows });
+      res.json({ ok: true, admins: rows, pagination: { current_page: page, per_page: pageSize, total: Number(count.total), last_page: Math.max(1, Math.ceil(Number(count.total) / pageSize)) } });
     } finally { conn.release(); }
   } catch (err) {
     req.log.error({ err }, "Failed to fetch admins");
@@ -139,7 +210,7 @@ router.post("/admin/admins", adminAuth, superAdminOnly, async (req, res) => {
   const password = String(body.password ?? "");
   const role = String(body.role ?? "office");
   const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
-  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager"];
+  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager", "suivi"];
   if (!username || password.length < 8 || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }
@@ -175,7 +246,7 @@ router.put("/admin/admins/:id", adminAuth, superAdminOnly, async (req, res) => {
   const password = body.password ? String(body.password) : null;
   const role = String(body.role ?? "office");
   const officeHub = String(body.office_hub ?? "").trim().slice(0, 200);
-  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager"];
+  const validRoles = ["admin", "office", "finance", "commercial", "ticket_manager", "suivi"];
   if (!username || !validRoles.includes(role)) {
     res.status(400).json({ ok: false, error: "invalid_fields" }); return;
   }

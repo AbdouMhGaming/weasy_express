@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
+import { PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -28,6 +29,19 @@ interface ParentUser {
 const HOSTINGER_PUBLIC_BUILD = import.meta.env.VITE_HOSTINGER_BUILD === "true";
 
 const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
+  admin: [
+    ...(!HOSTINGER_PUBLIC_BUILD ? [
+      { key: "ecotrack", label: "Retards Ecotrack" },
+    ] : []),
+    { key: "expediteurs", label: "Expediteurs" },
+    { key: "queue", label: "Queue" },
+    { key: "payouts", label: "Payouts" },
+    { key: "team", label: "Team" },
+    { key: "returns", label: "Returns" },
+    { key: "merchants", label: "Merchants" },
+    { key: "messaging", label: "Messaging" },
+    { key: "analytics", label: "Analytics" },
+  ],
   expediteur: [
     ...(!HOSTINGER_PUBLIC_BUILD ? [
       { key: "ecotrack", label: "Commandes" },
@@ -66,6 +80,7 @@ function RoleBadge({ role }: { role: string }) {
     office:      "bg-blue-50 text-blue-700 border-blue-100",
     expediteur:  "bg-violet-50 text-violet-700 border-violet-100",
     admin:       "bg-gray-50 text-gray-700 border-gray-200",
+    admin_team:  "bg-purple-50 text-purple-700 border-purple-100",
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${cfg[role] ?? cfg.admin}`}>
@@ -154,7 +169,7 @@ function AddModal({
   const { t } = useTranslation();
 
   // Admin-only: type selection
-  const [linkType, setLinkType] = useState<"office" | "expediteur" | "">("");
+  const [linkType, setLinkType] = useState<"admin" | "office" | "expediteur" | "">("");
   const [parentUsername, setParentUsername] = useState("");
 
   const [username, setUsername]   = useState("");
@@ -170,7 +185,7 @@ function AddModal({
   const sections = SECTIONS_BY_ROLE[effectiveRole] ?? [];
 
   // Reset parent selection & perms when linkType changes
-  function handleLinkType(t: "office" | "expediteur") {
+  function handleLinkType(t: "admin" | "office" | "expediteur") {
     setLinkType(t);
     setParentUsername("");
     setPerms([]);
@@ -238,7 +253,7 @@ function AddModal({
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-2">{t("admin.team.linkType")}</label>
           <div className="grid grid-cols-2 gap-2">
-            {(["office", "expediteur"] as const).map(type => (
+            {(["admin", "office", "expediteur"] as const).map(type => (
               <button
                 key={type}
                 onClick={() => handleLinkType(type)}
@@ -258,7 +273,7 @@ function AddModal({
                   </svg>
                 )}
                 <div>
-                  <p>{type === "office" ? t("admin.team.linkOffice") : t("admin.team.linkExpediteur")}</p>
+                  <p>{type === "admin" ? "Admin" : type === "office" ? t("admin.team.linkOffice") : t("admin.team.linkExpediteur")}</p>
                 </div>
               </button>
             ))}
@@ -286,7 +301,7 @@ function AddModal({
           )}
           {selectedParent?.office_hub && (
             <p className="text-xs text-gray-400 mt-1">
-              🏢 Hub: <span className="font-semibold text-gray-600">{selectedParent.office_hub}</span>
+              Hub: <span className="font-semibold text-gray-600">{selectedParent.office_hub}</span>
             </p>
           )}
         </div>
@@ -410,7 +425,7 @@ function EditModal({
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <RoleBadge role={currentParentRole} />
                   {account.parent_hub && (
-                    <span className="text-[10px] text-gray-400">🏢 {account.parent_hub}</span>
+                    <span className="text-[10px] text-gray-400">{account.parent_hub}</span>
                   )}
                 </div>
               </div>
@@ -469,7 +484,6 @@ function EditModal({
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-
 export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
   const role    = getSessionRole();
@@ -481,25 +495,56 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
   const [showAdd, setShowAdd]       = useState(false);
   const [editTarget, setEditTarget] = useState<TeamAccount | null>(null);
 
+  // Pagination & Filters
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedParentRole, setSelectedParentRole] = useState("");
+  const [selectedParentUsername, setSelectedParentUsername] = useState("");
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/team`, { headers: adminHeaders() });
+      const searchParams = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      });
+      if (debouncedSearch) searchParams.set("search", debouncedSearch);
+      if (selectedParentRole) searchParams.set("parentRole", selectedParentRole);
+      if (selectedParentUsername) searchParams.set("parentUsername", selectedParentUsername);
+
+      const res = await fetch(`${API_BASE}/api/admin/team?${searchParams.toString()}`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }
       const data = await res.json();
-      if (data.ok) setAccounts(data.accounts);
+      if (data.ok) {
+        setAccounts(data.accounts);
+        if (data.pagination) {
+          setTotalPages(data.pagination.last_page);
+          setTotalItems(data.pagination.total);
+        } else {
+          setTotalPages(1);
+          setTotalItems(data.accounts.length);
+        }
+      }
     } finally { setLoading(false); }
-  }, [onUnauth]);
+  }, [onUnauth, page, pageSize, debouncedSearch, selectedParentRole, selectedParentUsername]);
 
-  // For admin: fetch all potential parent users (offices + expediteurs)
   const fetchParents = useCallback(async () => {
     if (!isAdmin) return;
-    const res = await fetch(`${API_BASE}/api/admin/admins`, { headers: adminHeaders() });
+    const res = await fetch(`${API_BASE}/api/admin/team/parents?pageSize=100`, { headers: adminHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     if (data.ok) {
-      setAllParents((data.admins ?? []).filter((u: ParentUser) =>
-        ["office", "expediteur"].includes(u.role)
+      setAllParents((data.parents ?? []).filter((u: ParentUser) =>
+        ["admin", "office", "expediteur"].includes(u.role)
       ));
     }
   }, [isAdmin]);
@@ -523,114 +568,123 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
   }
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
+    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden p-3 sm:p-6 lg:p-8 bg-slate-50/50">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("admin.team.title")}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{t("admin.team.subtitle")}</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t("admin.team.title")}</h1>
+          <p className="text-sm text-slate-500 font-medium mt-0.5">{t("admin.team.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white px-4 py-2.5 rounded-xl shadow-sm transition-colors"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-          </svg>
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
           {t("admin.team.add")}
         </button>
       </div>
 
-      {/* Modals */}
-      {showAdd && (
-        <AddModal
-          isAdmin={isAdmin} myRole={role} allParents={allParents}
-          onClose={() => setShowAdd(false)} onCreated={handleCreated} onUnauth={onUnauth}
-        />
-      )}
-      {editTarget && (
-        <EditModal
-          account={editTarget} isAdmin={isAdmin} allParents={allParents}
-          onClose={() => setEditTarget(null)} onSaved={handleSaved} onUnauth={onUnauth}
-        />
-      )}
-
-      {/* List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-400 text-sm gap-2">
-          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+      <div className="mb-4 flex flex-wrap gap-2 shrink-0">
+        <div className="relative flex-1 min-w-[200px]">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input
+            type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("admin.ecotrackPortal.common.search")}
+            className="w-full pl-9 h-10 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 text-sm"
+          />
         </div>
-      ) : accounts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
-          <svg className="w-12 h-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <p className="text-sm font-medium">{t("admin.team.empty")}</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {accounts.map((a, i) => {
-            const perms = parsePerm(a.permissions);
-            return (
-              <div key={a.id} className={`flex items-center gap-4 px-4 py-3.5 ${i > 0 ? "border-t border-gray-50" : ""}`}>
-                {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-[#E10600]/10 flex items-center justify-center shrink-0">
-                  <span className="text-[#E10600] text-sm font-bold uppercase">{a.username[0]}</span>
-                </div>
+        {isAdmin && (
+          <>
+            <select
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
+              value={selectedParentRole}
+              onChange={(e) => { setSelectedParentRole(e.target.value); setPage(1); }}
+            >
+              <option value="">Tous les types</option>
+              <option value="admin">Admin</option>
+              <option value="office">Office</option>
+              <option value="expediteur">Expéditeur</option>
+            </select>
+            <select
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
+              value={selectedParentUsername}
+              onChange={(e) => { setSelectedParentUsername(e.target.value); setPage(1); }}
+            >
+              <option value="">Tous les comptes</option>
+              {allParents
+                .filter(p => !selectedParentRole || p.role === selectedParentRole)
+                .map(p => <option key={p.username} value={p.username}>{p.username}</option>)
+              }
+            </select>
+          </>
+        )}
+      </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-gray-900">{a.username}</p>
-                    <RoleBadge role={a.role} />
-                  </div>
+      <div className="flex-1 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        {loading && accounts.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <svg className="animate-spin w-8 h-8 text-[#E10600]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
+            <svg className="w-16 h-16 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+            <p className="text-sm font-medium">{t("admin.team.empty")}</p>
+          </div>
+        ) : (
+          <>
+          <div className="flex-1 overflow-auto">
+            <div className="min-w-[600px]">
+              {accounts.map((a, i) => {
+                const perms = parsePerm(a.permissions);
+                return (
+                  <div key={a.id} className={`flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${i > 0 ? "border-t border-slate-50" : ""}`}>
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+                      <span className="text-slate-600 text-sm font-bold uppercase">{a.username[0]}</span>
+                    </div>
 
-                  {/* Permissions */}
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">
-                    {perms.length > 0 ? perms.join(", ") : t("admin.team.noPerms")}
-                  </p>
-
-                  {/* Linked parent (admin view) */}
-                  {isAdmin && a.parent_username && (
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      <span className="text-[10px] text-gray-400 font-medium">{t("admin.team.linkedTo")}:</span>
-                      <span className="text-[10px] font-semibold text-gray-600">{a.parent_username}</span>
-                      {a.parent_hub && (
-                        <span className="text-[10px] text-gray-400">🏢 {a.parent_hub}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold text-slate-900">{a.username}</p>
+                        <RoleBadge role={a.role} />
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 truncate">
+                        {perms.length > 0 ? perms.join(", ") : t("admin.team.noPerms")}
+                      </p>
+                      {isAdmin && a.parent_username && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{t("admin.team.linkedTo")}</span>
+                          <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{a.parent_username}</span>
+                          {a.parent_hub && <span className="text-[10px] font-medium text-slate-500 ml-1">{a.parent_hub}</span>}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => setEditTarget(a)}
-                    className="p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                    title={t("admin.team.edit")}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => removeAccount(a.id)}
-                    className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    title={t("admin.team.delete")}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => setEditTarget(a)} className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title={t("admin.team.edit")}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button onClick={() => removeAccount(a.id)} className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors" title={t("admin.team.delete")}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            setPage={setPage}
+            setPageSize={setPageSize}
+          />
+          </>
+        )}
+      </div>
+
+      {showAdd && <AddModal isAdmin={isAdmin} myRole={role} allParents={allParents} onClose={() => setShowAdd(false)} onCreated={handleCreated} onUnauth={onUnauth} />}
+      {editTarget && <EditModal account={editTarget} isAdmin={isAdmin} allParents={allParents} onClose={() => setEditTarget(null)} onSaved={handleSaved} onUnauth={onUnauth} />}
     </div>
   );
 }

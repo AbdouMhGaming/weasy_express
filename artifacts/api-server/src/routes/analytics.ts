@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { adminAuth, type AuthedRequest } from "../lib/adminAuth";
+import { adminAuth, hasTeamPermission, type AuthedRequest } from "../lib/adminAuth";
 
 const router = Router();
 // Scope this guard so it cannot reject unrelated routes mounted after it.
 router.use("/analytics", adminAuth, (req, res, next) => {
   if ((req as AuthedRequest).adminRole === "ticket_manager") {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  if ((req as AuthedRequest).adminRole === "admin_team" && !hasTeamPermission(req, "analytics")) {
     res.status(403).json({ ok: false, error: "forbidden" }); return;
   }
   next();
@@ -30,7 +33,7 @@ router.get("/analytics/options", adminAuth, async (req: AuthedRequest, res) => {
     let hubs: string[]    = [];
     let expediteurs: string[] = [];
 
-    if (role === "admin") {
+    if (role === "admin" || hasTeamPermission(req, "analytics")) {
       // Build hub list from the offices table (same format used everywhere: "wilaya — commune")
       // then UNION with any office_hub values already in admins/payouts that may not be in offices
       const [hr] = await conn.execute(
@@ -121,7 +124,7 @@ router.get("/analytics", adminAuth, async (req: AuthedRequest, res) => {
 
   const conn = await pool.getConnection();
   try {
-    if (!["admin", "office", "expediteur"].includes(role)) {
+    if (!["admin", "admin_team", "office", "expediteur"].includes(role)) {
       return res.json({ ok: true, tickets: null, payouts: null });
     }
 

@@ -1,30 +1,39 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackDelays, useEcotrackDelayThresholds, useUpdateEcotrackDelayThresholds } from "@/hooks/use-ecotrack";
-import { Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
+import { Eye, Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { WILAYA_LIST } from "@/lib/wilayas";
+import { PaginationBar, usePagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
+import { TrackingDetailModal } from "./EcotrackWorkspaceView";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
-export default function EcotrackDelaysView({ role }: { role: "admin" | "expediteur" }) {
+export default function EcotrackDelaysView({ role }: { role: "admin" | "expediteur" | "suivi" }) {
   const { t } = useTranslation();
 
   if (role === "admin") {
-    return <AdminDelayThresholdsView t={t} />;
+    return (
+      <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-auto bg-slate-50/50">
+        <div className="flex-none"><AdminDelayThresholdsView t={t} /></div>
+        <div className="flex-1"><ExpediteurDelaysView t={t} role={role} /></div>
+      </div>
+    );
   }
-  
-  return <ExpediteurDelaysView t={t} />;
+
+  return <div className="flex flex-col h-[calc(100vh-4rem)] w-full"><ExpediteurDelaysView t={t} role={role} /></div>;
 }
 
-function ExpediteurDelaysView({ t }: { t: any }) {
+function ExpediteurDelaysView({ t, role }: { t: any, role: "admin" | "expediteur" | "suivi" }) {
   const [selectedWilaya, setSelectedWilaya] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  type DelaySortKey = "enteredAt" | "elapsedHours";
-  const [sortKey, setSortKey] = useState<DelaySortKey>("elapsedHours");
+  type DelaySortKey = "enteredAt" | "elapsedDays";
+  const [sortKey, setSortKey] = useState<DelaySortKey>("elapsedDays");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const [detailTracking, setDetailTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
@@ -52,6 +61,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
     () => new Map(WILAYA_LIST.map((wilaya) => [String(Number(wilaya.code.replace("DZ", ""))), wilaya.name])),
     [],
   );
+
   const sortedOrders = useMemo(() => {
     const orders = [...(delaysData?.orders || [])];
     return orders.sort((a: any, b: any) => {
@@ -61,6 +71,10 @@ function ExpediteurDelaysView({ t }: { t: any }) {
       return sortDirection === "asc" ? difference : -difference;
     });
   }, [delaysData?.orders, sortKey, sortDirection]);
+
+  // Client-side pagination
+  const { page, setPage, pageSize, setPageSize, paged: paginatedOrders, totalPages, totalItems } = usePagination(sortedOrders, 20);
+
   const toggleSort = (key: DelaySortKey) => {
     if (sortKey === key) setSortDirection(direction => direction === "desc" ? "asc" : "desc");
     else {
@@ -68,6 +82,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
       setSortDirection("desc");
     }
   };
+
   const SortIcon = ({ column }: { column: DelaySortKey }) => {
     if (sortKey !== column) return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />;
     return sortDirection === "desc"
@@ -76,7 +91,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
       <div className="mb-5 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="h-1 bg-[#E10600]" />
         <div className="flex flex-col items-start justify-between gap-4 p-5 xl:flex-row xl:items-center">
@@ -97,7 +112,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
           )}
           </div>
         </div>
-        
+
         <div className="flex flex-col gap-3 w-full xl:w-auto">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px]">
@@ -109,7 +124,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
                 className="pl-9 bg-white shadow-sm h-9"
               />
             </div>
-            <select 
+            <select
               className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value)}
@@ -121,7 +136,7 @@ function ExpediteurDelaysView({ t }: { t: any }) {
               <option value="suspendu">{t("admin.ecotrackPortal.tracking.statusLabels.suspended")}</option>
               <option value="retour">{t("admin.ecotrackPortal.delays.allReturns")}</option>
             </select>
-            <select 
+            <select
               className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
               value={selectedWilaya}
               onChange={e => setSelectedWilaya(e.target.value)}
@@ -146,78 +161,106 @@ function ExpediteurDelaysView({ t }: { t: any }) {
             <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
             <p className="text-slate-900 font-semibold">{t("admin.ecotrackPortal.common.error")}</p>
           </div>
-        ) : !delaysData?.orders || delaysData.orders.length === 0 ? (
+        ) : totalItems === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-12 text-center bg-slate-50">
             <Clock className="h-12 w-12 text-slate-300 mb-3" />
             <p className="text-slate-500 font-medium">{t("admin.ecotrackPortal.delays.noDelays")}</p>
           </div>
         ) : (
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.tracking")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.destination")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.recipient")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.tracking.status")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">
-                    <button type="button" onClick={() => toggleSort("enteredAt")} className={`inline-flex items-center gap-1.5 ${sortKey === "enteredAt" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-entered-at">
-                      {t("admin.ecotrackPortal.delays.enteredAt")} <SortIcon column="enteredAt" />
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">
-                    <button type="button" onClick={() => toggleSort("elapsedHours")} className={`inline-flex items-center gap-1.5 ${sortKey === "elapsedHours" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-elapsed-hours">
-                      {t("admin.ecotrackPortal.delays.elapsedHours")} <SortIcon column="elapsedHours" />
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sortedOrders.map((order: any) => (
-                  <tr key={order.tracking} className="hover:bg-slate-50 transition-colors" data-testid="overdue-row">
-                    <td className="px-4 py-3 font-mono font-bold text-slate-900">{order.tracking}</td>
-                    <td className="px-4 py-3 font-medium text-slate-700">
-                      {(() => {
-                        const id = String(order.wilayaId ?? order.wilaya_id ?? order.code_wilaya ?? "").replace(/^0+/, "");
-                        const name = order.wilayaName || order.wilaya_name || wilayaNames.get(id);
-                        return name ? (
-                          <span className="inline-flex items-center gap-1.5" data-testid={`delay-destination-${order.tracking}`}>
-                            <MapPin className="h-3.5 w-3.5 shrink-0 text-[#E10600]" />
-                            ({id}, {name})
-                          </span>
-                        ) : <span className="text-slate-400">—</span>;
-                      })()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{order.recipient || order.client}</div>
-                      <div className="text-xs text-slate-500">{order.phone}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-800">
-                        {order.status === "vers_wilaya" ? t("admin.ecotrackPortal.tracking.statusLabels.toWilaya") :
-                         order.status === "en_livraison" ? t("admin.ecotrackPortal.tracking.statusLabels.outForDelivery") :
-                         order.status === "suspendu" || order.status === "suspendus" ? t("admin.ecotrackPortal.tracking.statusLabels.suspended") :
-                         order.status?.startsWith("retour_") || order.status?.startsWith("return_") ? t("admin.ecotrackPortal.delays.allReturns") :
-                         order.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{order.enteredAt ? new Date(order.enteredAt).toLocaleString() : '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-red-600">{Number(order.elapsedHours).toFixed(1)}h</span>
-                        <span className="text-xs text-slate-400">/ {order.thresholdHours}h</span>
-                      </div>
-                    </td>
+          <div className="flex flex-col h-full flex-1">
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.tracking")}</th>
+                    {(role === "admin" || role === "suivi") && <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.sender", "Expéditeur")}</th>}
+                    <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.destination")}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.recipient")}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.tracking.status")}</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">
+                      <button type="button" onClick={() => toggleSort("enteredAt")} className={`inline-flex items-center gap-1.5 ${sortKey === "enteredAt" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-entered-at">
+                        {t("admin.ecotrackPortal.delays.enteredAt")} <SortIcon column="enteredAt" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">
+                      <button type="button" onClick={() => toggleSort("elapsedDays")} className={`inline-flex items-center gap-1.5 ${sortKey === "elapsedDays" ? "text-[#E10600]" : "hover:text-slate-900"}`} data-testid="sort-delays-elapsed-days">
+                        {t("admin.ecotrackPortal.delays.days", "Jours écoulés")} <SortIcon column="elapsedDays" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-3"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedOrders.map((order: any) => (
+                    <tr key={order.tracking} className="hover:bg-slate-50 transition-colors group" data-testid="overdue-row">
+                      <td className="px-4 py-3 font-mono font-bold text-slate-900">{order.tracking}</td>
+                      {(role === "admin" || role === "suivi") && (
+                        <td className="px-4 py-3 font-medium text-slate-700">{order.owner || order.expediteur || '—'}</td>
+                      )}
+                      <td className="px-4 py-3 font-medium text-slate-700">
+                        {(() => {
+                          const id = String(order.wilayaId ?? order.wilaya_id ?? order.code_wilaya ?? "").replace(/^0+/, "");
+                          const name = order.wilayaName || order.wilaya_name || wilayaNames.get(id);
+                          return name ? (
+                            <span className="inline-flex items-center gap-1.5" data-testid={`delay-destination-${order.tracking}`}>
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-[#E10600]" />
+                              ({id}, {name})
+                            </span>
+                          ) : <span className="text-slate-400">—</span>;
+                        })()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">{order.recipient || order.client}</div>
+                        <div className="text-xs text-slate-500">{order.phone}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-800">
+                          {order.status === "vers_wilaya" ? t("admin.ecotrackPortal.tracking.statusLabels.toWilaya") :
+                           order.status === "en_livraison" ? t("admin.ecotrackPortal.tracking.statusLabels.outForDelivery") :
+                           order.status === "suspendu" || order.status === "suspendus" ? t("admin.ecotrackPortal.tracking.statusLabels.suspended") :
+                           order.status?.startsWith("retour_") || order.status?.startsWith("return_") ? t("admin.ecotrackPortal.delays.allReturns") :
+                           order.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{order.enteredAt ? new Date(order.enteredAt).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-red-600">{(Number(order.elapsedHours) / 24).toFixed(1)}j</span>
+                          <span className="text-xs text-slate-400">/ {(Number(order.thresholdHours) / 24).toFixed(1)}j</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {totalItems > 0 && (
+              <div className="shrink-0 border-t border-slate-200">
+                <PaginationBar
+                  page={page}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  setPage={setPage}
+                  setPageSize={setPageSize}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
+      {detailTracking && <TrackingDetailModal tracking={detailTracking.tracking} expediteurId={detailTracking.expediteurId} onClose={() => setDetailTracking(null)} />}
     </div>
   );
 }
+
 
 function AdminDelayThresholdsView({ t }: { t: any }) {
   const { data: thresholdsData, isLoading, error } = useEcotrackDelayThresholds();
@@ -306,7 +349,7 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+    <div className="flex flex-col w-full bg-slate-50/50 p-4 sm:p-6 lg:p-8">
       <div className="mb-5 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="h-1 bg-[#E10600]" />
         <div className="flex flex-col items-start justify-between gap-5 p-5 xl:flex-row xl:items-center">
@@ -402,14 +445,14 @@ function AdminDelayThresholdsView({ t }: { t: any }) {
                     suspendu: { value: "72", unit: "h" },
                     retour: { value: "72", unit: "h" },
                   };
-                  
+
                   return (
                     <tr key={wilaya.code} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-semibold text-slate-700">
                         <span className="me-2 inline-flex min-w-7 justify-center rounded-md bg-slate-100 px-1.5 py-1 text-[10px] font-black text-slate-500">{id}</span>
                         {wilaya.name}
                       </td>
-                      
+
                       {thresholdColumns.map(column => (
                         <td key={column.field} className="border-s border-slate-100 px-4 py-3">
                           <div className="flex items-center gap-3">

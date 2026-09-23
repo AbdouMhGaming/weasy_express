@@ -1,9 +1,15 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { adminAuth, superAdminOnly, type AuthedRequest } from "../lib/adminAuth";
+import { adminAuth, hasTeamPermission, superAdminOnly, type AuthedRequest } from "../lib/adminAuth";
 import { sendPushToUser, sendPushToRole, sendPushToOfficeHub } from "../lib/pushNotify";
 
 const router = Router();
+router.use("/tickets", adminAuth, (req, res, next) => {
+  if (!hasTeamPermission(req, "messaging") && (req as AuthedRequest).adminRole === "admin_team") {
+    res.status(403).json({ ok: false, error: "forbidden" }); return;
+  }
+  next();
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -73,7 +79,7 @@ router.get("/tickets", adminAuth, async (req: AuthedRequest, res) => {
   const conn = await pool.getConnection();
   try {
     let rows: any[];
-    if (role === "admin" || role === "ticket_manager") {
+    if (((role === "admin") || hasTeamPermission(req, "messaging")) || role === "ticket_manager") {
       [rows] = await conn.execute("SELECT * FROM tickets ORDER BY updated_at DESC") as any;
     } else if (role === "office") {
       // Team sub-accounts see the parent's tickets (dataUsername = parent's username)
@@ -221,7 +227,7 @@ router.put("/tickets/:id/status", adminAuth, async (req: AuthedRequest, res) => 
 
     const isSender = ticket.created_by === username;
     const isRecipient =
-      role === "admin" ||
+      ((role === "admin") || hasTeamPermission(req, "messaging")) ||
       role === "ticket_manager" ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
@@ -296,7 +302,7 @@ router.put("/tickets/:id/claim", adminAuth, async (req: AuthedRequest, res) => {
 
     const myHub = (role === "office") ? await getUserHub(conn, username) : null;
     const allowed =
-      role === "admin" ||
+      ((role === "admin") || hasTeamPermission(req, "messaging")) ||
       role === "ticket_manager" ||
       (role === "office" && ticket.destination_type === "pickup_desk" && myHub && ticket.recipient_office === myHub) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === username);
@@ -324,7 +330,7 @@ router.get("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) => 
     const role = req.adminRole!;
     const username = req.adminUsername!;
     const hub = role === "office" ? await getUserHub(conn, username) : null;
-    const allowed = role === "admin" || role === "ticket_manager" ||
+    const allowed = ((role === "admin") || hasTeamPermission(req, "messaging")) || role === "ticket_manager" ||
       ticket.created_by === (req.adminDataUsername ?? username) ||
       (role === "office" && ticket.destination_type === "pickup_desk" && hub === ticket.recipient_office) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === (req.adminDataUsername ?? username)) ||
@@ -355,7 +361,7 @@ router.post("/tickets/:id/events", adminAuth, async (req: AuthedRequest, res) =>
     const role = req.adminRole!;
     const username = req.adminUsername!;
     const hub = role === "office" ? await getUserHub(conn, username) : null;
-    const allowed = role === "admin" || role === "ticket_manager" ||
+    const allowed = ((role === "admin") || hasTeamPermission(req, "messaging")) || role === "ticket_manager" ||
       ticket.created_by === (req.adminDataUsername ?? username) ||
       (role === "office" && ticket.destination_type === "pickup_desk" && hub === ticket.recipient_office) ||
       (role === "expediteur" && ticket.destination_type === "merchant" && ticket.recipient_username === (req.adminDataUsername ?? username)) ||

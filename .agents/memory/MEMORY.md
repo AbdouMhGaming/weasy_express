@@ -16,3 +16,4 @@
 - [Ecotrack dashboard density](ecotrack-dashboard-density.md) — user prefers the compact paired dashboard layout; collapsed sidebar must be icon-only and expand Orders before category selection.
 - [Ecotrack delay timing](ecotrack-delay-timing.md) — delay thresholds are global per wilaya/status; overdue time starts at the recorded current-status entry, with remote timestamps only as fallback.
 - [Portal session expiry](portal-session-expiry.md) — protected Expediteur/Admin requests must treat HTTP 401 as session expiry and redirect to the path-specific login, not as an Ecotrack disconnect.
+- [Cross-portal Ecotrack identity](cross-portal-ecotrack-identity.md) — privileged order operations must pair tracking with owner ID; Suivi sessions and admin-team permissions are isolated and deny by default.

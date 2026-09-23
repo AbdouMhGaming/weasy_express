@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { OrderFormModal, BulkOrderModal, OrderDetailsModal, TrackingDetailModal, AddNoteModal } from "./EcotrackWorkspaceView";
+import { OrderFormModal, BulkOrderModal, OrderDetailsModal, TrackingDetailModal } from "./EcotrackWorkspaceView";
 import { useToast } from "@/hooks/use-toast";
 
 const ECOTRACK_STATUS_KEYS: Record<string, string> = {
@@ -957,7 +957,7 @@ export default function EcotrackDashboardView() {
       {isBulkModalOpen && <BulkOrderModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />}
       {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
       {detailTracking && <TrackingDetailModal tracking={detailTracking} onClose={() => setDetailTracking("")} />}
-      {noteTracking && <AddNoteModal tracking={noteTracking} onClose={() => setNoteTracking("")} />}
+      {noteTracking && <TrackingDetailModal tracking={noteTracking} onClose={() => setNoteTracking("")} />}
       
       <style>{`
         .map-container svg { width: 100%; height: 100%; object-fit: contain; }

@@ -1,6 +1,7 @@
 import { pool } from "@workspace/db";
 import { EcotrackError, ecotrackRequest, ecotrackToken } from "./ecotrackClient";
 import { logger } from "./logger";
+import { ensureEcotrackEventsStorage, recordSuspension } from "./ecotrackEvents";
 
 const MAX_SYNC_PAGES = 10;
 const LIVE_SYNC_INTERVAL_MS = 60_000;
@@ -93,6 +94,7 @@ export async function ensureEcotrackStorage() {
       );
     }
     logger.info("Ecotrack storage ready");
+    await ensureEcotrackEventsStorage();
   } finally {
     conn.release();
   }
@@ -184,10 +186,14 @@ export async function cacheOrders(expediteurId: number, orders: any[]) {
         [expediteurId, ...trackings],
       ) as any;
       const existingStatuses = new Map(existingRows.map((row: any) => [String(row.tracking), String(row.status_value ?? "")]));
+      const suspensionEvents: Array<{ tracking: string; occurredAt: string }> = [];
       const historyRows = batch.flatMap((row) => {
         const currentStatus = String(row[5] ?? "");
         if (!currentStatus || existingStatuses.get(String(row[1])) === currentStatus) return [];
         const occurredAt = row[10] ?? row[9] ?? mysqlDateTime(new Date());
+        if (["suspendu", "suspendus"].includes(currentStatus.toLocaleLowerCase())) {
+          suspensionEvents.push({ tracking: String(row[1]), occurredAt: String(occurredAt) });
+        }
         return [[expediteurId, row[1], currentStatus, occurredAt]];
       });
       if (historyRows.length) {
@@ -208,6 +214,9 @@ export async function cacheOrders(expediteurId: number, orders: any[]) {
           last_updated_at_remote=VALUES(last_updated_at_remote), raw_order=VALUES(raw_order), fetched_at=NOW()`,
         batch.flat(),
       );
+      for (const event of suspensionEvents) {
+        await recordSuspension({ expediteurId, ...event });
+      }
     }
   } finally {
     conn.release();

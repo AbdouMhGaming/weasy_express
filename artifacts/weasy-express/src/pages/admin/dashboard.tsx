@@ -19,6 +19,7 @@ const EcotrackWorkspaceView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import
 const EcotrackDashboardView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDashboardView"));
 const EcotrackReportsView    = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackReportsView"));
 const EcotrackDelaysView     = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDelaysView"));
+const EcotrackFailuresView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackFailuresView"));
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, History } from "lucide-react";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
@@ -28,12 +29,13 @@ import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { useEcotrackDashboard } from "@/hooks/use-ecotrack";
+import { NotificationsBell } from "@/components/NotificationsBell";
 import { humanizeEcotrackStatus } from "./EcotrackWorkspaceView";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type PartnerStatus = "pending" | "reviewing" | "approved" | "rejected";
-type AdminRole = "admin" | "office" | "finance" | "commercial" | "expediteur" | "ticket_manager";
+type AdminRole = "admin" | "office" | "finance" | "commercial" | "expediteur" | "ticket_manager" | "suivi" | "admin_team";
 type OrderStatus = "pending" | "in_transit" | "delivered" | "returned" | "failed" | "cancelled";
 
 interface Partner {
@@ -113,6 +115,8 @@ const ROLE_COLOR: Record<AdminRole, string> = {
   commercial: "bg-orange-100 text-orange-800",
   expediteur: "bg-amber-100 text-amber-800",
   ticket_manager: "bg-cyan-100 text-cyan-800",
+  suivi: "bg-pink-100 text-pink-800",
+  admin_team: "bg-purple-50 text-purple-600",
 };
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
@@ -129,12 +133,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-failures";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
   partnerCount, agentApplicationCount, officeCount, isOpen, onClose,
-  isCollapsed = false, toggleCollapse,
+  isCollapsed = false, toggleCollapse, isPermitted
 }: {
   view: string; setView: (v: string) => void;
   role: AdminRole; username: string;
@@ -142,6 +146,7 @@ function SidebarInner({
   partnerCount: number; agentApplicationCount: number; officeCount: number;
   isOpen: boolean; onClose: () => void;
   isCollapsed?: boolean; toggleCollapse?: () => void;
+  isPermitted: (v: string) => boolean;
 }) {
   const { t } = useTranslation();
   const isAdmin = role === "admin";
@@ -184,10 +189,10 @@ function SidebarInner({
   const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
   const [notifLoading, setNotifLoading] = useState(false);
   // Pick the correct session token based on the user's role
-  const _pushToken = () => localStorage.getItem(role === "expediteur" ? "exp_token" : "admin_token") ?? "";
+  const _pushToken = () => localStorage.getItem(role === "suivi" ? "suivi_token" : role === "expediteur" ? "exp_token" : "admin_token") ?? "";
 
   async function toggleNotifications() {
-    if (notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (role === "suivi" || notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
     setNotifLoading(true);
     try {
       if (notifEnabled) {
@@ -278,73 +283,76 @@ function SidebarInner({
             {t(`admin.roles.${role}`)}
           </span>
         </div>
-        {toggleCollapse && (
+        <div className="flex items-center gap-1">
+          <NotificationsBell />
+          {role !== "suivi" && toggleCollapse && (
           <button onClick={toggleCollapse} title="Toggle Sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all">
             <svg className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
           </button>
         )}
+        </div>
       </div>
 
-      {isAdmin ? (
+      {(isAdmin || role === "admin_team") ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItem("dashboard", t("admin.sidebar.dashboard"), 0,
+          {isPermitted("dashboard") && navItem("dashboard", t("admin.sidebar.dashboard"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
-          {navItem("partners", t("admin.sidebar.partners"), partnerCount,
+          {isPermitted("partners") && navItem("partners", t("admin.sidebar.partners"), partnerCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
-          {navItem("agent-applications", t("admin.sidebar.agentApplications"), agentApplicationCount,
+          {isPermitted("agent-applications") && navItem("agent-applications", t("admin.sidebar.agentApplications"), agentApplicationCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0M19 8v6m3-3h-6" /></svg>
           )}
-          {navItem("offices", t("admin.sidebar.offices"), officeCount,
+          {isPermitted("offices") && navItem("offices", t("admin.sidebar.offices"), officeCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
-          {navItem("admins", t("admin.sidebar.admins"), 0,
+          {isPermitted("admins") && navItem("admins", t("admin.sidebar.admins"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
-          {navItem("performance", t("admin.sidebar.performance"), 0,
+          {isPermitted("performance") && navItem("performance", t("admin.sidebar.performance"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
           )}
           {!HOSTINGER_PUBLIC_BUILD && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
-          {navItem("charges", t("admin.charges.title"), 0,
+          {isPermitted("charges") && navItem("charges", t("admin.charges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
-          {navItem("commissions", t("admin.commissions.title"), 0,
+          {isPermitted("commissions") && navItem("commissions", t("admin.commissions.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
           )}
-          {navItem("workers", t("admin.workers.title"), 0,
+          {isPermitted("workers") && navItem("workers", t("admin.workers.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
-          {navItem("decharges", t("admin.decharges.title"), 0,
+          {isPermitted("decharges") && navItem("decharges", t("admin.decharges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
-          {navItem("queue", t("admin.sidebar.queue"), 0,
+          {isPermitted("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
           )}
-          {navItem("returns", t("admin.sidebar.returns"), 0,
+          {isPermitted("returns") && navItem("returns", t("admin.sidebar.returns"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
           )}
-          {navItem("expediteurs", t("admin.sidebar.merchants"), 0,
+          {isPermitted("expediteurs") && navItem("expediteurs", t("admin.sidebar.merchants"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           )}
-          {navItem("payouts", t("admin.sidebar.payouts"), 0,
+          {isPermitted("payouts") && navItem("payouts", t("admin.sidebar.payouts"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           )}
-          {navItem("messaging", t("admin.sidebar.messaging"), 0,
+          {isPermitted("messaging") && navItem("messaging", t("admin.sidebar.messaging"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
           )}
-          {navItem("team", t("admin.sidebar.team"), 0,
+          {isPermitted("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           )}
-          {navItem("analytics", t("admin.sidebar.analytics"), 0,
+          {isPermitted("analytics") && navItem("analytics", t("admin.sidebar.analytics"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
           <div className="my-2 border-t border-white/5" />
-          {navItem("settings", t("admin.settings.title"), 0,
+          {isPermitted("settings") && navItem("settings", t("admin.settings.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
         </nav>
@@ -378,22 +386,22 @@ function SidebarInner({
         </nav>
       ) : role === "finance" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItem("charges", t("admin.charges.title"), 0,
+          {isPermitted("charges") && navItem("charges", t("admin.charges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
-          {navItem("commissions", t("admin.commissions.title"), 0,
+          {isPermitted("commissions") && navItem("commissions", t("admin.commissions.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
           )}
-          {navItem("workers", t("admin.workers.title"), 0,
+          {isPermitted("workers") && navItem("workers", t("admin.workers.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
-          {navItem("decharges", t("admin.decharges.title"), 0,
+          {isPermitted("decharges") && navItem("decharges", t("admin.decharges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           )}
         </nav>
       ) : role === "commercial" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItem("partners", t("admin.sidebar.partners"), partnerCount,
+          {isPermitted("partners") && navItem("partners", t("admin.sidebar.partners"), partnerCount,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           )}
         </nav>
@@ -499,6 +507,15 @@ function SidebarInner({
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItem("queue", t("admin.sidebar.queue"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+          )}
+        </nav>
+      ) : role === "suivi" ? (
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {!HOSTINGER_PUBLIC_BUILD && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays", "Retards"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+          {!HOSTINGER_PUBLIC_BUILD && navItem("ecotrack-failures", t("admin.sidebar.ecotrackFailures", "Échec de livraison"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
           )}
         </nav>
       ) : (
@@ -2903,10 +2920,13 @@ export default function AdminDashboard() {
   const [location, navigate] = useLocation();
   // Expediteur sessions use separate localStorage keys (exp_*) so admins can visit
   // /expediteurs and log in as an expediteur without touching their admin session.
-  const isExpediteurPath = location === "/expediteurs";
-  const role = (localStorage.getItem(isExpediteurPath ? "exp_role" : "admin_role") ?? (isExpediteurPath ? "expediteur" : "admin")) as AdminRole;
-  const username = localStorage.getItem(isExpediteurPath ? "exp_username" : "admin_username") ?? "user";
+  const isSuiviPath = location.startsWith("/suivi");
+  const isExpediteurPath = location.startsWith("/expediteurs");
+  const portal = isSuiviPath ? "suivi" : isExpediteurPath ? "expediteur" : "admin";
+  const roleRaw = localStorage.getItem(isSuiviPath ? "suivi_role" : isExpediteurPath ? "exp_role" : "admin_role") ?? (isSuiviPath ? "suivi" : isExpediteurPath ? "expediteur" : "admin");
   const isTeam = localStorage.getItem(isExpediteurPath ? "exp_is_team" : "admin_is_team") === "1";
+  const role = (roleRaw === "admin" && isTeam) ? "admin_team" : roleRaw as AdminRole;
+  const username = localStorage.getItem(isSuiviPath ? "suivi_username" : isExpediteurPath ? "exp_username" : "admin_username") ?? "user";
   const teamPerms: string[] = isTeam ? (() => { try { return JSON.parse(localStorage.getItem(isExpediteurPath ? "exp_permissions" : "admin_permissions") ?? "[]"); } catch { return []; } })() : [];
   const effectiveTeamPerms = teamPerms.includes("ecotrack") && !teamPerms.includes("ecotrack-dashboard")
     ? ["ecotrack-dashboard", ...teamPerms]
@@ -2935,17 +2955,29 @@ export default function AdminDashboard() {
   const defaultView: SidebarView = role === "finance" ? "charges"
     : role === "commercial" ? "partners"
     : role === "ticket_manager" ? "queue"
+    : role === "suivi" ? "ecotrack-delays"
+    : role === "admin_team"
+      ? (teamPerms.includes("ecotrack") ? "ecotrack-delays" : (teamPerms[0] as SidebarView | undefined) ?? "queue")
     : role === "office" || role === "expediteur" ? (allowedSections[0] ?? "queue")
     : "dashboard";
-  const viewStorageKey = `weasy:${isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
+  const viewStorageKey = `weasy:${isSuiviPath ? "suivi" : isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
   const permittedViews = useMemo<SidebarView[]>(() => {
     if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "ecotrack-delays", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
     if (role === "office") return allowedSections;
     if (role === "finance") return ["charges", "commissions", "workers", "decharges"];
     if (role === "commercial") return ["partners"];
     if (role === "ticket_manager") return ["queue"];
+    if (role === "suivi") return ["ecotrack-delays", "ecotrack-failures"];
+    if (role === "admin_team") {
+      const views = teamPerms
+        .map((permission) => permission === "ecotrack" ? "ecotrack-delays" : permission)
+        .filter((permission): permission is SidebarView =>
+          ["ecotrack-delays", "expediteurs", "queue", "payouts", "team", "returns", "merchants", "messaging", "analytics"].includes(permission),
+        );
+      return views;
+    }
     return allowedSections;
-  }, [role, allowedSections]);
+  }, [role, allowedSections, teamPerms]);
 
   const isPermitted = useCallback((v: string) => {
     if ((permittedViews as string[]).includes(v)) return true;
@@ -2995,41 +3027,52 @@ export default function AdminDashboard() {
     // Unsubscribe from push BEFORE clearing the session.
     // We await it (with a 3-second safety timeout) so the fetch completes
     // before navigate() is called — fire-and-forget was getting aborted.
-    const pushToken = isExpediteurPath
+    const pushToken = isSuiviPath
+      ? localStorage.getItem("suivi_token")
+      : isExpediteurPath
       ? localStorage.getItem("exp_token")
       : localStorage.getItem("admin_token");
-    try {
-      if ("serviceWorker" in navigator && "PushManager" in window && pushToken) {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          await Promise.race([
-            (async () => {
-              await fetch(`${API_BASE}/api/push/unsubscribe`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ endpoint: sub.endpoint }),
-                keepalive: true,   // survives navigation
-              });
-              await sub.unsubscribe(); // revoke browser endpoint
-            })(),
-            new Promise<void>(resolve => setTimeout(resolve, 3000)), // never block logout > 3 s
-          ]);
-        }
-      }
-    } catch { /* never block logout on push errors */ }
 
-    // Remember that push was on so we can re-subscribe after the next login.
-    if (localStorage.getItem("push_enabled") === "1") {
-      localStorage.setItem(
-        isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin",
-        "1",
-      );
+    if (role !== "suivi") {
+      try {
+        if ("serviceWorker" in navigator && "PushManager" in window && pushToken) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            await Promise.race([
+              (async () => {
+                await fetch(`${API_BASE}/api/push/unsubscribe`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ endpoint: sub.endpoint }),
+                  keepalive: true,   // survives navigation
+                });
+                await sub.unsubscribe(); // revoke browser endpoint
+              })(),
+              new Promise<void>(resolve => setTimeout(resolve, 3000)), // never block logout > 3 s
+            ]);
+          }
+        }
+      } catch { /* never block logout on push errors */ }
+
+      // Remember that push was on so we can re-subscribe after the next login.
+      if (localStorage.getItem("push_enabled") === "1") {
+        localStorage.setItem(
+          isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin",
+          "1",
+        );
+      }
+      localStorage.removeItem("push_enabled");
     }
-    localStorage.removeItem("push_enabled");
+
     localStorage.removeItem(viewStorageKey);
 
-    if (isExpediteurPath) {
+    if (isSuiviPath) {
+      localStorage.removeItem("suivi_token");
+      localStorage.removeItem("suivi_role");
+      localStorage.removeItem("suivi_username");
+      navigate("/suivi/login");
+    } else if (isExpediteurPath) {
       localStorage.removeItem("exp_token");
       localStorage.removeItem("exp_role");
       localStorage.removeItem("exp_username");
@@ -3078,14 +3121,14 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Each path checks its own separate token — admin and expediteur sessions are independent
-    const token = localStorage.getItem(isExpediteurPath ? "exp_token" : "admin_token");
+    const token = localStorage.getItem(isSuiviPath ? "suivi_token" : isExpediteurPath ? "exp_token" : "admin_token");
     if (!token) {
-      navigate(isExpediteurPath ? "/expediteurs/login" : "/admin/login");
+      navigate(isSuiviPath ? "/suivi/login" : isExpediteurPath ? "/expediteurs/login" : "/admin/login");
       return;
     }
     if (role === "admin") { fetchPartners(); fetchOffices(); fetchAgentApplications(); }
     else if (role === "commercial") { fetchPartners(); }
-  }, [fetchPartners, fetchOffices, fetchAgentApplications, navigate, role, location, isExpediteurPath]);
+  }, [fetchPartners, fetchOffices, fetchAgentApplications, navigate, role, location, isSuiviPath, isExpediteurPath]);
 
   // Register service worker for push notifications
   useEffect(() => {
@@ -3168,7 +3211,7 @@ export default function AdminDashboard() {
         agentApplicationCount={agentApplications.filter((application) => application.status === "pending").length}
         officeCount={offices.length}
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
-        isCollapsed={isCollapsed} toggleCollapse={toggleCollapse}
+        isCollapsed={isCollapsed} toggleCollapse={toggleCollapse} isPermitted={isPermitted}
       />
       <main className={`flex-1 min-h-screen overflow-y-auto pt-14 md:pt-0 transition-all duration-300 ${isCollapsed ? "md:ml-[72px]" : "md:ml-64"}`}>
         <NotificationBanner role={role} />
@@ -3204,9 +3247,13 @@ export default function AdminDashboard() {
             <ChargesView onUnauth={unauth} />
           ) : role === "ticket_manager" ? (
             <QueueView />
+          ) : role === "suivi" ? (
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-delays" && EcotrackDelaysView ? <EcotrackDelaysView role="suivi" /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-failures" && EcotrackFailuresView ? <EcotrackFailuresView /> :
+            <EmptyRoleView role={role} />
           ) : role === "commercial" ? (
             <PartnersView partners={partners} loading={partnersLoading} error={partnersError} onRefresh={fetchPartners} onUnauth={unauth} role={role} canChangeStatus={canChangePartnerStatus} />
-          ) : !isAdmin ? (
+          ) : (!isAdmin && role !== "admin_team") ? (
             <EmptyRoleView role={role} />
           ) : view === "dashboard" ? (
             <DashboardView onUnauth={unauth} onRefreshBadge={fetchPartners} />

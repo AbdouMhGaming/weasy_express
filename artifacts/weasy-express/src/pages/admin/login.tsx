@@ -25,7 +25,7 @@ export default function AdminLogin() {
       const res = await fetch(`${API_BASE}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, rememberMe }),
+        body: JSON.stringify({ username, password, rememberMe, portal: "admin" }),
       });
       const data = (await res.json()) as { ok: boolean; token?: string; role?: string; allowedPartnerStatuses?: string | null; canChangePartnerStatus?: boolean; officeHub?: string; isTeam?: boolean; permissions?: string[] };
       if (!res.ok || !data.ok || !data.token) {

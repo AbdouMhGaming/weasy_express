@@ -455,12 +455,20 @@ const fr = {
       expediteurBlocked: "Ce portail est réservé aux administrateurs. Les expéditeurs doivent se connecter via /expediteurs.",
       footer: "Weasy Express · Tableau de bord administrateur",
     },
+    notifications: {
+      title: "Notifications",
+      unread: "non lues",
+      empty: "Aucune notification",
+      newRemark: "Nouvelle remarque de suivi",
+      update: "Mise à jour de commande",
+    },
     sidebar: {
       label: "Administration",
       dashboard: "Tableau de bord",
       ecotrackDashboard: "Tableau de bord",
       ecotrackReports: "Rapports Statistiques",
       ecotrackDelays: "Retards",
+      ecotrackFailures: "Échec de livraison",
       partners: "Expéditeurs",
       agentApplications: "Demandes d'agents",
       offices: "Bureaux",
@@ -1663,6 +1671,7 @@ const fr = {
         moreResults: "{{count}} autres commandes trouvées",
       },
       delays: {
+        days: "Jours écoulés",
         title: "Retards",
         subtitle: "Commandes en retard en transit, livraison, suspension ou retour",
         noDelays: "Aucune commande en retard trouvée",
@@ -1882,6 +1891,14 @@ const fr = {
       usernamePh: "Nom d'utilisateur",
       accessDenied: "Accès refusé. Ce portail est réservé aux expéditeurs.",
       footer: "Weasy Express · Espace Expéditeur",
+    },
+  },
+  suivi: {
+    login: {
+      title: "Espace Suivi",
+      subtitle: "Connectez-vous pour suivre les retards et les échecs de livraison",
+      usernamePh: "Nom d'utilisateur",
+      footer: "Weasy Express · Espace Suivi",
     },
   },
 };

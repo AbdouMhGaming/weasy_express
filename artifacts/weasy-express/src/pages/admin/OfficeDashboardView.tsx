@@ -517,7 +517,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                     <span className="text-xs font-semibold text-gray-700">{fmtDate(r.report_date)}</span>
                     <span className="text-xs font-bold text-gray-900">{r.total_parcels} {t("admin.office.units.parcel")}</span>
                   </div>
-                  {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
+                  {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">{r.station}</p>}
                   {r.wilayas     && <p className="text-xs text-blue-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
                   {r.sender_name && <p className="text-xs text-gray-400 truncate mt-0.5">📦 {formatSenderCompact(r.sender_name, othersLabel)}</p>}
                   {r.total_amount_dzd > 0 && <p className="text-xs text-gray-500 mt-0.5">{fmtDZ(r.total_amount_dzd)}</p>}
@@ -534,7 +534,7 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
                     <span className="text-xs font-bold text-gray-900">{r.total_parcels} {t("admin.office.units.returnUnit")}</span>
                   </div>
                   {r.sender_name && <p className="text-xs text-gray-500 truncate mt-0.5">📦 {r.sender_name}</p>}
-                  {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">🏢 {r.station}</p>}
+                  {r.station     && <p className="text-xs text-gray-500 truncate mt-0.5">{r.station}</p>}
                   {r.wilayas     && <p className="text-xs text-orange-600 truncate mt-0.5">📍 {wilayasDisplay(r.wilayas)}</p>}
                 </>
               )}

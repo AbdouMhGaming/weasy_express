@@ -343,7 +343,7 @@ function FilterBar({
                 />
               )}
               {filters.hub && (
-                <ActiveTag label={`🏢 ${filters.hub}`} onRemove={() => set({ hub: "" })} />
+                <ActiveTag label={`${filters.hub}`} onRemove={() => set({ hub: "" })} />
               )}
               {filters.expediteur && (
                 <ActiveTag label={`👤 ${filters.expediteur}`} onRemove={() => set({ expediteur: "" })} />
