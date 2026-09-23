@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { API_BASE, expediteurHeaders, readApiJson } from "@/lib/api";
+import { API_BASE, authenticatedFetch, expediteurHeaders, readApiJson } from "@/lib/api";
 
 const BASE = `${API_BASE}/api/expediteur/ecotrack`;
+const fetch = authenticatedFetch;
 
 // Dashboard
 export function useEcotrackReports(filters: { from?: string; to?: string; wilaya?: string }) {

@@ -36,6 +36,43 @@ export function expediteurHeaders(): Record<string, string> {
   };
 }
 
+let sessionExpiryRedirectStarted = false;
+
+/**
+ * Clears an expired portal session and sends the user to the matching login.
+ * Ecotrack credentials are server-side and are intentionally not removed.
+ */
+export function expireCurrentSession(): never {
+  if (typeof window !== "undefined" && !sessionExpiryRedirectStarted) {
+    sessionExpiryRedirectStarted = true;
+    const isExpPath = window.location.pathname.startsWith("/expediteurs");
+
+    localStorage.removeItem("push_enabled");
+    if (isExpPath) {
+      localStorage.removeItem("exp_token");
+      localStorage.removeItem("exp_role");
+      localStorage.removeItem("exp_username");
+      localStorage.removeItem("exp_is_team");
+      localStorage.removeItem("exp_permissions");
+      window.location.replace("/expediteurs/login");
+    } else {
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_role");
+      localStorage.removeItem("admin_username");
+      localStorage.removeItem("admin_office_hub");
+      window.location.replace("/admin/login");
+    }
+  }
+  throw new Error("session_expired");
+}
+
+/** Fetch wrapper for protected endpoints that centrally handles expired sessions. */
+export async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await globalThis.fetch(input, init);
+  if (response.status === 401) expireCurrentSession();
+  return response;
+}
+
 const _isExpPath = () =>
   typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs");
 

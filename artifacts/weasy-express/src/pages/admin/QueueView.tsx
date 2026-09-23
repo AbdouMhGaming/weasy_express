@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { API_BASE, adminHeaders, getSessionRole, getSessionUsername } from "@/lib/api";
+import { API_BASE, adminHeaders, authenticatedFetch, getSessionRole, getSessionUsername } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
+
+const fetch = authenticatedFetch;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
