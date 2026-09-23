@@ -16,6 +16,7 @@ import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { OrderFormModal, BulkOrderModal, OrderDetailsModal, TrackingDetailModal } from "./EcotrackWorkspaceView";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   pret_a_expedier: "readyToShip",
@@ -359,6 +360,9 @@ export default function EcotrackDashboardView() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-slate-50/50 space-y-6 overflow-y-auto w-full relative">
+      <div className="flex justify-end">
+        <NotificationsBell />
+      </div>
       
       {/* Tooltip for Map */}
       {hoveredWilayaData && (
@@ -956,7 +960,7 @@ export default function EcotrackDashboardView() {
       {isModalOpen && <OrderFormModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedParcel(null); }} parcel={selectedParcel} isEdit={Boolean(selectedParcel)} />}
       {isBulkModalOpen && <BulkOrderModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />}
       {detailOrder && <OrderDetailsModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
-      {detailTracking && <TrackingDetailModal tracking={detailTracking} onClose={() => setDetailTracking("")} />}
+      {detailTracking && <TrackingDetailModal tracking={detailTracking} mode="tracking" onClose={() => setDetailTracking("")} />}
       {noteTracking && <TrackingDetailModal tracking={noteTracking} onClose={() => setNoteTracking("")} />}
       
       <style>{`

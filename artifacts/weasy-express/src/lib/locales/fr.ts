@@ -468,6 +468,8 @@ const fr = {
       ecotrackDashboard: "Tableau de bord",
       ecotrackReports: "Rapports Statistiques",
       ecotrackDelays: "Retards",
+      delaysList: "Retards",
+      delaysConfiguration: "Configuration",
       ecotrackFailures: "Échec de livraison",
       partners: "Expéditeurs",
       agentApplications: "Demandes d'agents",
@@ -504,6 +506,7 @@ const fr = {
       commercial: "Commercial",
       expediteur: "Expéditeur",
       ticket_manager: "Gestionnaire de tickets",
+      suivi: "Suivi",
     },
     partners: {
       title: "Expéditeurs",
@@ -1776,6 +1779,13 @@ const fr = {
         }
       },
       tracking: {
+        followUpInfo: "Informations de suivi",
+        noFollowUp: "Aucun commentaire de suivi pour le moment.",
+        unknownAuthor: "Auteur non précisé",
+        followUpDriver: "Livreur",
+        followUpSender: "Expéditeur",
+        noHistory: "Aucun historique de statut trouvé.",
+        addRemarkPlaceholder: "Ajouter une remarque locale...",
         addNote: "Ajouter une information de suivi",
         listUpdates: "Lister les mises à jour",
         requestReturn: "Demander le retour",

@@ -470,6 +470,8 @@ const ar: Translations = {
       ecotrackDashboard: "لوحة التحكم",
       ecotrackReports: "تقارير إحصائية",
       ecotrackDelays: "التأخيرات",
+      delaysList: "التأخيرات",
+      delaysConfiguration: "الإعدادات",
       ecotrackFailures: "فشل التسليم",
       partners: "المرسلون",
       agentApplications: "طلبات الوكلاء",
@@ -506,6 +508,7 @@ const ar: Translations = {
       commercial: "التجاري",
       expediteur: "مرسِل",
       ticket_manager: "مسؤول التذاكر",
+      suivi: "المتابعة",
     },
     partners: {
       title: "المرسلون",
@@ -1778,6 +1781,13 @@ const ar: Translations = {
         }
       },
       tracking: {
+        followUpInfo: "معلومات المتابعة",
+        noFollowUp: "لا توجد تعليقات متابعة بعد.",
+        unknownAuthor: "كاتب غير محدد",
+        followUpDriver: "الموزّع",
+        followUpSender: "المرسل",
+        noHistory: "لا يوجد سجل للحالات.",
+        addRemarkPlaceholder: "أضف ملاحظة محلية...",
         addNote: "إضافة معلومات متابعة",
         listUpdates: "قائمة التحديثات",
         requestReturn: "طلب إرجاع",

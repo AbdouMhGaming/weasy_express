@@ -9,14 +9,13 @@ import { TrackingDetailModal } from "./EcotrackWorkspaceView";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
-export default function EcotrackDelaysView({ role }: { role: "admin" | "expediteur" | "suivi" }) {
+export default function EcotrackDelaysView({ role, section = "list" }: { role: "admin" | "expediteur" | "suivi"; section?: "list" | "configuration" }) {
   const { t } = useTranslation();
 
-  if (role === "admin") {
+  if (role === "admin" && section === "configuration") {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-auto bg-slate-50/50">
-        <div className="flex-none"><AdminDelayThresholdsView t={t} /></div>
-        <div className="flex-1"><ExpediteurDelaysView t={t} role={role} /></div>
+      <div className="min-h-screen w-full overflow-auto bg-slate-50/50">
+        <AdminDelayThresholdsView t={t} />
       </div>
     );
   }

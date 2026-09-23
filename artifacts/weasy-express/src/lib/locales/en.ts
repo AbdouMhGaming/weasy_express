@@ -470,6 +470,8 @@ const en: Translations = {
       ecotrackDashboard: "Dashboard",
       ecotrackReports: "Statistical Reports",
       ecotrackDelays: "Delays",
+      delaysList: "Delays",
+      delaysConfiguration: "Configuration",
       ecotrackFailures: "Delivery failures",
       partners: "Expediteurs",
       agentApplications: "Agent requests",
@@ -506,6 +508,7 @@ const en: Translations = {
       commercial: "Commercial",
       expediteur: "Expediteur",
       ticket_manager: "Ticket Manager",
+      suivi: "Follow-up",
     },
     partners: {
       title: "Expediteurs",
@@ -1778,6 +1781,13 @@ const en: Translations = {
         }
       },
       tracking: {
+        followUpInfo: "Follow-up information",
+        noFollowUp: "No follow-up comments yet.",
+        unknownAuthor: "Author not specified",
+        followUpDriver: "Driver",
+        followUpSender: "Sender",
+        noHistory: "No status history found.",
+        addRemarkPlaceholder: "Add a local remark...",
         addNote: "Add follow-up info",
         listUpdates: "List updates",
         requestReturn: "Request return",

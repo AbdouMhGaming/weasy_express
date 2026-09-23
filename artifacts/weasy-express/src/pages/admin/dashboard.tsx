@@ -21,7 +21,7 @@ const EcotrackReportsView    = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import
 const EcotrackDelaysView     = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDelaysView"));
 const EcotrackFailuresView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackFailuresView"));
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, History } from "lucide-react";
+import { ChevronDown, ChevronRight, History, Clock, Settings2 } from "lucide-react";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { API_BASE, adminHeaders } from "@/lib/api";
@@ -29,7 +29,6 @@ import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { useEcotrackDashboard } from "@/hooks/use-ecotrack";
-import { NotificationsBell } from "@/components/NotificationsBell";
 import { humanizeEcotrackStatus } from "./EcotrackWorkspaceView";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -133,7 +132,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-failures";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-delay-configuration" | "ecotrack-failures";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -184,62 +183,7 @@ function SidebarInner({
   }, [rawStatuses]);
 
   const [isCommandesOpen, setIsCommandesOpen] = useState(view.startsWith("ecotrack-status-"));
-
-  // ── Push notification state ───────────────────────────────────────────────
-  const [notifEnabled, setNotifEnabled] = useState<boolean>(() => localStorage.getItem("push_enabled") === "1");
-  const [notifLoading, setNotifLoading] = useState(false);
-  // Pick the correct session token based on the user's role
-  const _pushToken = () => localStorage.getItem(role === "suivi" ? "suivi_token" : role === "expediteur" ? "exp_token" : "admin_token") ?? "";
-
-  async function toggleNotifications() {
-    if (role === "suivi" || notifLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    setNotifLoading(true);
-    try {
-      if (notifEnabled) {
-        // Disable — use .ready (guaranteed to find the active SW, unlike getRegistration)
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          await fetch(`${API_BASE}/api/push/unsubscribe`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ endpoint: sub.endpoint }),
-            keepalive: true,
-          });
-          await sub.unsubscribe();
-        }
-        localStorage.removeItem("push_enabled");
-        setNotifEnabled(false);
-      } else {
-        // Enable
-        if (Notification.permission === "denied") {
-          alert(t("admin.sidebar.notificationsDenied"));
-          return;
-        }
-        const perm = await Notification.requestPermission();
-        if (perm !== "granted") return;
-        const reg = await navigator.serviceWorker.ready;
-        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" } });
-        const { key: vapidKey } = await vapidRes.json() as { key: string };
-        if (!vapidKey) return;
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        });
-        await fetch(`${API_BASE}/api/push/subscribe`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${_pushToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify(sub.toJSON()),
-        });
-        localStorage.setItem("push_enabled", "1");
-        setNotifEnabled(true);
-      }
-    } catch (err) {
-      console.error("Push toggle error:", err);
-    } finally {
-      setNotifLoading(false);
-    }
-  }
+  const [isDelaysOpen, setIsDelaysOpen] = useState(view === "ecotrack-delays" || view === "ecotrack-delay-configuration");
 
   // Team member permission filtering — use exp_* keys for expediteur sessions
   const sidebarIsTeam = localStorage.getItem(role === "expediteur" ? "exp_is_team" : "admin_is_team") === "1";
@@ -284,7 +228,6 @@ function SidebarInner({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <NotificationsBell />
           {role !== "suivi" && toggleCollapse && (
           <button onClick={toggleCollapse} title="Toggle Sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all">
             <svg className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
@@ -314,8 +257,20 @@ function SidebarInner({
           {isPermitted("performance") && navItem("performance", t("admin.sidebar.performance"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
           )}
-          {!HOSTINGER_PUBLIC_BUILD && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          {!HOSTINGER_PUBLIC_BUILD && (isPermitted("ecotrack-delays") || isPermitted("ecotrack-delay-configuration")) && (
+            <div>
+              <button type="button" onClick={() => setIsDelaysOpen(open => !open)}
+                aria-expanded={isDelaysOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 ${isCollapsed ? "md:justify-center" : ""}`}
+                title={isCollapsed ? t("admin.sidebar.ecotrackDelays") : undefined}>
+                <Clock className="w-5 h-5 shrink-0" />
+                <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.ecotrackDelays")}</span>
+                <span className={`ml-auto text-xs ${isCollapsed ? "md:hidden" : ""}`}>{isDelaysOpen ? "▾" : "▸"}</span>
+              </button>
+              {isDelaysOpen && <div className={isCollapsed ? "md:pl-0" : "pl-5"}>
+                {isPermitted("ecotrack-delays") && navItem("ecotrack-delays", t("admin.sidebar.delaysList"), 0, <Clock className="w-4 h-4 shrink-0" />)}
+                {isPermitted("ecotrack-delay-configuration") && navItem("ecotrack-delay-configuration", t("admin.sidebar.delaysConfiguration"), 0, <Settings2 className="w-4 h-4 shrink-0" />)}
+              </div>}
+            </div>
           )}
           {isPermitted("charges") && navItem("charges", t("admin.charges.title"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -536,28 +491,6 @@ function SidebarInner({
             </button>
           ))}
         </div>
-        {"Notification" in window && "serviceWorker" in navigator && (
-          <button
-            onClick={toggleNotifications}
-            disabled={notifLoading}
-            title={notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
-            className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 ${
-              notifEnabled ? "text-[#E10600] hover:bg-white/5" : "text-white/50 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <svg className="w-5 h-5 shrink-0" fill={notifEnabled ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-              {notifEnabled ? (
-                <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              )}
-            </svg>
-            <span className={isCollapsed ? "md:hidden" : ""}>
-              {notifEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
-            </span>
-            {notifLoading && <span className={`w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin ${isCollapsed ? "absolute top-1 right-1" : "ml-auto"}`} />}
-          </button>
-        )}
         <button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
           <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.changePassword")}</span>
@@ -2583,7 +2516,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.admins.fields.role")}</label>
                   <select value={newRole} onChange={(e) => setNewRole(e.target.value as AdminRole)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] bg-white">
-                    {(["admin", "office", "finance", "commercial", "ticket_manager"] as const).map((r) => (
+                    {(["admin", "office", "finance", "commercial", "ticket_manager", "suivi"] as const).map((r) => (
                       <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
                     ))}
                   </select>
@@ -2679,7 +2612,7 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">{t("admin.admins.fields.role")}</label>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value as AdminRole)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 focus:border-[#E10600] bg-white transition-colors">
-                    {(["admin", "office", "finance", "commercial", "ticket_manager"] as const).map((r) => (
+                    {(["admin", "office", "finance", "commercial", "ticket_manager", "suivi"] as const).map((r) => (
                       <option key={r} value={r}>{t(`admin.roles.${r}`)}</option>
                     ))}
                   </select>
@@ -2962,7 +2895,7 @@ export default function AdminDashboard() {
     : "dashboard";
   const viewStorageKey = `weasy:${isSuiviPath ? "suivi" : isExpediteurPath ? "expediteur" : "admin"}:${username}:dashboard-view`;
   const permittedViews = useMemo<SidebarView[]>(() => {
-    if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "ecotrack-delays", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
+    if (role === "admin") return ["dashboard", "partners", "agent-applications", "offices", "admins", "performance", "ecotrack-delays", "ecotrack-delay-configuration", "charges", "commissions", "settings", "workers", "decharges", "queue", "returns", "expediteurs", "payouts", "messaging", "team", "analytics"];
     if (role === "office") return allowedSections;
     if (role === "finance") return ["charges", "commissions", "workers", "decharges"];
     if (role === "commercial") return ["partners"];
@@ -3267,6 +3200,8 @@ export default function AdminDashboard() {
             <PerformanceView onUnauth={unauth} />
           ) : view === "ecotrack-delays" && EcotrackDelaysView && !HOSTINGER_PUBLIC_BUILD ? (
             <EcotrackDelaysView role="admin" />
+          ) : view === "ecotrack-delay-configuration" && EcotrackDelaysView && !HOSTINGER_PUBLIC_BUILD && isAdmin ? (
+            <EcotrackDelaysView role="admin" section="configuration" />
           ) : view === "charges" ? (
             <ChargesView onUnauth={unauth} />
           ) : view === "commissions" ? (

@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { Bell, Check, Package, MessageSquare, AlertCircle } from "lucide-react";
+import { Bell, MessageSquare, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackNotifications, useMarkNotificationRead } from "@/hooks/use-ecotrack";
+import { API_BASE } from "@/lib/api";
 import { TrackingDetailModal } from "@/pages/admin/EcotrackWorkspaceView";
 
 export function NotificationsBell() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(() => localStorage.getItem("push_enabled") === "1");
+  const [pushLoading, setPushLoading] = useState(false);
   const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -34,15 +37,64 @@ export function NotificationsBell() {
     setOpen(false);
   };
 
+  async function togglePush() {
+    if (pushLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    setPushLoading(true);
+    try {
+      const token = localStorage.getItem("exp_token") || "";
+      const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+      const reg = await navigator.serviceWorker.ready;
+      if (pushEnabled) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          const response = await fetch(`${API_BASE}/api/push/unsubscribe`, {
+            method: "DELETE", headers, body: JSON.stringify({ endpoint: sub.endpoint }),
+          });
+          if (!response.ok) throw new Error("unsubscribe_failed");
+          await sub.unsubscribe();
+        }
+        localStorage.removeItem("push_enabled");
+        setPushEnabled(false);
+      } else {
+        if (!("Notification" in window) || await Notification.requestPermission() !== "granted") return;
+        const response = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers });
+        if (!response.ok) throw new Error("vapid_failed");
+        const { key } = await response.json() as { key: string };
+        if (!key) throw new Error("vapid_failed");
+        const raw = atob((key + "=".repeat((4 - key.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+        const bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+        const saved = await fetch(`${API_BASE}/api/push/subscribe`, {
+          method: "POST", headers, body: JSON.stringify(sub.toJSON()),
+        });
+        if (!saved.ok) throw new Error("subscribe_failed");
+        localStorage.setItem("push_enabled", "1");
+        setPushEnabled(true);
+      }
+    } catch (error) {
+      console.error("Push notification preference could not be updated", error);
+    } finally {
+      setPushLoading(false);
+    }
+  }
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative flex items-center gap-2" ref={containerRef}>
+      {"Notification" in window && "serviceWorker" in navigator && (
+        <button type="button" onClick={togglePush} disabled={pushLoading}
+          className={`rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50 ${pushEnabled ? "border-red-200 bg-red-50 text-[#E10600]" : "border-slate-200 bg-white text-slate-600"}`}
+          title={pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}>
+          {pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+        </button>
+      )}
       <button
         onClick={() => setOpen(!open)}
-        className="relative h-9 w-9 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all"
+        className="relative h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:text-[#E10600] hover:bg-red-50 transition-all"
+        aria-label={t("admin.notifications.title")}
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#E10600] border-2 border-[#0F172A]" />
+          <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#E10600] border-2 border-white" />
         )}
       </button>
 

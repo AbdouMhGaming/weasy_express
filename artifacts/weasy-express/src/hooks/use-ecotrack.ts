@@ -150,41 +150,36 @@ export function useEcotrackOrderDetail(tracking: string, expediteurId?: number |
       const info = body.order ?? {};
       const events: any[] = [];
 
-      (body.statusHistory || []).forEach((sh: any) => {
-        const createdAt = sh.created_at || sh.createdAt || "";
-        const [date = "", time = ""] = createdAt.split(" ");
-        events.push({
-          type: "status",
-          status: sh.status,
-          date, time,
-          station: sh.station,
-          scanLocation: sh.scanLocation,
-          reason: sh.reason,
-          details: sh.details,
-          author: sh.auteur || sh.author,
-          driver: sh.livreur || sh.driver,
-          comments: sh.commentaires || sh.comments,
-          remark: sh.remarque || sh.remark,
+      // Follow-up information is commentary from the carrier/driver or merchant,
+      // not the order's status tracking history.
+      (body.updates || []).forEach((update: any) => {
+        const createdAt = update.created_at || update.createdAt || update.date_maj || update.occurredAt || "";
+        const comments = [update.commentaires, update.comments, update.comment, update.remarque, update.remark]
+          .filter((text): text is string => typeof text === "string" && !!text.trim());
+        comments.forEach((content) => events.push({
+          type: "followup",
+          content,
+          author: update.auteur || update.author || update.livreur || update.driver || "",
+          role: update.livreur || update.driver ? "delivery" : "expediteur",
+          createdAt,
           timestamp: new Date(createdAt || 0).getTime(),
-          original: sh
-        });
+        }));
       });
 
       (body.remarks || []).forEach((rm: any) => {
         const createdAt = rm.created_at || rm.createdAt || "";
-        const [date = "", time = ""] = createdAt.split(" ");
         events.push({
           type: "remark",
           content: rm.content,
           author: rm.author,
           role: rm.role,
-          date, time,
+          createdAt,
           timestamp: new Date(createdAt || 0).getTime(),
           original: rm
         });
       });
 
-      events.sort((a, b) => a.timestamp - b.timestamp);
+      events.sort((a, b) => b.timestamp - a.timestamp);
 
       return { info, events, ...body };
     },
@@ -248,9 +243,10 @@ export function useUpdateEcotrackDelayThresholds() {
 }
 
 // References
-export function useEcotrackWilayas() {
+export function useEcotrackWilayas(enabled = true) {
   return useQuery({
     queryKey: ["ecotrack", "wilayas"],
+    enabled,
     queryFn: async () => {
       const res = await fetch(`${BASE}/wilayas`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
