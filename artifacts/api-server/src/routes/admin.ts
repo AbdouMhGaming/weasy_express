@@ -116,6 +116,20 @@ router.post("/admin/verify", adminAuth, (req, res) => {
   res.json({ ok: true, role: (req as AuthedRequest).adminRole });
 });
 
+router.get("/admin/profile", adminAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT username, email, phone FROM admins WHERE username=? LIMIT 1",
+      [(req as AuthedRequest).adminUsername],
+    ) as any;
+    if (!rows[0]) { res.status(404).json({ ok: false, error: "not_found" }); return; }
+    res.json({ ok: true, profile: rows[0] });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch profile");
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 router.post("/admin/change-password", adminAuth, async (req, res) => {
   const username = (req as AuthedRequest).adminUsername ?? "";
   const body = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };

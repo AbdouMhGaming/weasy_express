@@ -14,6 +14,7 @@ const PayoutsRequestView     = lazy(() => import("./PayoutsRequestView"));
 const TeamView               = lazy(() => import("./TeamView"));
 const AnalyticsView          = lazy(() => import("./AnalyticsView"));
 const AgentApplicationsView  = lazy(() => import("./AgentApplicationsView"));
+const ProfileView            = lazy(() => import("./ProfileView"));
 const EcotrackSettingsView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackSettingsView"));
 const EcotrackWorkspaceView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackWorkspaceView"));
 const EcotrackDashboardView  = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDashboardView"));
@@ -21,7 +22,7 @@ const EcotrackReportsView    = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import
 const EcotrackDelaysView     = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackDelaysView"));
 const EcotrackFailuresView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import("./EcotrackFailuresView"));
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, History, Clock, Settings2 } from "lucide-react";
+import { ChevronDown, ChevronRight, History, Clock, Settings2, User } from "lucide-react";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { API_BASE, adminHeaders } from "@/lib/api";
@@ -132,7 +133,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-delay-configuration" | "ecotrack-failures";
+type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-delay-configuration" | "ecotrack-failures" | "profile";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -184,6 +185,13 @@ function SidebarInner({
 
   const [isCommandesOpen, setIsCommandesOpen] = useState(view.startsWith("ecotrack-status-"));
   const [isDelaysOpen, setIsDelaysOpen] = useState(view === "ecotrack-delays" || view === "ecotrack-delay-configuration");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(view === "profile" || view === "ecotrack-settings");
+
+  const groupHeader = (label: string) => (
+    <div className={`px-3 pt-4 pb-2 text-[10px] font-bold text-white/40 uppercase tracking-widest ${isCollapsed ? "md:sr-only" : ""}`}>
+      {label}
+    </div>
+  );
 
   // Team member permission filtering — use exp_* keys for expediteur sessions
   const sidebarIsTeam = localStorage.getItem(role === "expediteur" ? "exp_is_team" : "admin_is_team") === "1";
@@ -362,6 +370,7 @@ function SidebarInner({
         </nav>
       ) : role === "expediteur" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {groupHeader(t("admin.sidebar.groups.activity"))}
           {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-dashboard") && navItem("ecotrack-dashboard", t("admin.sidebar.ecotrackDashboard"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           )}
@@ -393,8 +402,8 @@ function SidebarInner({
                     : <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />}
                 </span>
               </button>
-              {isCommandesOpen && !isCollapsed && (
-                <div className="ms-5 mt-1 space-y-0.5 border-s border-white/10 ps-2">
+              {isCommandesOpen && (
+                <div className={`ms-5 mt-1 space-y-0.5 border-s border-white/10 ps-2 ${isCollapsed ? "md:hidden" : ""}`}>
                   {ecotrackStatuses.map((item: any) => {
                     const status = String(item.status);
                     const statusView = `ecotrack-status-${status}`;
@@ -427,36 +436,67 @@ function SidebarInner({
               )}
             </div>
           )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && navItem("ecotrack-history", t("admin.ecotrackPortal.history"), 0,
-            <History className="w-5 h-5 shrink-0" />
-          )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-desks") && navItem("ecotrack-desks", t("admin.ecotrackPortal.desksNav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6" /></svg>
-          )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-fees") && navItem("ecotrack-fees", t("admin.ecotrackPortal.feesNav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6v12m3-9.5c-.7-.9-1.7-1.5-3-1.5-1.7 0-3 1-3 2.5s1.3 2.2 3 2.5 3 1 3 2.5-1.3 2.5-3 2.5c-1.3 0-2.4-.6-3-1.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-products") && navItem("ecotrack-products", t("admin.ecotrackPortal.productsNav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-          )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-reports") && navItem("ecotrack-reports", t("admin.sidebar.ecotrackReports"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
           )}
           {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-delays") && navItem("ecotrack-delays", t("admin.sidebar.ecotrackDelays"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           )}
-          {expAllowed("queue") && navItem("queue", t("admin.sidebar.queue"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+
+          {groupHeader(t("admin.sidebar.groups.management"))}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-products") && navItem("ecotrack-products", t("admin.ecotrackPortal.productsNav"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
           )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-desks") && navItem("ecotrack-desks", t("admin.sidebar.agencies"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6" /></svg>
+          )}
+          {(!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack")) && navItem("ecotrack-history", t("admin.sidebar.history"), 0,
+            <History className="w-5 h-5 shrink-0" />
+          )}
+
+          {groupHeader(t("admin.sidebar.groups.finances"))}
           {expAllowed("payouts") && navItem("payouts", t("admin.sidebar.payouts"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-fees") && navItem("ecotrack-fees", t("admin.sidebar.fees"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6v12m3-9.5c-.7-.9-1.7-1.5-3-1.5-1.7 0-3 1-3 2.5s1.3 2.2 3 2.5 3 1 3 2.5-1.3 2.5-3 2.5c-1.3 0-2.4-.6-3-1.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+
+          {groupHeader(t("admin.sidebar.groups.analytics"))}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-reports") && navItem("ecotrack-reports", t("admin.sidebar.reports"), 0,
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          )}
+
+          {groupHeader(t("admin.sidebar.groups.administration"))}
           {expAllowed("team") && navItem("team", t("admin.sidebar.team"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           )}
-          {!HOSTINGER_PUBLIC_BUILD && !sidebarIsTeam && navItem("ecotrack-settings", t("admin.ecotrack.nav"), 0,
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-          )}
+          <div>
+            <button type="button" onClick={() => {
+              if (isCollapsed && toggleCollapse && window.innerWidth >= 768) {
+                toggleCollapse();
+                setIsSettingsOpen(true);
+              } else setIsSettingsOpen(open => !open);
+            }}
+              aria-expanded={isSettingsOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 ${isCollapsed ? "md:justify-center" : ""}`}
+              title={isCollapsed ? t("admin.sidebar.settings") : undefined}>
+              <Settings2 className="w-5 h-5 shrink-0" />
+              <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.settings")}</span>
+              <span className={`ml-auto text-xs ${isCollapsed ? "md:hidden" : ""}`}>{isSettingsOpen ? "▾" : "▸"}</span>
+            </button>
+            {isSettingsOpen && <div className={isCollapsed ? "md:hidden" : "pl-5"}>
+              {navItem("profile", t("admin.sidebar.profile"), 0,
+                <User className="w-4 h-4 shrink-0" />
+              )}
+              {!HOSTINGER_PUBLIC_BUILD && !sidebarIsTeam && navItem("ecotrack-settings", t("admin.sidebar.api"), 0,
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              )}
+              <button onClick={onLogout} title={isCollapsed ? t("admin.sidebar.logout") : undefined} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all`}>
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.logout")}</span>
+              </button>
+            </div>}
+          </div>
         </nav>
       ) : role === "ticket_manager" ? (
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -491,14 +531,14 @@ function SidebarInner({
             </button>
           ))}
         </div>
-        <button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
+        {role !== "expediteur" && <><button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
           <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.changePassword")}</span>
         </button>
         <button onClick={onLogout} title={t("admin.sidebar.logout")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
           <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.logout")}</span>
-        </button>
+        </button></>}
       </div>
     </aside>
   );
@@ -2913,11 +2953,12 @@ export default function AdminDashboard() {
   }, [role, allowedSections, teamPerms]);
 
   const isPermitted = useCallback((v: string) => {
+    if (role === "expediteur" && v === "profile") return true;
     if ((permittedViews as string[]).includes(v)) return true;
     if (v.startsWith("ecotrack-status-") && (permittedViews as string[]).includes("ecotrack")) return true;
     if (v === "ecotrack-history" && (permittedViews as string[]).includes("ecotrack")) return true;
     return false;
-  }, [permittedViews]);
+  }, [permittedViews, role]);
 
   const [view, setViewState] = useState<string>(() => {
     const saved = localStorage.getItem(viewStorageKey) as string | null;
@@ -3150,6 +3191,7 @@ export default function AdminDashboard() {
         <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
+            view === "profile" ? <ProfileView username={username} onChangePassword={() => setShowChangePass(true)} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-dashboard" && EcotrackDashboardView ? <EcotrackDashboardView /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus="prete_a_expedier" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view.startsWith("ecotrack-status-") && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus={view.replace("ecotrack-status-", "")} onOpenSettings={() => setView("ecotrack-settings")} /> :

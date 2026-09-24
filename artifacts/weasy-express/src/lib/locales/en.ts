@@ -358,7 +358,7 @@ const en: Translations = {
   },
   admin: {
     ecotrackDashboard: {
-      title: "Ecotrack Dashboard",
+      title: "Dashboard",
       subtitle: "Advanced analytics and business overview",
       filters: {
         allWilayas: "All Wilayas",
@@ -468,6 +468,21 @@ const en: Translations = {
       label: "Administration",
       dashboard: "Dashboard",
       ecotrackDashboard: "Dashboard",
+      groups: {
+        activity: "ACTIVITY",
+        management: "MANAGEMENT",
+        finances: "FINANCES",
+        analytics: "ANALYTICS",
+        administration: "ADMINISTRATION",
+      },
+      products: "Products",
+      agencies: "Agencies",
+      history: "History",
+      fees: "Service Fees",
+      reports: "Reports & Statistics",
+      profile: "Profile",
+      settings: "Settings",
+      api: "API",
       ecotrackReports: "Statistical Reports",
       ecotrackDelays: "Delays",
       delaysList: "Delays",
@@ -1695,7 +1710,7 @@ const en: Translations = {
       history: "History",
       nav: "Orders",
       title: "Orders",
-      desksNav: "Desks",
+      desksNav: "Agencies",
       feesNav: "Service fees",
       productsNav: "Product",
       disconnected: "Ecotrack is not connected.",
@@ -1840,7 +1855,7 @@ const en: Translations = {
       },
       config: {
         wilayas: "Active wilayas",
-        desks: "Desks",
+        desks: "Agencies",
         communes: "Active communes",
         fees: "Service fees",
         selectWilaya: "Select a wilaya to view communes",

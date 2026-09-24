@@ -10,7 +10,7 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(() => localStorage.getItem("push_enabled") === "1");
   const [pushLoading, setPushLoading] = useState(false);
-  const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
+  const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number, mode: "remarks" | "details"} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
   const { data, isLoading } = useEcotrackNotifications();
@@ -33,7 +33,7 @@ export function NotificationsBell() {
     if (!n.readAt) {
       markRead.mutate(n.id);
     }
-    setActiveTracking({ tracking: n.tracking, expediteurId: n.expediteurId });
+    setActiveTracking({ tracking: n.tracking, expediteurId: n.expediteurId, mode: n.eventType === "remark" ? "remarks" : "details" });
     setOpen(false);
   };
 
@@ -79,14 +79,7 @@ export function NotificationsBell() {
   }
 
   return (
-    <div className="relative flex items-center gap-2" ref={containerRef}>
-      {"Notification" in window && "serviceWorker" in navigator && (
-        <button type="button" onClick={togglePush} disabled={pushLoading}
-          className={`rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm disabled:opacity-50 ${pushEnabled ? "border-red-200 bg-red-50 text-[#E10600]" : "border-slate-200 bg-white text-slate-600"}`}
-          title={pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}>
-          {pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
-        </button>
-      )}
+    <div className="relative flex items-center" ref={containerRef}>
       <button
         onClick={() => setOpen(!open)}
         className="relative h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:text-[#E10600] hover:bg-red-50 transition-all"
@@ -99,7 +92,7 @@ export function NotificationsBell() {
       </button>
 
       {open && (
-        <div className="absolute top-12 left-0 md:left-auto md:right-0 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+        <div className="absolute top-12 right-0 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
             <h3 className="font-bold text-slate-900 text-sm">{t("admin.notifications.title", "Notifications")}</h3>
             {unreadCount > 0 && <span className="text-xs font-semibold text-[#E10600] bg-red-50 px-2 py-0.5 rounded-full">{unreadCount} {t("admin.notifications.unread", "non lues")}</span>}
@@ -137,11 +130,21 @@ export function NotificationsBell() {
               </div>
             )}
           </div>
+          {"Notification" in window && "serviceWorker" in navigator && (
+            <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-600">{t("admin.notifications.title")}</span>
+              <button type="button" onClick={togglePush} disabled={pushLoading}
+                aria-pressed={pushEnabled}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${pushEnabled ? "bg-red-50 text-[#E10600]" : "bg-slate-100 text-slate-600"}`}>
+                {pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {activeTracking && (
-        <TrackingDetailModal tracking={activeTracking.tracking} expediteurId={activeTracking.expediteurId} onClose={() => setActiveTracking(null)} />
+        <TrackingDetailModal tracking={activeTracking.tracking} expediteurId={activeTracking.expediteurId} mode={activeTracking.mode} onClose={() => setActiveTracking(null)} />
       )}
     </div>
   );

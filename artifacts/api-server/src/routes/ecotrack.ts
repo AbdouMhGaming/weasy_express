@@ -273,12 +273,13 @@ router.get("/suivi/ecotrack/failures", async (req: AuthedRequest, res: any) => {
   const conn = await pool.getConnection();
   try {
     const params: any[] = [];
+    // This view is for parcels currently suspended or failed, not every
+    // parcel with a remark. Avoid comparing tracking columns across tables:
+    // the cache and local-remarks tables use incompatible MySQL collations.
     const where = [
-      `(JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.remarque')) IS NOT NULL
-        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.commentaires')) IS NOT NULL
-        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.comment')) IS NOT NULL
-        OR JSON_UNQUOTE(JSON_EXTRACT(c.raw_order,'$.comments')) IS NOT NULL
-        OR EXISTS (SELECT 1 FROM expediteur_ecotrack_remarks r WHERE r.expediteur_id=c.expediteur_id AND r.tracking=c.tracking))`,
+      `(LOWER(COALESCE(c.status_value,'')) IN ('suspendu','suspendus','echec','echec_livraison','failed','refuse')
+        OR LOWER(COALESCE(c.status_value,'')) LIKE '%chec%'
+        OR LOWER(COALESCE(c.status_value,'')) LIKE '%refus%')`,
     ];
     if (search) { where.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR a.username LIKE ?)"); params.push(...Array(3).fill(`%${search}%`)); }
     if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }

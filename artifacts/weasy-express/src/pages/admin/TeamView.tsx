@@ -45,7 +45,7 @@ const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
   expediteur: [
     ...(!HOSTINGER_PUBLIC_BUILD ? [
       { key: "ecotrack", label: "Commandes" },
-      { key: "ecotrack-desks", label: "Desks" },
+      { key: "ecotrack-desks", label: "Agences" },
       { key: "ecotrack-fees", label: "Service fees" },
       { key: "ecotrack-products", label: "Produit" },
     ] : []),

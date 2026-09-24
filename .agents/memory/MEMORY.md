@@ -17,3 +17,4 @@
 - [Ecotrack delay timing](ecotrack-delay-timing.md) — delay thresholds are global per wilaya/status; overdue time starts at the recorded current-status entry, with remote timestamps only as fallback.
 - [Portal session expiry](portal-session-expiry.md) — protected Expediteur/Admin requests must treat HTTP 401 as session expiry and redirect to the path-specific login, not as an Ecotrack disconnect.
 - [Cross-portal Ecotrack identity](cross-portal-ecotrack-identity.md) — privileged order operations must pair tracking with owner ID; Suivi sessions and admin-team permissions are isolated and deny by default.
+- [Ecotrack tracking collations](ecotrack-tracking-collations.md) — cached orders and local remarks use incompatible MySQL collations; compare cross-table tracking explicitly.
