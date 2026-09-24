@@ -76,7 +76,7 @@ export async function renderPayoutReceipt(p: PayoutRequest): Promise<HTMLCanvasE
   heading.addColorStop(0, "#a90812"); heading.addColorStop(1, RED);
   box(10, 36, 190, 27, heading);
   text("DÉCHARGE DE PAIEMENT", 17, 55, 7.2, "#ffffff", 800);
-  arabic("وصل استلام ودفع", 192, 44, 6, "#ffffff", 800);
+  arabic("وصل استلام", 192, 44, 6, "#ffffff", 800);
   text("DOCUMENT OFFICIEL  ·  WEASY EXPRESS", 192, 55, 2.7, "#ffe5e7", 600, "right");
 
   const receiptNumber = p.receipt_number || `PV${String(p.id).padStart(8, "0")}`;
