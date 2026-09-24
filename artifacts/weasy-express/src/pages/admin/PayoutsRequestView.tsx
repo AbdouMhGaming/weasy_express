@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
-import QRCode from "qrcode";
+import { generatePayoutPDF } from "./PayoutReceiptPdf";
+import { PayoutScanner } from "./PayoutScanner";
 
 type PayoutStatus = "pending" | "accepted" | "refused" | "delayed" | "paid";
 
-interface PayoutRequest {
+export interface PayoutRequest {
   id: number;
   expediteur_username: string;
   expediteur_id?: number | null;
@@ -63,64 +64,16 @@ function Spinner() {
   );
 }
 
-async function generatePayoutPDF(p: PayoutRequest) {
-  const { jsPDF } = await import("jspdf");
-  const JsBarcode = (await import("jsbarcode")).default;
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const W = 210, RED = [225, 6, 0] as [number, number, number], DARK = [30, 30, 30] as [number, number, number];
-  const GRAY = [100, 100, 100] as [number, number, number];
-  const barcode = document.createElement("canvas");
-  JsBarcode(barcode, p.receipt_number || `PV${String(p.id).padStart(8, "0")}`, { format: "CODE128", displayValue: false, width: 1.8, height: 40, margin: 0 });
-  doc.setFillColor(...RED); doc.rect(0, 0, W, 36, "F");
-  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-  doc.text("ENTREPRISE Weasydel Express", 14, 12);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-  doc.text("Direction Générale  ·  Service Finance", 14, 19);
-  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 25);
-  doc.setTextColor(...DARK); doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-  doc.text("Reçu de Paiement", W / 2, 49, { align: "center" });
-  doc.setDrawColor(...RED); doc.line(60, 53, W - 60, 53);
-  doc.addImage(barcode.toDataURL("image/png"), "PNG", W - 69, 62, 55, 14);
-  doc.setTextColor(...RED); doc.setFontSize(9);
-  doc.text(`PV N° : ${p.receipt_number || `PV${String(p.id).padStart(8, "0")}`}`, W - 41, 81, { align: "center" });
-  let y = 91;
-  doc.setTextColor(...DARK); doc.setFontSize(9);
-  doc.text(`Station / Hub : ${p.office_hub || "—"}`, 14, y);
-  doc.text(`Date : ${new Date(p.paid_at || p.approved_at || p.updated_at).toLocaleString("fr-DZ")}`, 112, y); y += 9;
-  doc.text(`Client : ${p.expediteur_username}`, 14, y); y += 9;
-  doc.text(`ID client : ${p.expediteur_id ?? "—"}`, 14, y); y += 9;
-  doc.text(`Téléphone : ${p.expediteur_phone || "Non renseigné"}`, 14, y); y += 9;
-  doc.text(`Email : ${p.expediteur_email || "Non renseigné"}`, 14, y); y += 9;
-  doc.text(`Adresse : ${(p.client_address || "Non renseignée").slice(0, 80)}`, 14, y); y += 9;
-  doc.setDrawColor(200, 200, 200); doc.line(14, y, W - 14, y); y += 12;
-  doc.setFillColor(253, 232, 232); doc.setDrawColor(...RED); doc.roundedRect(14, y - 7, W - 28, 25, 3, 3, "FD");
-  doc.setTextColor(...RED); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-  doc.text(p.status === "paid" ? "Montant total payé" : "Montant approuvé", W / 2, y + 2, { align: "center" });
-  doc.setFontSize(18); doc.text(`${Number(p.amount_dzd).toLocaleString("fr-DZ")} DZD`, W / 2, y + 12, { align: "center" }); y += 38;
-  doc.setTextColor(...DARK); doc.setFontSize(10); doc.text(`Statut : ${p.status === "paid" ? "Payé" : "En attente de confirmation"}`, 14, y); y += 16;
-  doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY); doc.setFontSize(9);
-  doc.text(doc.splitTextToSize(p.status === "paid"
-    ? "Ce reçu confirme le paiement de la demande indiquée ci-dessus."
-    : "Document de demande approuvée. Le paiement sera confirmé par le destinataire via le code QR.", W - 28), 14, y); y += 18;
-  if (p.confirmation_token) {
-    const confirmUrl = `${window.location.origin}/expediteurs/payout-confirm/${p.id}?token=${encodeURIComponent(p.confirmation_token)}`;
-    // Generate locally: never send the one-time token to a third-party QR service.
-    const qrDataUrl = await QRCode.toDataURL(confirmUrl, { width: 240, margin: 1, errorCorrectionLevel: "M" });
-    doc.addImage(qrDataUrl, "PNG", W - 57, y - 12, 38, 38);
-  }
-  doc.setTextColor(...DARK); doc.setFontSize(9);
-  doc.text("Signature et cachet de l'agence", 14, 248);
-  doc.setDrawColor(140, 140, 140); doc.line(14, 271, 95, 271);
-  doc.setFontSize(7); doc.text("Scannez le QR pour confirmer la réception", W - 14, 255, { align: "right" });
-  doc.setFillColor(...RED); doc.rect(0, 282, W, 15, "F");
-  doc.setTextColor(255, 255, 255); doc.setFontSize(8);
-  doc.text("+213-(0) 654 970 662", 14, 290); doc.text("www.weasyexpress.com", W / 2, 290, { align: "center" }); doc.text("contact@weasyexpress.com", W - 14, 290, { align: "right" });
-  doc.save(`Paiement_${p.receipt_number || p.id}.pdf`);
-}
-
 export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
   const role     = getSessionRole();
+  const [showScanner, setShowScanner] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+  const downloadPDF = async (p: PayoutRequest) => {
+    setPdfError("");
+    try { await generatePayoutPDF(p); }
+    catch (e) { setPdfError(e instanceof Error ? e.message : "Le PDF n'a pas pu être créé."); }
+  };
 
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,7 +193,14 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
              t("admin.payoutsRequest.subtitleExpediteur")}
           </p>
         </div>
-        {canCreate && (
+        {canCreate && <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setShowScanner(true)}
+            className="flex items-center gap-2 rounded-xl border border-[#E10600] bg-white px-4 py-2.5 text-sm font-semibold text-[#E10600] hover:bg-red-50">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M4 9V5a1 1 0 0 1 1-1h4m6 0h4a1 1 0 0 1 1 1v4M4 15v4a1 1 0 0 0 1 1h4m6 0h4a1 1 0 0 0 1-1v-4M7 12h10" />
+            </svg>
+            Scanner un reçu / مسح الوصل
+          </button>
           <button
             onClick={() => { setCreateError(""); setShowCreate(true); }}
             className="flex items-center gap-2 text-sm font-semibold bg-[#E10600] hover:bg-[#C50500] text-white px-4 py-2.5 rounded-xl shadow-sm transition-colors"
@@ -250,8 +210,10 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
             </svg>
             {t("admin.payoutsRequest.newRequest")}
           </button>
-        )}
+        </div>}
       </div>
+      {showScanner && <PayoutScanner onClose={() => setShowScanner(false)} />}
+      {pdfError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{pdfError}</p>}
 
       {/* ── Filter bar ── */}
       <div className="flex flex-wrap gap-2 mb-5">
@@ -484,7 +446,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                           </button>
                         )}
                         {(role === "admin" || role === "office") && (p.status === "accepted" || p.status === "paid") && (
-                          <button onClick={() => generatePayoutPDF(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-[#E10600] hover:bg-red-50" title="Télécharger le reçu PDF">
+                          <button onClick={() => void downloadPDF(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-[#E10600] hover:bg-red-50" title="Télécharger le reçu PDF">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" /></svg>
                           </button>
                         )}
@@ -549,7 +511,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                         </button>
                       )}
                       {(role === "admin" || role === "office") && (p.status === "accepted" || p.status === "paid") && (
-                        <button onClick={() => generatePayoutPDF(p)} className="text-xs font-semibold text-gray-600 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200">PDF</button>
+                        <button onClick={() => void downloadPDF(p)} className="text-xs font-semibold text-gray-600 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200">PDF</button>
                       )}
                       {role === "admin" && (
                         <button

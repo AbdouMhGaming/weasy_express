@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "@types/qrcode": "1.5.5",
+    "html5-qrcode": "^2.3.8",
     "i18next": "^26.0.7",
     "i18next-browser-languagedetector": "^8.2.1",
     "jsbarcode": "^3.12.3",
