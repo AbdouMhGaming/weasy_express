@@ -94,9 +94,6 @@ export async function renderPayoutReceipt(p: PayoutRequest): Promise<HTMLCanvasE
     // No external QR service ever receives the one-time confirmation token.
     const qr = await loadImage(await QRCode.toDataURL(url, { width: 640, margin: 3, errorCorrectionLevel: "H" }));
     ctx.drawImage(qr, 113, 70, 38, 38);
-    // White-backed brand mark; small enough to preserve the QR error correction.
-    box(127, 85.1, 10, 7.8, "#ffffff", 1);
-    ctx.drawImage(logo, 50, 150, 450, 180, 127.5, 86.1, 9, 5.8);
   } else {
     box(114, 72, 36, 34, "#f4f6f9", 2);
     text("QR déjà utilisé", 132, 89, 3, MUTED, 600, "center");
@@ -152,8 +149,8 @@ export async function renderPayoutReceipt(p: PayoutRequest): Promise<HTMLCanvasE
   ctx.setLineDash([]);
   line(105, 233, 105, 270);
   text("WEASY EXPRESS", 152, 237, 3.2, RED, 800, "center");
-  arabic("شكرا لثقتكم بـ Weasy Express", 152, 248, 4, DARK, 700);
-  arabic("هذا الوصل إثبات رسمي للدفع", 152, 255, 3.1, MUTED);
+  text("شكرا لثقتكم بـ Weasy Express", 152, 248, 4, DARK, 700, "center", undefined, true);
+  text("هذا الوصل إثبات رسمي للدفع", 152, 255, 3.1, MUTED, 600, "center", undefined, true);
   line(136, 261, 168, 261, RED, 0.45);
   text("Merci pour votre confiance chez Weasy Express", 152, 267, 2.8, DARK, 600, "center");
 
