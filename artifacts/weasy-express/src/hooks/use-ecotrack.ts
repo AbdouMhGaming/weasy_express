@@ -138,12 +138,21 @@ export function useEcotrackOrderDetail(tracking: string, expediteurId?: number |
   return useQuery({
     queryKey: ["ecotrack", "order", tracking, expediteurId],
     queryFn: async () => {
-      let url = `${getDynamicBase()}/orders/${tracking}/history`;
+      let url = `${getDynamicBase()}/orders/${encodeURIComponent(tracking)}/history`;
       if (expediteurId && typeof window !== "undefined" && !window.location.pathname.startsWith("/expediteurs")) {
         url += `?expediteurId=${expediteurId}`;
       }
-      const res = await fetch(url, { headers: adminHeaders() });
-      if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
+       // Do not use authenticatedFetch here: a detail request can legitimately
+       // fail with 400/404 when the owner pairing is stale, and a transient
+       // detail failure must never clear an otherwise valid Suivi session.
+       // Keep the portal token explicit so this request cannot inherit an
+       // admin/expediteur token from another tab.
+       const headers = typeof window !== "undefined" && window.location.pathname.startsWith("/suivi")
+         ? { ...adminHeaders(), Authorization: `Bearer ${localStorage.getItem("suivi_token") ?? ""}` }
+         : adminHeaders();
+       const res = await globalThis.fetch(url, { headers });
+       if (res.status === 401) throw new Error("detail_unauthorized");
+       if (res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
 
@@ -323,9 +332,49 @@ export function useEcotrackProducts(page = 1) {
       const res = await fetch(`${BASE}/products?page=${page}`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
-      const raw = body.data?.data ?? body.data;
+      const raw = body.products ? body : (body.data?.data ?? body.data);
       return raw && typeof raw === "object" ? raw : { products: [], pagination: {} };
     }
+  });
+}
+
+export function useCreateEcotrackProduct() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const body = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+          if (value instanceof File) body.append(key, value);
+          else body.append(key, String(value));
+        }
+      });
+      const res = await fetch(`${BASE}/products`, { method: "POST", headers: adminHeaders(), body });
+      const json = await readApiJson(res);
+      if (!res.ok || !json.ok) throw new Error(json.error || "product_save_failed");
+      return json.product;
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ["ecotrack", "products"] }),
+  });
+}
+
+export function useUpdateEcotrackProduct() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+      const body = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+          if (value instanceof File) body.append(key, value);
+          else body.append(key, String(value));
+        }
+      });
+      const res = await fetch(`${BASE}/products/${id}`, { method: "PUT", headers: adminHeaders(), body });
+      const json = await readApiJson(res);
+      if (!res.ok || !json.ok) throw new Error(json.error || "product_save_failed");
+      return json.product;
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ["ecotrack", "products"] }),
   });
 }
 
@@ -519,15 +568,26 @@ export function useEcotrackNotifications() {
   return useQuery({
     queryKey: ["ecotrack", "notifications"],
     queryFn: async () => {
-      const res = await fetch(`${getDynamicBase()}/notifications`, { headers: adminHeaders() });
-      if (!res.ok) return { notifications: [], unreadCount: 0 };
-      const body = await res.json();
+      const res = await fetch(`${getDynamicBase()}/notifications?limit=100`, { headers: adminHeaders() });
+      if (res.status === 401 || res.status === 403 || res.status === 409) {
+        throw new Error("disconnected");
+      }
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
       return {
         notifications: body.notifications || [],
         unreadCount: body.unreadCount || 0
       };
     },
-    refetchInterval: 60_000,
+    // Remarks are written by other users (Suivi/admin), so this cannot rely
+    // on the sender invalidating this browser's cache. Poll while the portal
+    // is open and rehydrate immediately when the tab regains focus.
+    refetchInterval: () => typeof document === "undefined" || document.visibilityState === "visible" ? 10_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    retry: 2,
   });
 }
 

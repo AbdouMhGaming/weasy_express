@@ -26,6 +26,7 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/expediteurs/login" component={ExpediteurLogin} />
+      <Route path="/expediteurs/payout-confirm/:id" component={AdminDashboard} />
       <Route path="/expediteurs" component={AdminDashboard} />
       <Route path="/suivi/login" component={SuiviLogin} />
       <Route path="/suivi" component={AdminDashboard} />

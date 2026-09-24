@@ -2970,8 +2970,18 @@ export default function AdminDashboard() {
     setViewState(safe);
   }, [defaultView, isPermitted, viewStorageKey]);
   useEffect(() => {
+    if (window.location.pathname.includes("/payout-confirm/") && view !== "payouts") {
+      setView("payouts");
+      return;
+    }
+    const returnTo = localStorage.getItem("exp_return_to");
+    if (returnTo && window.location.pathname === "/expediteurs") {
+      localStorage.removeItem("exp_return_to");
+      navigate(returnTo, { replace: true });
+      return;
+    }
     if (!isPermitted(view)) setView(defaultView);
-  }, [view, isPermitted, defaultView, setView]);
+  }, [view, isPermitted, defaultView, setView, navigate]);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -3047,6 +3057,9 @@ export default function AdminDashboard() {
       localStorage.removeItem("suivi_username");
       navigate("/suivi/login");
     } else if (isExpediteurPath) {
+      if (window.location.pathname.includes("/payout-confirm/")) {
+        localStorage.setItem("exp_return_to", `${window.location.pathname}${window.location.search}`);
+      }
       localStorage.removeItem("exp_token");
       localStorage.removeItem("exp_role");
       localStorage.removeItem("exp_username");
@@ -3097,6 +3110,9 @@ export default function AdminDashboard() {
     // Each path checks its own separate token — admin and expediteur sessions are independent
     const token = localStorage.getItem(isSuiviPath ? "suivi_token" : isExpediteurPath ? "exp_token" : "admin_token");
     if (!token) {
+      if (isExpediteurPath && window.location.pathname.includes("/payout-confirm/")) {
+        localStorage.setItem("exp_return_to", `${window.location.pathname}${window.location.search}`);
+      }
       navigate(isSuiviPath ? "/suivi/login" : isExpediteurPath ? "/expediteurs/login" : "/admin/login");
       return;
     }

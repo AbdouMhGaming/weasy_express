@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "node:crypto";
 import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
 import { decryptEcotrackToken, encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
@@ -317,14 +318,14 @@ router.get("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) => 
   try {
     let rows: any[];
     if (role === "admin") {
-      [rows] = await conn.execute("SELECT * FROM expediteur_payouts ORDER BY created_at DESC") as any;
+      [rows] = await conn.execute("SELECT p.*, a.id expediteur_id, a.phone expediteur_phone, a.email expediteur_email FROM expediteur_payouts p LEFT JOIN admins a ON BINARY a.username=BINARY p.expediteur_username AND a.role='expediteur' ORDER BY p.created_at DESC") as any;
     } else if (role === "office") {
       const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
       const hub = me[0]?.office_hub;
       if (!hub) { rows = []; }
-      else { [rows] = await conn.execute("SELECT * FROM expediteur_payouts WHERE office_hub = ? ORDER BY created_at DESC", [hub]) as any; }
+      else { [rows] = await conn.execute("SELECT p.*, a.id expediteur_id, a.phone expediteur_phone, a.email expediteur_email FROM expediteur_payouts p LEFT JOIN admins a ON BINARY a.username=BINARY p.expediteur_username AND a.role='expediteur' WHERE p.office_hub = ? ORDER BY p.created_at DESC", [hub]) as any; }
     } else if (role === "expediteur") {
-      [rows] = await conn.execute("SELECT * FROM expediteur_payouts WHERE expediteur_username = ? ORDER BY created_at DESC", [dataUsername]) as any;
+      [rows] = await conn.execute("SELECT p.*, a.id expediteur_id, a.phone expediteur_phone, a.email expediteur_email FROM expediteur_payouts p LEFT JOIN admins a ON BINARY a.username=BINARY p.expediteur_username AND a.role='expediteur' WHERE p.expediteur_username = ? ORDER BY p.created_at DESC", [dataUsername]) as any;
     } else {
       rows = [];
     }
@@ -343,6 +344,7 @@ router.post("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) =>
   const amount = parseInt(String(body.amount_dzd ?? "0"), 10);
   const date   = String(body.requested_date ?? "").slice(0, 10);
   const notes  = String(body.expediteur_notes ?? "").slice(0, 500);
+  const address = String(body.client_address ?? "").trim().slice(0, 500);
   if (!amount || amount <= 0 || !date) return res.status(400).json({ ok: false, error: "invalid_fields" });
   const conn = await pool.getConnection();
   try {
@@ -351,8 +353,8 @@ router.post("/expediteur/payouts", adminAuth, async (req: AuthedRequest, res) =>
     const hub = me[0]?.office_hub;
     if (!hub) return res.status(400).json({ ok: false, error: "no_office_linked" });
     const [result] = await conn.execute(
-      "INSERT INTO expediteur_payouts (expediteur_username, office_hub, amount_dzd, requested_date, expediteur_notes) VALUES (?, ?, ?, ?, ?)",
-      [dataUsername, hub, amount, date, notes || null]
+      "INSERT INTO expediteur_payouts (expediteur_username, office_hub, amount_dzd, requested_date, expediteur_notes, client_address) VALUES (?, ?, ?, ?, ?, ?)",
+      [dataUsername, hub, amount, date, notes || null, address || null]
     ) as any;
     res.json({ ok: true, id: result.insertId });
   } finally { conn.release(); }
@@ -373,18 +375,81 @@ router.put("/expediteur/payouts/:id", adminAuth, async (req: AuthedRequest, res)
   try {
     const [[payout]] = await conn.execute("SELECT * FROM expediteur_payouts WHERE id = ? LIMIT 1", [id]) as any;
     if (!payout) return res.status(404).json({ ok: false, error: "Not found" });
+    if (payout.status === "paid" && status !== "paid") {
+      return res.status(409).json({ ok: false, error: "already_paid" });
+    }
+    if (status === "paid" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "only_super_admin_can_mark_paid" });
+    }
     if (role !== "admin") {
       // office can only update payouts for their hub
       const [me] = await conn.execute("SELECT office_hub FROM admins WHERE username = ? LIMIT 1", [username]) as any;
       const hub = me[0]?.office_hub;
       if (role !== "office" || payout.office_hub !== hub) return res.status(403).json({ ok: false, error: "Forbidden" });
     }
+    if (status === "accepted" && payout.status !== "accepted") {
+      const token = crypto.randomBytes(32).toString("base64url");
+      const receipt = `PV${String(payout.id).padStart(8, "0")}`;
+      await conn.execute(
+        "UPDATE expediteur_payouts SET status=?, admin_notes=?, confirmation_token=?, receipt_number=?, approved_at=CURRENT_TIMESTAMP WHERE id=?",
+        [status, adminNotes || null, token, receipt, id],
+      );
+      return res.json({ ok: true, confirmation_token: token, receipt_number: receipt });
+    }
     await conn.execute(
-      "UPDATE expediteur_payouts SET status=?, admin_notes=? WHERE id=?",
-      [status, adminNotes || null, id]
+      status === "paid"
+        ? "UPDATE expediteur_payouts SET status=?, admin_notes=?, paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP) WHERE id=?"
+        : "UPDATE expediteur_payouts SET status=?, admin_notes=? WHERE id=?",
+      [status, adminNotes || null, id],
     );
     res.json({ ok: true });
   } finally { conn.release(); }
+});
+
+// QR links are intentionally read-only. Payment confirmation requires the
+// authenticated owning Expediteur and a POST, so a scanner/crawler cannot pay.
+router.get("/expediteur/payouts/:id/receipt", adminAuth, async (req: AuthedRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: "invalid_id" });
+  const conn = await pool.getConnection();
+  try {
+    const [[payout]] = await conn.execute("SELECT * FROM expediteur_payouts WHERE id=? LIMIT 1", [id]) as any;
+    if (!payout) return res.status(404).json({ ok: false, error: "not_found" });
+    const role = req.adminRole;
+    if (role === "office") {
+      const [[me]] = await conn.execute("SELECT office_hub FROM admins WHERE username=? LIMIT 1", [req.adminUsername]) as any;
+      if (!me?.office_hub || me.office_hub !== payout.office_hub) return res.status(403).json({ ok: false, error: "forbidden" });
+    } else if (role === "expediteur" && (req.adminDataUsername ?? req.adminUsername) !== payout.expediteur_username) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    } else if (!["admin", "office", "expediteur"].includes(role ?? "")) return res.status(403).json({ ok: false, error: "forbidden" });
+    res.json({ ok: true, payout });
+  } finally { conn.release(); }
+});
+
+router.post("/expediteur/payouts/:id/confirm", adminAuth, async (req: AuthedRequest, res) => {
+  if (req.adminRole !== "expediteur") return res.status(403).json({ ok: false, error: "expediteur_confirmation_only" });
+  const id = Number(req.params.id);
+  const token = String(req.body?.confirmation_token ?? "");
+  if (!Number.isInteger(id) || !token) return res.status(400).json({ ok: false, error: "invalid_confirmation" });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[payout]] = await conn.execute("SELECT * FROM expediteur_payouts WHERE id=? FOR UPDATE", [id]) as any;
+    if (!payout || payout.expediteur_username !== (req.adminDataUsername ?? req.adminUsername)) {
+      await conn.rollback(); return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+    if (payout.status === "paid") { await conn.commit(); return res.json({ ok: true, already_paid: true }); }
+    if (payout.status !== "accepted" || payout.confirmation_token !== token) {
+      await conn.rollback(); return res.status(409).json({ ok: false, error: "confirmation_expired" });
+    }
+    const [result] = await conn.execute(
+      "UPDATE expediteur_payouts SET status='paid', paid_at=CURRENT_TIMESTAMP, confirmation_token=NULL WHERE id=? AND status='accepted' AND confirmation_token=?",
+      [id, token],
+    ) as any;
+    if (!result.affectedRows) { await conn.rollback(); return res.status(409).json({ ok: false, error: "already_confirmed" }); }
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
 });
 
 // ── GET /api/admin/team — list team accounts for current user ─────────────────

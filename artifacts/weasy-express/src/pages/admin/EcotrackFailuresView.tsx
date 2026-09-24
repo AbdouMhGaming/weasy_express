@@ -128,7 +128,7 @@ export default function EcotrackFailuresView() {
                       <td className="px-4 py-3 font-medium text-slate-700">{order.expediteur || '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-700">
                         {(() => {
-                          const id = String(order.wilaya ?? "").replace(/^0+/, "");
+                          const id = String(order.destination ?? order.wilaya ?? "").replace(/^0+/, "");
                           const name = wilayaNames.get(id);
                           return name ? `${id}, ${name}` : <span className="text-slate-400">—</span>;
                         })()}
@@ -137,7 +137,7 @@ export default function EcotrackFailuresView() {
                         <div className="font-medium text-slate-900">{order.nom_client || order.client}</div>
                         <div className="text-xs text-slate-500">{order.telephone}</div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{order.date_maj || order.updated_at ? new Date(order.date_maj || order.updated_at).toLocaleString() : '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{order.date_maj || order.updated_at || order.updatedAt ? new Date(order.date_maj || order.updated_at || order.updatedAt).toLocaleString() : '—'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <Button variant="ghost" size="icon" title={t("admin.ecotrackPortal.orders.details.title")} className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>

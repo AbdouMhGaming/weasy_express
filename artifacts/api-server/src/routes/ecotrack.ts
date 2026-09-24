@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
 import { adminAuth, hasTeamPermission, suiviAuth, type AuthedRequest } from "../lib/adminAuth";
@@ -14,6 +15,7 @@ const router = Router();
 const PAGE_SIZE = 40;
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+const productUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 async function accountFor(req: AuthedRequest): Promise<any | null> {
   if (req.adminRole !== "expediteur") return null;
@@ -273,13 +275,15 @@ router.get("/suivi/ecotrack/failures", async (req: AuthedRequest, res: any) => {
   const conn = await pool.getConnection();
   try {
     const params: any[] = [];
-    // This view is for parcels currently suspended or failed, not every
-    // parcel with a remark. Avoid comparing tracking columns across tables:
-    // the cache and local-remarks tables use incompatible MySQL collations.
+    // Delivery failures is the follow-up queue: include every cached order
+    // with at least one Ecotrack remark, regardless of its current status.
+    // The two tracking columns were created with incompatible collations, so
+    // use a binary comparison rather than letting MySQL aggregate collations.
     const where = [
-      `(LOWER(COALESCE(c.status_value,'')) IN ('suspendu','suspendus','echec','echec_livraison','failed','refuse')
-        OR LOWER(COALESCE(c.status_value,'')) LIKE '%chec%'
-        OR LOWER(COALESCE(c.status_value,'')) LIKE '%refus%')`,
+      `EXISTS (
+        SELECT 1 FROM expediteur_ecotrack_remarks r
+        WHERE r.expediteur_id=c.expediteur_id AND BINARY r.tracking=BINARY c.tracking
+      )`,
     ];
     if (search) { where.push("(c.tracking LIKE ? OR c.client_name LIKE ? OR a.username LIKE ?)"); params.push(...Array(3).fill(`%${search}%`)); }
     if (wilaya) { where.push(`${wilayaExpression}=?`); params.push(wilaya); }
@@ -288,13 +292,27 @@ router.get("/suivi/ecotrack/failures", async (req: AuthedRequest, res: any) => {
       params,
     ) as any;
     const [rows] = await conn.execute(
-      `SELECT c.raw_order,c.expediteur_id expediteurId,c.tracking,c.status_value status,a.username expediteur,c.last_updated_at_remote updatedAt
+       `SELECT c.raw_order,c.expediteur_id expediteurId,c.tracking,c.status_value status,
+               c.client_name,c.phone,c.last_updated_at_remote updatedAt,c.created_at_remote createdAt,
+               a.username expediteur
        FROM expediteur_ecotrack_order_cache c JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
        WHERE ${where.join(" AND ")} ORDER BY c.last_updated_at_remote DESC,c.fetched_at DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, (page - 1) * pageSize],
     ) as any;
     const total = Number(count?.total ?? 0);
-    return res.json({ ok: true, orders: rows.map((row: any) => ({ ...parsedOrder(row.raw_order), tracking: row.tracking, status: row.status, expediteurId: Number(row.expediteurId), expediteur: row.expediteur, updatedAt: row.updatedAt })), pagination: { current_page: page, per_page: pageSize, total, last_page: Math.max(1, Math.ceil(total / pageSize)) } });
+     return res.json({ ok: true, orders: rows.map((row: any) => {
+       const parsed = parsedOrder(row.raw_order);
+       const destination = parsed.destination ?? parsed.destination_wilaya ?? parsed.wilaya_id ?? parsed.wilaya
+         ?? parsed.wilaya_destination ?? parsed.dest_wilaya ?? parsed.destinationWilaya;
+       return {
+         ...parsed, tracking: row.tracking, status: row.status,
+         client: row.client_name ?? parsed.client ?? parsed.nom_client,
+         phone: row.phone ?? parsed.phone ?? parsed.telephone,
+         destination, wilaya: destination,
+         expediteurId: Number(row.expediteurId), expediteur: row.expediteur,
+         updatedAt: row.updatedAt ?? row.createdAt,
+       };
+     }), pagination: { current_page: page, per_page: pageSize, total, last_page: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (e) { return error(res, e); } finally { conn.release(); }
 });
 
@@ -1096,7 +1114,7 @@ async function listNotifications(req: AuthedRequest, res: any) {
     const finalWhere = unread ? (where ? `${where} AND nr.notification_id IS NULL` : "WHERE nr.notification_id IS NULL") : where;
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
     const [rows] = await conn.execute(
-      `SELECT n.id,n.tracking,n.event_type eventType,n.title,n.body,n.author_username author,n.author_role role,
+      `SELECT n.id,n.tracking,n.expediteur_id expediteurId,n.event_type eventType,n.title,n.body,n.author_username author,n.author_role role,
         n.created_at createdAt,nr.read_at readAt,a.username expediteur
        FROM expediteur_ecotrack_notifications n
        LEFT JOIN admins a ON a.id=n.expediteur_id
@@ -1202,6 +1220,65 @@ router.get("/expediteur/ecotrack/orders/:tracking/label", async (req: AuthedRequ
     const { Readable } = await import("node:stream"); Readable.fromWeb(response.body as any).pipe(res);
     return undefined;
   } catch (e) { if (!res.headersSent) return error(res, e); res.destroy(); return undefined; }
+});
+
+async function productOwner(req: AuthedRequest) {
+  const account = await accountFor(req);
+  if (!account) throw new EcotrackError("forbidden", 403, null);
+  return account.id;
+}
+router.get("/expediteur/ecotrack/products", async (req: AuthedRequest, res) => {
+  try {
+    const owner = await productOwner(req);
+    const [rows] = await pool.execute("SELECT id,expediteur_id,name,sku,purchase_price,sale_price,barcode,external_id,brand,alert_min_stock,weight_kg,marketer_percentage,page_url,description,photo_mime,(photo_data IS NOT NULL) has_photo FROM expediteur_products WHERE expediteur_id=? ORDER BY updated_at DESC, id DESC", [owner]) as any;
+    return res.json({ ok: true, products: rows.map((p: any) => ({ ...p, photo_url: p.has_photo ? `/api/expediteur/ecotrack/products/${p.id}/photo` : null })) });
+  } catch (e) { return error(res, e); }
+});
+router.get("/expediteur/ecotrack/products/:id/photo", async (req: AuthedRequest, res) => {
+  try {
+    const owner = await productOwner(req);
+    const [[row]] = await pool.execute("SELECT photo_data, photo_mime FROM expediteur_products WHERE id=? AND expediteur_id=?", [Number(req.params.id), owner]) as any;
+    if (!row?.photo_data) return res.status(404).end();
+    res.type(row.photo_mime || "application/octet-stream"); return res.send(row.photo_data);
+  } catch (e) { return error(res, e); }
+});
+function validateProduct(body: any, file?: Express.Multer.File) {
+  const numeric = ["purchase_price", "sale_price", "alert_min_stock", "weight_kg", "marketer_percentage"];
+  for (const key of numeric) if (body[key] !== undefined && body[key] !== "" && (!Number.isFinite(Number(body[key])) || Number(body[key]) < 0)) return `invalid_${key}`;
+  if (body.page_url) { try { const url = new URL(String(body.page_url)); if (!["http:", "https:"].includes(url.protocol)) return "invalid_page_url"; } catch { return "invalid_page_url"; } }
+  if (file) {
+    const good = (file.mimetype === "image/jpeg" && file.buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])))
+      || (file.mimetype === "image/png" && file.buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])))
+      || (file.mimetype === "image/webp" && file.buffer.subarray(0, 4).toString() === "RIFF" && file.buffer.subarray(8, 12).toString() === "WEBP");
+    if (!good) return "invalid_photo";
+  }
+  return null;
+}
+router.post("/expediteur/ecotrack/products", productUpload.single("photo"), async (req: AuthedRequest, res) => {
+  try {
+    const owner = await productOwner(req);
+    const name = String(req.body.name ?? "").trim();
+    if (!name) return res.status(400).json({ ok: false, error: "name_required" });
+    const validation = validateProduct(req.body, req.file);
+    if (validation) return res.status(400).json({ ok: false, error: validation });
+    const numeric = (key: string) => req.body[key] === undefined || req.body[key] === "" ? null : Number(req.body[key]);
+    const [result] = await pool.execute(`INSERT INTO expediteur_products (expediteur_id,name,sku,purchase_price,sale_price,barcode,external_id,brand,alert_min_stock,weight_kg,marketer_percentage,page_url,description,photo_data,photo_mime) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [owner,name,req.body.sku||null,numeric("purchase_price"),numeric("sale_price"),req.body.barcode||null,req.body.external_id||null,req.body.brand||null,numeric("alert_min_stock"),numeric("weight_kg"),numeric("marketer_percentage"),req.body.page_url||null,req.body.description||null,req.file?.buffer||null,req.file?.mimetype||null]) as any;
+    const [[product]] = await pool.execute("SELECT id,name,sku,purchase_price,sale_price,barcode,external_id,brand,alert_min_stock,weight_kg,marketer_percentage,page_url,description,photo_mime,(photo_data IS NOT NULL) has_photo FROM expediteur_products WHERE id=?", [result.insertId]) as any;
+    return res.status(201).json({ ok: true, product: { ...product, photo_url: product.has_photo ? `/api/expediteur/ecotrack/products/${result.insertId}/photo` : null } });
+  } catch (e) { return error(res, e); }
+});
+router.put("/expediteur/ecotrack/products/:id", productUpload.single("photo"), async (req: AuthedRequest, res) => {
+  try {
+    const owner = await productOwner(req); const id = Number(req.params.id);
+    const [[current]] = await pool.execute("SELECT * FROM expediteur_products WHERE id=? AND expediteur_id=?", [id, owner]) as any;
+    if (!current) return res.status(404).json({ ok: false, error: "not_found" });
+    const validation = validateProduct(req.body, req.file);
+    if (validation) return res.status(400).json({ ok: false, error: validation });
+    const numeric = (key: string) => req.body[key] === undefined || req.body[key] === "" ? null : Number(req.body[key]);
+    await pool.execute(`UPDATE expediteur_products SET name=?,sku=?,purchase_price=?,sale_price=?,barcode=?,external_id=?,brand=?,alert_min_stock=?,weight_kg=?,marketer_percentage=?,page_url=?,description=?,photo_data=COALESCE(?,photo_data),photo_mime=COALESCE(?,photo_mime) WHERE id=? AND expediteur_id=?`, [String(req.body.name ?? current.name).trim(),req.body.sku||null,numeric("purchase_price"),numeric("sale_price"),req.body.barcode||null,req.body.external_id||null,req.body.brand||null,numeric("alert_min_stock"),numeric("weight_kg"),numeric("marketer_percentage"),req.body.page_url||null,req.body.description||null,req.file?.buffer||null,req.file?.mimetype||null,id,owner]);
+    const [[product]] = await pool.execute("SELECT id,name,sku,purchase_price,sale_price,barcode,external_id,brand,alert_min_stock,weight_kg,marketer_percentage,page_url,description,photo_mime,(photo_data IS NOT NULL) has_photo FROM expediteur_products WHERE id=?", [id]) as any;
+    return res.json({ ok: true, product: { ...product, photo_url: product.has_photo ? `/api/expediteur/ecotrack/products/${id}/photo` : null } });
+  } catch (e) { return error(res, e); }
 });
 
 for (const [name, path] of Object.entries({ wilayas: "/api/v1/get/wilayas", communes: "/api/v1/get/communes", desks: "/api/v1/get/desks", fees: "/api/v1/get/fees", products: "/api/v1/get/products/list" })) {

@@ -13,7 +13,7 @@ export function NotificationsBell() {
   const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number, mode: "remarks" | "details"} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const { data, isLoading } = useEcotrackNotifications();
+  const { data, isLoading, refetch } = useEcotrackNotifications();
   const markRead = useMarkNotificationRead();
 
   const notifications = data?.notifications || [];
@@ -28,6 +28,12 @@ export function NotificationsBell() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Opening the menu is an explicit request for the latest server state.
+  // This also covers a tab that was backgrounded while polling was paused.
+  useEffect(() => {
+    if (open) void refetch();
+  }, [open, refetch]);
 
   const handleOpenNotif = (n: any) => {
     if (!n.readAt) {

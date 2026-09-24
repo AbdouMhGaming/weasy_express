@@ -3,12 +3,17 @@ import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
+import QRCode from "qrcode";
 
 type PayoutStatus = "pending" | "accepted" | "refused" | "delayed" | "paid";
 
 interface PayoutRequest {
   id: number;
   expediteur_username: string;
+  expediteur_id?: number | null;
+  expediteur_phone?: string | null;
+  expediteur_email?: string | null;
+  client_address?: string | null;
   office_hub: string;
   amount_dzd: number;
   requested_date: string;
@@ -17,6 +22,10 @@ interface PayoutRequest {
   admin_notes: string | null;
   created_at: string;
   updated_at: string;
+  confirmation_token?: string | null;
+  receipt_number?: string | null;
+  approved_at?: string | null;
+  paid_at?: string | null;
 }
 
 const STATUS_STYLES: Record<PayoutStatus, { pill: string; dot: string }> = {
@@ -54,6 +63,61 @@ function Spinner() {
   );
 }
 
+async function generatePayoutPDF(p: PayoutRequest) {
+  const { jsPDF } = await import("jspdf");
+  const JsBarcode = (await import("jsbarcode")).default;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const W = 210, RED = [225, 6, 0] as [number, number, number], DARK = [30, 30, 30] as [number, number, number];
+  const GRAY = [100, 100, 100] as [number, number, number];
+  const barcode = document.createElement("canvas");
+  JsBarcode(barcode, p.receipt_number || `PV${String(p.id).padStart(8, "0")}`, { format: "CODE128", displayValue: false, width: 1.8, height: 40, margin: 0 });
+  doc.setFillColor(...RED); doc.rect(0, 0, W, 36, "F");
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text("ENTREPRISE Weasydel Express", 14, 12);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  doc.text("Direction Générale  ·  Service Finance", 14, 19);
+  doc.text("Rue BEN KAHLA MENAOUER 03 OUED RHIOU  ·  weasyexpress.com", 14, 25);
+  doc.setTextColor(...DARK); doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+  doc.text("Reçu de Paiement", W / 2, 49, { align: "center" });
+  doc.setDrawColor(...RED); doc.line(60, 53, W - 60, 53);
+  doc.addImage(barcode.toDataURL("image/png"), "PNG", W - 69, 62, 55, 14);
+  doc.setTextColor(...RED); doc.setFontSize(9);
+  doc.text(`PV N° : ${p.receipt_number || `PV${String(p.id).padStart(8, "0")}`}`, W - 41, 81, { align: "center" });
+  let y = 91;
+  doc.setTextColor(...DARK); doc.setFontSize(9);
+  doc.text(`Station / Hub : ${p.office_hub || "—"}`, 14, y);
+  doc.text(`Date : ${new Date(p.paid_at || p.approved_at || p.updated_at).toLocaleString("fr-DZ")}`, 112, y); y += 9;
+  doc.text(`Client : ${p.expediteur_username}`, 14, y); y += 9;
+  doc.text(`ID client : ${p.expediteur_id ?? "—"}`, 14, y); y += 9;
+  doc.text(`Téléphone : ${p.expediteur_phone || "Non renseigné"}`, 14, y); y += 9;
+  doc.text(`Email : ${p.expediteur_email || "Non renseigné"}`, 14, y); y += 9;
+  doc.text(`Adresse : ${(p.client_address || "Non renseignée").slice(0, 80)}`, 14, y); y += 9;
+  doc.setDrawColor(200, 200, 200); doc.line(14, y, W - 14, y); y += 12;
+  doc.setFillColor(253, 232, 232); doc.setDrawColor(...RED); doc.roundedRect(14, y - 7, W - 28, 25, 3, 3, "FD");
+  doc.setTextColor(...RED); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text(p.status === "paid" ? "Montant total payé" : "Montant approuvé", W / 2, y + 2, { align: "center" });
+  doc.setFontSize(18); doc.text(`${Number(p.amount_dzd).toLocaleString("fr-DZ")} DZD`, W / 2, y + 12, { align: "center" }); y += 38;
+  doc.setTextColor(...DARK); doc.setFontSize(10); doc.text(`Statut : ${p.status === "paid" ? "Payé" : "En attente de confirmation"}`, 14, y); y += 16;
+  doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY); doc.setFontSize(9);
+  doc.text(doc.splitTextToSize(p.status === "paid"
+    ? "Ce reçu confirme le paiement de la demande indiquée ci-dessus."
+    : "Document de demande approuvée. Le paiement sera confirmé par le destinataire via le code QR.", W - 28), 14, y); y += 18;
+  if (p.confirmation_token) {
+    const confirmUrl = `${window.location.origin}/expediteurs/payout-confirm/${p.id}?token=${encodeURIComponent(p.confirmation_token)}`;
+    // Generate locally: never send the one-time token to a third-party QR service.
+    const qrDataUrl = await QRCode.toDataURL(confirmUrl, { width: 240, margin: 1, errorCorrectionLevel: "M" });
+    doc.addImage(qrDataUrl, "PNG", W - 57, y - 12, 38, 38);
+  }
+  doc.setTextColor(...DARK); doc.setFontSize(9);
+  doc.text("Signature et cachet de l'agence", 14, 248);
+  doc.setDrawColor(140, 140, 140); doc.line(14, 271, 95, 271);
+  doc.setFontSize(7); doc.text("Scannez le QR pour confirmer la réception", W - 14, 255, { align: "right" });
+  doc.setFillColor(...RED); doc.rect(0, 282, W, 15, "F");
+  doc.setTextColor(255, 255, 255); doc.setFontSize(8);
+  doc.text("+213-(0) 654 970 662", 14, 290); doc.text("www.weasyexpress.com", W / 2, 290, { align: "center" }); doc.text("contact@weasyexpress.com", W - 14, 290, { align: "right" });
+  doc.save(`Paiement_${p.receipt_number || p.id}.pdf`);
+}
+
 export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
   const role     = getSessionRole();
@@ -67,6 +131,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   const [amount, setAmount]           = useState("");
   const [reqDate, setReqDate]         = useState(today);
   const [notes, setNotes]             = useState("");
+  const [clientAddress, setClientAddress] = useState("");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating]       = useState(false);
 
@@ -115,11 +180,11 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
     try {
       const res = await fetch(`${API_BASE}/api/expediteur/payouts`, {
         method: "POST", headers: adminHeaders(),
-        body: JSON.stringify({ amount_dzd: amt, requested_date: reqDate, expediteur_notes: notes }),
+        body: JSON.stringify({ amount_dzd: amt, requested_date: reqDate, expediteur_notes: notes, client_address: clientAddress }),
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = await res.json();
-      if (data.ok) { setShowCreate(false); setAmount(""); setNotes(""); setReqDate(today); fetchPayouts(); }
+      if (data.ok) { setShowCreate(false); setAmount(""); setNotes(""); setClientAddress(""); setReqDate(today); fetchPayouts(); }
       else setCreateError(data.error === "no_office_linked" ? t("admin.payoutsRequest.noOffice") : t("admin.payoutsRequest.saveError"));
     } finally { setCreating(false); }
   }
@@ -142,7 +207,10 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
       });
       if (res.status === 401) { onUnauth(); return; }
       const data = await res.json();
-      if (data.ok) { setUpdateId(null); setUpdateTarget(null); setAdminNotes(""); fetchPayouts(); }
+      if (data.ok) {
+        if (data.confirmation_token) setPayouts((current) => current.map((p) => p.id === updateId ? { ...p, status: "accepted", confirmation_token: data.confirmation_token, receipt_number: data.receipt_number, approved_at: new Date().toISOString() } : p));
+        setUpdateId(null); setUpdateTarget(null); setAdminNotes(""); fetchPayouts();
+      }
     } finally { setUpdating(false); }
   }
 
@@ -156,6 +224,9 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   const canUpdate = role === "admin" || role === "office";
   const canCreate = role === "expediteur";
 
+  if (window.location.pathname.includes("/payout-confirm/")) {
+    return <PayoutConfirmationView onUnauth={onUnauth} />;
+  }
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto">
 
@@ -237,6 +308,12 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Adresse du client (pour le reçu)</label>
+                  <input type="text" maxLength={500} value={clientAddress} onChange={(e) => setClientAddress(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30"
+                    placeholder="Adresse à afficher sur le reçu PDF" />
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.payoutsRequest.fields.notes")}</label>
                   <textarea
                     value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
@@ -284,7 +361,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.payoutsRequest.fields.status")}</label>
                   <div className="grid grid-cols-2 gap-2">
-                    {(["accepted", "refused", "delayed", "paid"] as PayoutStatus[]).map((s) => (
+                    {(["accepted", "refused", "delayed", ...(role === "admin" ? ["paid"] : [])] as PayoutStatus[]).map((s) => (
                       <button
                         key={s}
                         onClick={() => setNewStatus(s)}
@@ -406,6 +483,11 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                             {t("admin.payoutsRequest.action")}
                           </button>
                         )}
+                        {(role === "admin" || role === "office") && (p.status === "accepted" || p.status === "paid") && (
+                          <button onClick={() => generatePayoutPDF(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-[#E10600] hover:bg-red-50" title="Télécharger le reçu PDF">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" /></svg>
+                          </button>
+                        )}
                         {role === "admin" && (
                           <button
                             onClick={() => deletePayout(p.id)}
@@ -466,6 +548,9 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                           {t("admin.payoutsRequest.action")}
                         </button>
                       )}
+                      {(role === "admin" || role === "office") && (p.status === "accepted" || p.status === "paid") && (
+                        <button onClick={() => generatePayoutPDF(p)} className="text-xs font-semibold text-gray-600 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-200">PDF</button>
+                      )}
                       {role === "admin" && (
                         <button
                           onClick={() => deletePayout(p.id)}
@@ -493,6 +578,49 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
           <PaginationBar {...pag} />
         </>
       )}
+    </div>
+  );
+}
+
+function PayoutConfirmationView({ onUnauth }: { onUnauth: () => void }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState("");
+  const id = Number(window.location.pathname.split("/").pop());
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  async function confirm() {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/expediteur/payouts/${id}/confirm`, {
+        method: "POST", headers: adminHeaders(), body: JSON.stringify({ confirmation_token: token }),
+      });
+      if (res.status === 401) { onUnauth(); return; }
+      const data = await res.json();
+      setResult(data.ok ? "paid" : data.error || "error");
+    } catch {
+      setResult("Connection error. Please retry.");
+    } finally { setBusy(false); }
+  }
+  useEffect(() => {
+    // A scan by the authenticated owner confirms the payment automatically.
+    // The QR URL itself is a read-only page; the mutation remains an authenticated POST.
+    if (token && Number.isInteger(id) && id > 0) void confirm();
+  }, [id, token]);
+  return (
+    <div className="max-w-lg mx-auto p-6 md:p-10">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+        <div className="w-14 h-14 mx-auto rounded-full bg-red-50 text-[#E10600] flex items-center justify-center text-2xl">✓</div>
+        <h1 className="text-2xl font-bold text-gray-900 mt-4">{t("admin.payoutsRequest.confirmPayment", "Confirm payment")}</h1>
+        {result === "paid" || result === "already_paid" ? (
+          <p className="mt-3 text-emerald-600 font-semibold">{t("admin.payoutsRequest.paymentConfirmed", "Payment confirmed successfully.")}</p>
+        ) : (
+          <>
+            <p className="mt-3 text-gray-500 text-sm">{busy ? "Confirming payment…" : "Payment confirmation is automatic when the QR code is scanned by the signed-in recipient."}</p>
+            {result && <button disabled={busy || !token || !Number.isInteger(id)} onClick={confirm} className="mt-6 px-5 py-3 rounded-xl bg-[#E10600] text-white font-semibold disabled:opacity-50">Retry</button>}
+            {result && <p className="mt-3 text-sm text-red-600">{result}</p>}
+          </>
+        )}
+      </div>
     </div>
   );
 }
