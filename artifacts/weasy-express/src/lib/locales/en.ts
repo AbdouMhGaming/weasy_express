@@ -1782,6 +1782,10 @@ const en: Translations = {
       },
       tracking: {
         followUpInfo: "Follow-up information",
+        remarksHistory: "Remark history",
+        remarkStation: "Station",
+        remarkDriver: "Driver",
+        remarkSender: "Sender",
         noFollowUp: "No follow-up comments yet.",
         unknownAuthor: "Author not specified",
         followUpDriver: "Driver",

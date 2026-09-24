@@ -134,7 +134,7 @@ export function useEcotrackOrders(
 }
 
 // Order details
-export function useEcotrackOrderDetail(tracking: string, expediteurId?: number | string) {
+export function useEcotrackOrderDetail(tracking: string, expediteurId?: number | string, enabled = true) {
   return useQuery({
     queryKey: ["ecotrack", "order", tracking, expediteurId],
     queryFn: async () => {
@@ -147,44 +147,39 @@ export function useEcotrackOrderDetail(tracking: string, expediteurId?: number |
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
 
-      const info = body.order ?? {};
-      const events: any[] = [];
-
-      // Follow-up information is commentary from the carrier/driver or merchant,
-      // not the order's status tracking history.
-      (body.updates || []).forEach((update: any) => {
-        const createdAt = update.created_at || update.createdAt || update.date_maj || update.occurredAt || "";
-        const comments = [update.commentaires, update.comments, update.comment, update.remarque, update.remark]
-          .filter((text): text is string => typeof text === "string" && !!text.trim());
-        comments.forEach((content) => events.push({
-          type: "followup",
-          content,
-          author: update.auteur || update.author || update.livreur || update.driver || "",
-          role: update.livreur || update.driver ? "delivery" : "expediteur",
-          createdAt,
-          timestamp: new Date(createdAt || 0).getTime(),
-        }));
-      });
-
-      (body.remarks || []).forEach((rm: any) => {
-        const createdAt = rm.created_at || rm.createdAt || "";
-        events.push({
-          type: "remark",
-          content: rm.content,
-          author: rm.author,
-          role: rm.role,
-          createdAt,
-          timestamp: new Date(createdAt || 0).getTime(),
-          original: rm
-        });
-      });
-
-      events.sort((a, b) => b.timestamp - a.timestamp);
-
-      return { info, events, ...body };
+      return { ...body, info: body.order };
     },
-    enabled: !!tracking,
+    enabled: !!tracking && enabled,
     refetchInterval: 30_000,
+  });
+}
+
+export interface EcotrackRemark {
+  remarque: string;
+  station?: string;
+  livreur?: string;
+  auteur?: string;
+  created_at: string;
+  tracking?: string;
+}
+
+export function useEcotrackRemarks(tracking: string, expediteurId?: number | string, enabled = true) {
+  return useQuery({
+    queryKey: ["ecotrack", "remarks", tracking, expediteurId],
+    queryFn: async (): Promise<EcotrackRemark[]> => {
+      const params = new URLSearchParams();
+      if (expediteurId && !window.location.pathname.startsWith("/expediteurs")) {
+        params.set("expediteurId", String(expediteurId));
+      }
+      const url = `${getDynamicBase()}/orders/${encodeURIComponent(tracking)}/remarks${params.size ? `?${params}` : ""}`;
+      const res = await fetch(url, { headers: adminHeaders() });
+      const body = await readApiJson(res);
+      if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
+      if (!Array.isArray(body.remarks)) throw new Error("invalid_remark_history");
+      return body.remarks;
+    },
+    enabled: !!tracking && enabled,
+    staleTime: 30_000,
   });
 }
 
@@ -470,7 +465,8 @@ export function useAddEcotrackNote() {
       return body;
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "order", vars.tracking] }); queryClient.invalidateQueries({ queryKey: ["ecotrack", "notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["ecotrack", "remarks", vars.tracking] });
+      queryClient.invalidateQueries({ queryKey: ["ecotrack", "notifications"] });
     },
   });
 }

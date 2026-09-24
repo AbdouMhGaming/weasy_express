@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackDelays, useEcotrackDelayThresholds, useUpdateEcotrackDelayThresholds } from "@/hooks/use-ecotrack";
-import { Eye, Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
+import { Eye, MessageSquare, Loader2, AlertCircle, Filter, X, Search, Clock, Save, Edit2, MapPin, Settings2, Truck, PackageCheck, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight } from "lucide-react";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { PaginationBar, usePagination } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ function ExpediteurDelaysView({ t, role }: { t: any, role: "admin" | "expediteur
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const [detailTracking, setDetailTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
+  const [remarksTracking, setRemarksTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
@@ -230,8 +231,11 @@ function ExpediteurDelaysView({ t, role }: { t: any, role: "admin" | "expediteur
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
+                          <Button variant="ghost" size="icon" title={t("admin.ecotrackPortal.orders.details.title")} className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" title={t("admin.ecotrackPortal.tracking.remarksHistory")} className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50" onClick={() => setRemarksTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
+                            <MessageSquare className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -255,7 +259,8 @@ function ExpediteurDelaysView({ t, role }: { t: any, role: "admin" | "expediteur
           </div>
         )}
       </div>
-      {detailTracking && <TrackingDetailModal tracking={detailTracking.tracking} expediteurId={detailTracking.expediteurId} onClose={() => setDetailTracking(null)} />}
+      {detailTracking && <TrackingDetailModal tracking={detailTracking.tracking} expediteurId={detailTracking.expediteurId} mode="details" onClose={() => setDetailTracking(null)} />}
+      {remarksTracking && <TrackingDetailModal tracking={remarksTracking.tracking} expediteurId={remarksTracking.expediteurId} mode="remarks" onClose={() => setRemarksTracking(null)} />}
     </div>
   );
 }

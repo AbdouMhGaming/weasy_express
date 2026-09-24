@@ -1782,6 +1782,10 @@ const ar: Translations = {
       },
       tracking: {
         followUpInfo: "معلومات المتابعة",
+        remarksHistory: "سجل الملاحظات",
+        remarkStation: "المحطة",
+        remarkDriver: "الموزّع",
+        remarkSender: "المرسل",
         noFollowUp: "لا توجد تعليقات متابعة بعد.",
         unknownAuthor: "كاتب غير محدد",
         followUpDriver: "الموزّع",

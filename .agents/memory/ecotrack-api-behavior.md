@@ -9,6 +9,12 @@ The Ecotrack production API returns HTTP 401 with `{"message":"Unauthenticated."
 
 **How to apply:** Across Ecotrack endpoints, classify HTTP 401 and the `Unauthenticated.` message as invalid credentials. Keep 429 separate for rate limiting and reserve unavailable states for transport failures or unexpected upstream responses.
 
+Ecotrack's "informations de suivi" means the remote history of remarks/mises à jour, including notes from stations, delivery staff, and expéditeurs. It is distinct from order details, status transitions, the original order remark, and remarks logged only inside this application. Fetch the live Ecotrack remarks when a user opens that history; don't infer it from the cached order.
+
+**Why:** The user provided a real parcel whose Ecotrack remark history contains station and expéditeur messages absent from the locally recorded remarks and cached status history. Conflating those sources made the follow-up action show the wrong information.
+
+**How to apply:** Keep the order-details action, tracking-status action, and remark-history action separate across merchant, admin, and suivi views. Preserve the remote text, source, author, and timestamp, and keep access scoped to both the owning expéditeur and tracking number.
+
 Production authentication requires the token in the `api_token` query parameter; Bearer authentication alone fails. Send both forms from the backend gateway, and ensure request logging never includes upstream query strings.
 
 **Why:** Live contract checks succeeded with the query parameter (with or without Bearer) and failed with Bearer alone, contrary to the general authentication guidance in the supplied documentation.

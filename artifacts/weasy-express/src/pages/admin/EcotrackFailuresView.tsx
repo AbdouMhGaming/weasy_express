@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useEcotrackFailures } from "@/hooks/use-ecotrack";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Eye, Filter, Loader2, PackageX, Search } from "lucide-react";
+import { AlertCircle, Eye, MessageSquare, Filter, Loader2, PackageX, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { WILAYA_LIST } from "@/lib/wilayas";
@@ -15,6 +15,7 @@ export default function EcotrackFailuresView() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [detailTracking, setDetailTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
+  const [remarksTracking, setRemarksTracking] = useState<{tracking: string, expediteurId?: string | number} | null>(null);
   const [page, setPage] = useState(1);
 
   // Hardcode page size to what the backend returns or default to 20
@@ -139,8 +140,11 @@ export default function EcotrackFailuresView() {
                       <td className="px-4 py-3 text-slate-600">{order.date_maj || order.updated_at ? new Date(order.date_maj || order.updated_at).toLocaleString() : '—'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
+                          <Button variant="ghost" size="icon" title={t("admin.ecotrackPortal.orders.details.title")} className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => setDetailTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" title={t("admin.ecotrackPortal.tracking.remarksHistory")} className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50" onClick={() => setRemarksTracking({ tracking: order.tracking, expediteurId: order.expediteurId || order.owner_id })}>
+                            <MessageSquare className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -164,7 +168,8 @@ export default function EcotrackFailuresView() {
           </div>
         )}
       </div>
-      {detailTracking && <TrackingDetailModal tracking={detailTracking.tracking} expediteurId={detailTracking.expediteurId} onClose={() => setDetailTracking(null)} />}
+      {detailTracking && <TrackingDetailModal tracking={detailTracking.tracking} expediteurId={detailTracking.expediteurId} mode="details" onClose={() => setDetailTracking(null)} />}
+      {remarksTracking && <TrackingDetailModal tracking={remarksTracking.tracking} expediteurId={remarksTracking.expediteurId} mode="remarks" onClose={() => setRemarksTracking(null)} />}
     </div>
   );
 }

@@ -1780,6 +1780,10 @@ const fr = {
       },
       tracking: {
         followUpInfo: "Informations de suivi",
+        remarksHistory: "Historique des remarques",
+        remarkStation: "Station",
+        remarkDriver: "Livreur",
+        remarkSender: "Expéditeur",
         noFollowUp: "Aucun commentaire de suivi pour le moment.",
         unknownAuthor: "Auteur non précisé",
         followUpDriver: "Livreur",

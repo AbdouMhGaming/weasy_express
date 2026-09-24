@@ -24,6 +24,7 @@ import {
   useRequestReturnEcotrackOrder,
   useLabelEcotrackOrder,
   useEcotrackOrderDetail,
+  useEcotrackRemarks,
   useAddEcotrackNote,
   useEcotrackSync
 } from "@/hooks/use-ecotrack";
@@ -1473,12 +1474,13 @@ export function OrderDetailsModal({ order, onClose, children }: { order: any; on
   );
 }
 
-export function TrackingDetailModal({ tracking, expediteurId, mode = "details", onClose }: { tracking: string; expediteurId?: number | string; mode?: "details" | "tracking"; onClose: () => void; }) {
+export function TrackingDetailModal({ tracking, expediteurId, mode = "remarks", onClose }: { tracking: string; expediteurId?: number | string; mode?: "details" | "tracking" | "remarks"; onClose: () => void; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [note, setNote] = useState("");
   const mutation = useAddEcotrackNote();
-  const { data, isLoading, error } = useEcotrackOrderDetail(tracking, expediteurId);
+  const { data, isLoading, error } = useEcotrackOrderDetail(tracking, expediteurId, mode !== "remarks");
+  const { data: remarks, isLoading: remarksLoading, error: remarksError } = useEcotrackRemarks(tracking, expediteurId, mode === "remarks");
 
   const submit = () => {
     if (!note.trim()) return;
@@ -1492,6 +1494,49 @@ export function TrackingDetailModal({ tracking, expediteurId, mode = "details", 
   };
 
   if (!tracking) return null;
+  if (mode === "remarks") return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">{t("admin.ecotrackPortal.tracking.remarksHistory")}</h2>
+            <p className="mt-1 font-mono text-xs text-slate-500">{tracking}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
+        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-5">
+          {remarksLoading ? <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-[#E10600]" /></div>
+            : remarksError ? <p role="alert" className="text-sm text-red-700">{t("admin.ecotrackPortal.common.error")}: {remarksError.message}</p>
+            : remarks?.length ? [...remarks].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))).map((item, index) => {
+              const source = item.station ? t("admin.ecotrackPortal.tracking.remarkStation")
+                : item.livreur ? t("admin.ecotrackPortal.tracking.remarkDriver")
+                : t("admin.ecotrackPortal.tracking.remarkSender");
+              const author = item.station || item.livreur || item.auteur;
+              return <article key={`${item.created_at}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center gap-x-1 text-xs font-semibold text-slate-600">
+                  <span>{source}{author ? ` - ${author}` : ""}</span>
+                  <time dateTime={item.created_at} className="font-normal text-slate-500">{item.created_at ? ` · ${item.created_at}` : ""}</time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800">{item.remarque}</p>
+              </article>;
+            })
+            : <p className="text-center text-sm text-slate-500">{t("admin.ecotrackPortal.tracking.noFollowUp")}</p>}
+        </div>
+        <div className="border-t border-slate-100 p-5">
+          <label htmlFor="ecotrack-followup-note" className="mb-2 block text-sm font-semibold text-slate-700">{t("admin.ecotrackPortal.tracking.addNote")}</label>
+          <textarea id="ecotrack-followup-note" className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600] resize-none"
+            rows={3} placeholder={t("admin.ecotrackPortal.tracking.addRemarkPlaceholder")}
+            value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="mt-2 flex justify-end">
+            <Button onClick={submit} disabled={mutation.isPending || !note.trim()} className="bg-[#E10600] hover:bg-red-700 text-white">
+              {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("admin.ecotrackPortal.common.save")}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   if (isLoading) return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><Loader2 className="h-8 w-8 animate-spin text-white" /></div>;
   if (error || !data?.info) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1516,33 +1561,7 @@ export function TrackingDetailModal({ tracking, expediteurId, mode = "details", 
       </div>
     </div>
   );
-  return <OrderDetailsModal order={data.info} onClose={onClose}>
-    <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
-      <h3 className="mb-3 font-bold text-slate-900">{t("admin.ecotrackPortal.tracking.followUpInfo")}</h3>
-      {data.events.length ? <div className="space-y-3">
-        {data.events.map((ev: any, index: number) => (
-          <div key={ev.original?.id ?? index} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-              <span>{ev.author || t("admin.ecotrackPortal.tracking.unknownAuthor")}{ev.role ? ` · ${ev.role === "delivery" ? t("admin.ecotrackPortal.tracking.followUpDriver") : ev.role === "expediteur" ? t("admin.ecotrackPortal.tracking.followUpSender") : ev.role}` : ""}</span>
-              <time>{ev.createdAt && !Number.isNaN(new Date(ev.createdAt).getTime()) ? new Date(ev.createdAt).toLocaleString() : "—"}</time>
-            </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{ev.content}</p>
-          </div>
-        ))}
-      </div> : <p className="text-sm text-slate-500">{t("admin.ecotrackPortal.tracking.noFollowUp")}</p>}
-      <textarea
-        className="mt-4 w-full h-24 p-3 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#E10600] resize-none"
-        placeholder={t("admin.ecotrackPortal.tracking.addRemarkPlaceholder")}
-        value={note} onChange={(e) => setNote(e.target.value)}
-      />
-      <div className="mt-2 flex justify-end">
-        <Button onClick={submit} disabled={mutation.isPending || !note.trim()} className="bg-[#E10600] hover:bg-red-700 text-white">
-          {mutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          {t("admin.ecotrackPortal.common.save")}
-        </Button>
-      </div>
-    </section>
-  </OrderDetailsModal>;
+  return <OrderDetailsModal order={data.info} onClose={onClose} />;
 }
 
 

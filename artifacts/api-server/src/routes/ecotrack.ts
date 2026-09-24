@@ -1029,6 +1029,56 @@ router.get("/expediteur/ecotrack/orders/:tracking/history", orderHistory);
 router.get("/admin/ecotrack/orders/:tracking/history", orderHistory);
 router.get("/suivi/ecotrack/orders/:tracking/history", orderHistory);
 
+async function orderRemarks(req: AuthedRequest, res: any) {
+  if (req.adminRole === "admin_team" && !hasTeamPermission(req, "ecotrack")) {
+    return res.status(403).json({ ok: false, error: "forbidden" });
+  }
+  const id = tracking(req.params.tracking);
+  if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+  try {
+    const ownerId = req.adminRole === "expediteur"
+      ? (await accountFor(req))?.id
+      : Number(req.query.expediteurId);
+    if (req.adminRole !== "expediteur" && (!Number.isInteger(ownerId) || ownerId <= 0)) {
+      return res.status(400).json({ ok: false, error: "expediteurId_required" });
+    }
+    if (!ownerId) return res.status(403).json({ ok: false, error: "forbidden" });
+
+    const conn = await pool.getConnection();
+    let token: string;
+    try {
+      const [[row]] = await conn.execute(
+        `SELECT k.token_ciphertext,k.token_iv,k.token_auth_tag
+         FROM expediteur_ecotrack_order_cache c
+         JOIN admins a ON a.id=c.expediteur_id AND a.role='expediteur'
+         LEFT JOIN expediteur_ecotrack_credentials k ON k.expediteur_id=c.expediteur_id
+         WHERE c.expediteur_id=? AND c.tracking=? LIMIT 1`,
+        [ownerId, id],
+      ) as any;
+      if (!row) return res.status(404).json({ ok: false, error: "order_not_found" });
+      if (!row.token_ciphertext) return res.status(409).json({ ok: false, error: "ecotrack_not_connected" });
+      token = ecotrackToken(row.token_ciphertext, row.token_iv, row.token_auth_tag);
+    } finally { conn.release(); }
+
+    // This is Ecotrack's actual remark history (station, driver, sender), not
+    // status transitions or only remarks recorded through this application.
+    let response;
+    try {
+      response = await ecotrackRequest(token, "/api/v1/get/maj", { method: "POST", params: { tracking: id } });
+    } catch (e) {
+      if (!(e instanceof EcotrackError) || ![404, 405].includes(e.status)) throw e;
+      response = await ecotrackRequest(token, "/api/v1/get/maj", { params: { tracking: id } });
+    }
+    const remarks = Array.isArray(response.body) ? response.body
+      : Array.isArray(response.body?.data) ? response.body.data : null;
+    if (!remarks) throw new EcotrackError("Invalid Ecotrack remark history", 502, null);
+    return res.json({ ok: true, remarks });
+  } catch (e) { return error(res, e); }
+}
+router.get("/expediteur/ecotrack/orders/:tracking/remarks", orderRemarks);
+router.get("/admin/ecotrack/orders/:tracking/remarks", orderRemarks);
+router.get("/suivi/ecotrack/orders/:tracking/remarks", orderRemarks);
+
 async function notificationScope(req: AuthedRequest, conn: any) {
   if (req.adminRole === "admin" || req.adminRole === "suivi") return null;
   if (req.adminRole === "expediteur") {
