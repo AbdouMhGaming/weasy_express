@@ -15,6 +15,12 @@ Ecotrack's "informations de suivi" means the remote history of remarks/mises à 
 
 **How to apply:** Keep the order-details action, tracking-status action, and remark-history action separate across merchant, admin, and suivi views. Preserve the remote text, source, author, and timestamp, and keep access scoped to both the owning expéditeur and tracking number.
 
+For live remark history, Ecotrack's `get/maj` accepts GET even though its documentation shows a POST example. A station entry may put a generic "Écrire une remarque" placeholder in `remarque`; its actual message is in `commentaires`. `station` names a branch/location, while `livreur` identifies the person who wrote the station note. Sender-authored entries have neither field, and this API does not supply their individual author names.
+
+**Why:** A live comparison against a user-reported parcel showed the exact mismatch: rendering the branch as author and the placeholder as text while hiding the actual comment. The order-level shipping account also differed from the per-entry sender names shown on Ecotrack's own site.
+
+**How to apply:** Call GET directly; show the station as the source without substituting its location for the author, place the delivery person's name alongside the actual comment, and leave a sender note's author unspecified unless that specific entry explicitly provides one. Never guess from the order owner or shipping account.
+
 Production authentication requires the token in the `api_token` query parameter; Bearer authentication alone fails. Send both forms from the backend gateway, and ensure request logging never includes upstream query strings.
 
 **Why:** Live contract checks succeeded with the query parameter (with or without Bearer) and failed with Bearer alone, contrary to the general authentication guidance in the supplied documentation.

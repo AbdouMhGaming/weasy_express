@@ -1062,13 +1062,7 @@ async function orderRemarks(req: AuthedRequest, res: any) {
 
     // This is Ecotrack's actual remark history (station, driver, sender), not
     // status transitions or only remarks recorded through this application.
-    let response;
-    try {
-      response = await ecotrackRequest(token, "/api/v1/get/maj", { method: "POST", params: { tracking: id } });
-    } catch (e) {
-      if (!(e instanceof EcotrackError) || ![404, 405].includes(e.status)) throw e;
-      response = await ecotrackRequest(token, "/api/v1/get/maj", { params: { tracking: id } });
-    }
+    const response = await ecotrackRequest(token, "/api/v1/get/maj", { params: { tracking: id } });
     const remarks = Array.isArray(response.body) ? response.body
       : Array.isArray(response.body?.data) ? response.body.data : null;
     if (!remarks) throw new EcotrackError("Invalid Ecotrack remark history", 502, null);

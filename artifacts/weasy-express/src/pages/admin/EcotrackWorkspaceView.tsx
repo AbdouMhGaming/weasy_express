@@ -30,6 +30,7 @@ import {
 } from "@/hooks/use-ecotrack";
 import type { EcotrackOrderSort } from "@/hooks/use-ecotrack";
 import type { EcotrackOrderFilters } from "@/hooks/use-ecotrack";
+import { displayEcotrackRemark } from "@/lib/ecotrackRemarks";
 import { PaginationBar } from "@/components/Pagination";
 import { useToast } from "@/hooks/use-toast";
 
@@ -1481,6 +1482,10 @@ export function TrackingDetailModal({ tracking, expediteurId, mode = "remarks", 
   const mutation = useAddEcotrackNote();
   const { data, isLoading, error } = useEcotrackOrderDetail(tracking, expediteurId, mode !== "remarks");
   const { data: remarks, isLoading: remarksLoading, error: remarksError } = useEcotrackRemarks(tracking, expediteurId, mode === "remarks");
+  const visibleRemarks = remarks
+    ?.map(displayEcotrackRemark)
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
 
   const submit = () => {
     if (!note.trim()) return;
@@ -1507,17 +1512,14 @@ export function TrackingDetailModal({ tracking, expediteurId, mode = "remarks", 
         <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-5">
           {remarksLoading ? <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-[#E10600]" /></div>
             : remarksError ? <p role="alert" className="text-sm text-red-700">{t("admin.ecotrackPortal.common.error")}: {remarksError.message}</p>
-            : remarks?.length ? [...remarks].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))).map((item, index) => {
-              const source = item.station ? t("admin.ecotrackPortal.tracking.remarkStation")
-                : item.livreur ? t("admin.ecotrackPortal.tracking.remarkDriver")
-                : t("admin.ecotrackPortal.tracking.remarkSender");
-              const author = item.station || item.livreur || item.auteur;
-              return <article key={`${item.created_at}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
+            : visibleRemarks?.length ? visibleRemarks.map((item, index) => {
+              const source = t(`admin.ecotrackPortal.tracking.${item.source === "station" ? "remarkStation" : item.source === "driver" ? "remarkDriver" : "remarkSender"}`);
+              return <article key={`${item.createdAt}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-center gap-x-1 text-xs font-semibold text-slate-600">
-                  <span>{source}{author ? ` - ${author}` : ""}</span>
-                  <time dateTime={item.created_at} className="font-normal text-slate-500">{item.created_at ? ` · ${item.created_at}` : ""}</time>
+                  <span>{source}{item.author ? ` - ${item.author}` : ""}</span>
+                  <time dateTime={item.createdAt} className="font-normal text-slate-500">{item.createdAt ? ` · ${item.createdAt}` : ""}</time>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800">{item.remarque}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800">{item.text}</p>
               </article>;
             })
             : <p className="text-center text-sm text-slate-500">{t("admin.ecotrackPortal.tracking.noFollowUp")}</p>}

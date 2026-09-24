@@ -156,9 +156,11 @@ export function useEcotrackOrderDetail(tracking: string, expediteurId?: number |
 
 export interface EcotrackRemark {
   remarque: string;
+  commentaires?: string;
   station?: string;
   livreur?: string;
   auteur?: string;
+  author?: string;
   created_at: string;
   tracking?: string;
 }
