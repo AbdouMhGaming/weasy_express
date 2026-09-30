@@ -226,7 +226,7 @@ function SidebarInner({
     <aside aria-label={t("admin.sidebar.label")} className={`fixed inset-y-0 left-0 bg-white border-r border-[#e9dedb] flex flex-col z-40 shadow-[4px_0_24px_rgba(38,19,17,.08)] transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"} ${isCollapsed ? "w-64 md:w-[72px]" : "w-64"}`}>
       <div className={`bg-gradient-to-br from-[#E10600] to-[#a90000] flex flex-col items-center justify-center shrink-0 ${isCollapsed ? "md:px-2" : ""}`}>
         <img src={`${import.meta.env.BASE_URL}logo-white.png`} alt="Weasy Express" className={`w-[220px] h-[88px] object-cover object-center ${isCollapsed ? "md:hidden" : ""}`} />
-        <span aria-hidden="true" className={`hidden ${isCollapsed ? "md:flex" : ""} items-center justify-center h-[88px] text-white text-2xl font-extrabold tracking-tighter`}>W<span className="text-white/70">.</span></span>
+        <img src={`${import.meta.env.BASE_URL}weasy-mark-white.png`} alt="Weasy Express" className={`hidden ${isCollapsed ? "md:block" : ""} w-14 h-[88px] object-contain`} />
       </div>
 
       <div className={`px-4 py-3 border-b border-[#eee3e1] flex items-center gap-2 ${isCollapsed ? "md:justify-center md:px-2" : "justify-between"}`}>
