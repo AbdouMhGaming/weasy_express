@@ -212,3 +212,17 @@ mtime_ms = 1790798619947
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/8452ddc6-df71-4268-9756-ecbad5c38a50/13975e42-4d47-44d0-b555-51ea8a2d0e08"
 storage_version_token = "1790798678299405"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "FnYJskFwdGxEx68d3G4uj"
+uri = "file://deploy/weasy-express-2026-09-30-dark-backgrounds.zip"
+type = "unspecified"
+title = "Weasy Express — dark portal backgrounds build"
+description = "Updated Hostinger build with solid charcoal backgrounds across Expéditeurs and Suivi sections, including non-dashboard pages."
+logical_id = "82bd6596-315d-4b03-8eef-2a3bf564c572"
+content_hash = "sha256:4b5a2421476167410895ad626a257802ade6d4e7b30f708c06753828790ec93a"
+size = 7780713
+mtime_ms = 1790799393243
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/82bd6596-315d-4b03-8eef-2a3bf564c572/9c49113a-7185-4f14-9736-2f4c0defc3bf"
+storage_version_token = "1790799435621093"
+content_type = "application/octet-stream"

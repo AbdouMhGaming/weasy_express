@@ -202,11 +202,12 @@
   [class~="bg-white/95"]) {
   background-color: hsl(var(--card));
 }
-.dark :is([class~="bg-gray-50"], [class~="bg-slate-50"], [class~="bg-[#f7f8fa]"]) {
+.dark :is([class~="bg-gray-50"], [class~="bg-gray-50/50"],
+  [class~="bg-slate-50"], [class~="bg-slate-50/50"], [class~="bg-[#f7f8fa]"]) {
   background-color: hsl(var(--background));
 }
-.dark :is([class~="bg-gray-50/60"], [class~="bg-gray-50/70"], [class~="bg-gray-50/80"],
-  [class~="bg-gray-100"], [class~="bg-slate-100"]) {
+.dark :is([class~="bg-gray-50/40"], [class~="bg-gray-50/60"], [class~="bg-gray-50/70"], [class~="bg-gray-50/80"],
+  [class~="bg-gray-100"], [class~="bg-gray-100/70"], [class~="bg-slate-100"], [class~="bg-slate-50/60"]) {
   background-color: hsl(var(--muted));
 }
 .dark :is([class~="bg-gray-200"], [class~="bg-slate-200"], [class~="bg-[#e2e8f0]"]) {
@@ -260,7 +261,9 @@
 .dark :is([class~="from-gray-100"], [class~="from-slate-50"]) { --tw-gradient-from: hsl(var(--muted)); }
 .dark [class~="to-gray-200"] { --tw-gradient-to: hsl(var(--card)); }
 .dark :is([class~="hover:bg-gray-50"], [class~="hover:bg-slate-50"],
-  [class~="hover:bg-gray-50/60"], [class~="hover:bg-gray-50/70"]):hover {
+  [class~="hover:bg-gray-50/40"], [class~="hover:bg-gray-50/50"],
+  [class~="hover:bg-gray-50/60"], [class~="hover:bg-gray-50/70"],
+  [class~="hover:bg-slate-50/70"]):hover {
   background-color: hsl(var(--muted));
 }
 
