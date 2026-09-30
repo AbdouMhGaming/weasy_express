@@ -39,6 +39,12 @@ All Ecotrack operational screens must inherit the existing Weasy Express visual 
 
 **How to apply:** Reuse the main dashboard’s white/slate surfaces, red brand accent, spacing, controls, and responsive behavior for reports, Retards, and future Ecotrack sections.
 
+When the user asks to redesign the sidebar, keep the rest of the site's existing page colors unchanged. The main site's red-and-white identity should guide the sidebar itself, not become a blanket color override for operational pages or login screens.
+
+**Why:** The user explicitly rejected a site-wide recolor after requesting a sidebar redesign; restoring each page's original colors was more important than making every status/action use the same palette.
+
+**How to apply:** Limit sidebar design changes to its own shell and navigation styles. Keep existing semantic and page-specific colors elsewhere unless the user asks for a separate restyling.
+
 Dashboard quick actions must complete their task in place when possible. Order quick search belongs directly above New Order and opens an anchored search/results panel; it must not navigate to History.
 
 **Why:** The user intends to remove History and expects the dashboard shortcut to remain a genuinely fast search interaction.

@@ -30,14 +30,13 @@ export function Navbar() {
     { href: "/agent", label: t("nav.agent") },
   ];
 
-  const onHero = location === "/" && !scrolled;
-  const headerCls = !onHero
-    ? "bg-[#faf8f6]/95 backdrop-blur-md border-b border-[#e8dfda] shadow-sm"
+  const headerCls = scrolled
+    ? "bg-white/95 backdrop-blur-md border-b border-border shadow-sm"
     : "bg-transparent border-b border-transparent";
 
   const linkBase = "text-sm font-medium transition-colors cursor-pointer";
-  const linkActive = !onHero ? "text-primary" : "text-white";
-  const linkInactive = !onHero
+  const linkActive = scrolled ? "text-primary" : "text-white";
+  const linkInactive = scrolled
     ? "text-muted-foreground hover:text-primary"
     : "text-white/80 hover:text-white";
 
@@ -52,7 +51,7 @@ export function Navbar() {
               src={logoWhitePath}
               alt="Weasy Express"
               className={`h-16 md:h-20 w-auto object-contain transition-opacity duration-300 ${
-                !onHero ? "opacity-0" : "opacity-100"
+                scrolled ? "opacity-0" : "opacity-100"
               }`}
             />
             <img
@@ -60,7 +59,7 @@ export function Navbar() {
               alt=""
               aria-hidden="true"
               className={`absolute left-0 top-0 h-16 md:h-20 w-auto object-contain transition-opacity duration-300 ${
-                !onHero ? "opacity-100" : "opacity-0"
+                scrolled ? "opacity-100" : "opacity-0"
               }`}
             />
           </div>
@@ -82,7 +81,7 @@ export function Navbar() {
           <Link href="/tracking">
             <Button
               className={`font-bold cursor-pointer ${
-                !onHero
+                scrolled
                   ? "bg-[#E10600] hover:bg-[#B80500] text-white"
                   : "bg-white text-[#E10600] hover:bg-white/90"
               }`}
@@ -103,7 +102,7 @@ export function Navbar() {
                 variant="ghost"
                 size="icon"
                 className={
-                  !onHero
+                  scrolled
                     ? "text-foreground hover:bg-black/5"
                     : "text-white hover:bg-white/10"
                 }

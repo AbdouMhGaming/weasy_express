@@ -78,29 +78,29 @@
   /* Off-White #F5F5F5 -> HSL: 0 0% 96.1% */
   /* White #FFFFFF -> HSL: 0 0% 100% */
 
-  --background: 24 18% 97%;
-  --foreground: 0 0% 12%;
+  --background: 0 0% 96.1%;
+  --foreground: 0 0% 10.2%;
 
-  --border: 20 12% 86%;
-  --input: 20 12% 86%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
   --ring: 1.6 98.3% 45.3%;
 
-  --card: 24 20% 99%;
+  --card: 0 0% 100%;
   --card-foreground: 0 0% 10.2%;
-  --card-border: 20 12% 86%;
+  --card-border: 0 0% 89.8%;
 
-  --popover: 24 20% 99%;
+  --popover: 0 0% 100%;
   --popover-foreground: 0 0% 10.2%;
-  --popover-border: 20 12% 86%;
+  --popover-border: 0 0% 89.8%;
 
   --primary: 1.6 98.3% 45.3%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 0 0% 12%;
+  --secondary: 0 0% 10.2%;
   --secondary-foreground: 0 0% 100%;
 
-  --muted: 18 13% 92%;
-  --muted-foreground: 0 0% 37%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 0 0% 40%;
 
   --accent: 1.6 98.3% 45.3%;
   --accent-foreground: 0 0% 100%;
@@ -108,12 +108,12 @@
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
 
-  --sidebar: 24 18% 97%;
-  --sidebar-foreground: 0 0% 12%;
-  --sidebar-border: 20 12% 86%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 0 0% 10.2%;
+  --sidebar-border: 0 0% 89.8%;
   --sidebar-primary: 1.6 98.3% 45.3%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 12 36% 92%;
+  --sidebar-accent: 0 0% 96.1%;
   --sidebar-accent-foreground: 0 0% 10.2%;
   --sidebar-ring: 1.6 98.3% 45.3%;
 
@@ -122,7 +122,7 @@
   --app-font-mono: Menlo, monospace;
   --radius: 0.75rem;
   
-  --shadow-sm: 0 1px 2px 0 rgb(38 19 17 / 0.05);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -184,250 +184,5 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
-  }
-  :focus-visible {
-    outline: 2px solid #b80500;
-    outline-offset: 2px;
-  }
-}
-
-/* Weasy's public red / charcoal identity, carried into the working portal. */
-.weasy-portal {
-  background: #f8f5f3;
-  color: #24201f;
-}
-.weasy-portal main {
-  background: #f8f5f3;
-}
-.weasy-portal aside {
-  scrollbar-color: #d9cfca transparent;
-}
-.weasy-portal aside nav {
-  scrollbar-width: thin;
-}
-.weasy-portal aside button:focus-visible {
-  outline: 2px solid #b80500;
-  outline-offset: -2px;
-}
-.weasy-portal :is(input, textarea, select):focus-visible {
-  outline-color: #b80500;
-}
-.weasy-portal :is(table, [role="table"]) {
-  font-variant-numeric: tabular-nums;
-}
-.weasy-portal :is(th, [role="columnheader"]) {
-  letter-spacing: .025em;
-}
-/* Legacy utility colors in operational views resolve to the same Weasy palette. */
-.weasy-portal :is([class~="bg-blue-50"], [class~="bg-blue-50/20"], [class~="bg-blue-50/40"], [class~="bg-blue-100"], [class~="bg-sky-50"], [class~="bg-sky-100"], [class~="bg-indigo-50"], [class~="bg-indigo-100"]) {
-  background-color: #f4ebe7;
-}
-.weasy-portal :is([class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"], [class~="bg-sky-500"], [class~="bg-indigo-500"]) {
-  background-color: #51433f;
-}
-.weasy-portal :is([class~="text-blue-500"], [class~="text-blue-600"], [class~="text-blue-700"], [class~="text-blue-800"], [class~="text-sky-600"], [class~="text-sky-700"], [class~="text-indigo-600"]) {
-  color: #51433f;
-}
-.weasy-portal :is([class~="border-blue-100"], [class~="border-blue-200"], [class~="border-blue-300"], [class~="border-sky-200"]) {
-  border-color: #d9c7be;
-}
-.weasy-portal :is([class~="hover:bg-blue-50"]:hover, [class~="hover:bg-blue-100"]:hover, [class~="hover:bg-blue-200"]:hover) {
-  background-color: #efe0d9;
-}
-.weasy-portal :is([class~="hover:bg-blue-600"]:hover, [class~="hover:bg-blue-700"]:hover) {
-  background-color: #342b29;
-}
-.weasy-portal :is([class~="hover:text-blue-500"]:hover, [class~="hover:text-blue-600"]:hover, [class~="hover:text-blue-700"]:hover) {
-  color: #b80500;
-}
-.weasy-portal :is([class~="bg-slate-900"], [class~="bg-slate-800"], [class~="bg-[#0F172A]"], [class~="bg-[#1E293B]"]) {
-  background-color: #24201f;
-}
-.weasy-portal :is([class~="text-slate-900"], [class~="text-slate-800"]) {
-  color: #24201f;
-}
-.weasy-portal :is([class~="from-blue-500"], [class~="from-blue-600"]) {
-  --tw-gradient-from: #51433f;
-}
-.weasy-portal :is([class~="to-blue-500"], [class~="to-blue-600"]) {
-  --tw-gradient-to: #342b29;
-}
-
-/*
- * Operational status colors use a restrained three-tone Weasy vocabulary:
- * charcoal for completed/positive states, warm red for attention, and
- * parchment for supporting information. Status words and icons remain in
- * place; color is never the only way to identify a state.
- */
-.weasy-portal :is(
-  [class~="bg-emerald-50"], [class~="bg-emerald-100"],
-  [class~="bg-green-50"], [class~="bg-green-100"],
-  [class~="bg-teal-50"], [class~="bg-purple-50"],
-  [class~="bg-purple-100"], [class~="bg-pink-50"],
-  [class~="bg-pink-100"], [class~="bg-cyan-50"],
-  [class~="bg-cyan-100"], [class~="bg-violet-50"],
-  [class~="bg-violet-100"]
-) {
-  background-color: #eee7e3;
-}
-.weasy-portal :is(
-  [class~="bg-amber-50"], [class~="bg-amber-100"],
-  [class~="bg-orange-50"], [class~="bg-orange-100"],
-  [class~="bg-yellow-50"], [class~="bg-yellow-100"]
-) {
-  background-color: #f9e9e5;
-}
-.weasy-portal :is(
-  [class~="bg-emerald-300"], [class~="bg-emerald-400"],
-  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
-  [class~="bg-green-400"], [class~="bg-green-500"],
-  [class~="bg-green-600"], [class~="bg-green-700"],
-  [class~="bg-teal-500"], [class~="bg-purple-400"],
-  [class~="bg-purple-500"], [class~="bg-purple-600"],
-  [class~="bg-pink-500"], [class~="bg-cyan-500"],
-  [class~="bg-violet-400"], [class~="bg-violet-500"],
-  [class~="bg-indigo-400"], [class~="bg-blue-400"]
-) {
-  background-color: #51433f;
-}
-.weasy-portal :is(
-  [class~="bg-amber-400"], [class~="bg-amber-500"],
-  [class~="bg-amber-600"], [class~="bg-orange-400"],
-  [class~="bg-orange-500"], [class~="bg-orange-600"],
-  [class~="bg-yellow-400"], [class~="bg-yellow-500"]
-) {
-  background-color: #b80500;
-}
-.weasy-portal :is(
-  [class~="text-emerald-300"], [class~="text-emerald-400"],
-  [class~="text-emerald-500"], [class~="text-emerald-600"],
-  [class~="text-emerald-700"], [class~="text-emerald-800"],
-  [class~="text-emerald-900"], [class~="text-green-500"],
-  [class~="text-green-600"], [class~="text-green-700"],
-  [class~="text-teal-600"], [class~="text-purple-500"],
-  [class~="text-purple-600"], [class~="text-purple-700"],
-  [class~="text-purple-800"], [class~="text-pink-700"],
-  [class~="text-pink-800"], [class~="text-cyan-700"],
-  [class~="text-cyan-800"], [class~="text-indigo-500"],
-  [class~="text-indigo-700"], [class~="text-violet-500"],
-  [class~="text-violet-600"], [class~="text-violet-700"]
-) {
-  color: #51433f;
-}
-.weasy-portal :is(
-  [class~="text-amber-500"], [class~="text-amber-600"],
-  [class~="text-amber-700"], [class~="text-amber-800"],
-  [class~="text-orange-400"], [class~="text-orange-500"],
-  [class~="text-orange-600"], [class~="text-orange-700"],
-  [class~="text-orange-800"], [class~="text-yellow-700"]
-) {
-  color: #98231d;
-}
-.weasy-portal :is(
-  [class~="border-emerald-100"], [class~="border-emerald-200"],
-  [class~="border-emerald-300"], [class~="border-green-100"],
-  [class~="border-green-200"], [class~="border-purple-100"],
-  [class~="border-purple-200"], [class~="border-indigo-100"],
-  [class~="border-pink-200"], [class~="border-cyan-200"],
-  [class~="border-violet-100"], [class~="border-violet-200"],
-  [class~="ring-emerald-200"], [class~="ring-blue-200"]
-) {
-  border-color: #d9c7be;
-  --tw-ring-color: #d9c7be;
-}
-.weasy-portal :is(
-  [class~="border-amber-100"], [class~="border-amber-200"],
-  [class~="border-orange-100"], [class~="border-orange-200"],
-  [class~="ring-amber-200"], [class~="ring-orange-200"]
-) {
-  border-color: #e6b9b0;
-  --tw-ring-color: #e6b9b0;
-}
-.weasy-portal :is(
-  [class~="border-emerald-500"], [class~="border-green-500"],
-  [class~="border-amber-500"], [class~="focus:border-emerald-500"]:focus,
-  [class~="focus:border-green-500"]:focus,
-  [class~="focus:border-amber-500"]:focus
-) {
-  border-color: #b80500;
-}
-.weasy-portal :is(
-  [class~="focus:ring-emerald-500/30"]:focus,
-  [class~="focus:ring-green-500/30"]:focus,
-  [class~="focus:ring-amber-500/30"]:focus,
-  [class~="focus:ring-purple-500/30"]:focus
-) {
-  --tw-ring-color: rgb(184 5 0 / .3);
-}
-.weasy-portal :is(
-  [class~="hover:bg-emerald-50"]:hover, [class~="hover:bg-green-50"]:hover,
-  [class~="hover:bg-purple-50"]:hover, [class~="hover:bg-pink-50"]:hover
-) {
-  background-color: #e7dcd6;
-}
-.weasy-portal :is(
-  [class~="hover:bg-amber-50"]:hover, [class~="hover:bg-orange-50"]:hover,
-  [class~="hover:bg-orange-200"]:hover
-) {
-  background-color: #f3dcd6;
-}
-.weasy-portal :is(
-  [class~="hover:bg-emerald-600"]:hover, [class~="hover:bg-green-600"]:hover,
-  [class~="hover:bg-green-700"]:hover, [class~="hover:bg-purple-600"]:hover
-) {
-  background-color: #342b29;
-}
-.weasy-portal :is(
-  [class~="hover:text-emerald-700"]:hover, [class~="hover:text-green-700"]:hover,
-  [class~="hover:text-purple-700"]:hover, [class~="hover:text-amber-700"]:hover,
-  [class~="hover:text-orange-700"]:hover
-) {
-  color: #98231d;
-}
-.weasy-portal :is(
-  [class~="from-emerald-400"], [class~="from-emerald-500"],
-  [class~="from-emerald-600"], [class~="from-green-500"],
-  [class~="from-purple-500"], [class~="from-indigo-500"],
-  [class~="from-sky-500"], [class~="from-violet-500"]
-) {
-  --tw-gradient-from: #51433f;
-}
-.weasy-portal :is(
-  [class~="to-emerald-500"], [class~="to-emerald-600"],
-  [class~="to-green-600"], [class~="to-purple-600"],
-  [class~="to-indigo-600"], [class~="to-sky-600"],
-  [class~="to-violet-600"]
-) {
-  --tw-gradient-to: #342b29;
-}
-.weasy-portal :is(
-  [class~="from-amber-500"], [class~="from-orange-500"],
-  [class~="from-yellow-500"]
-) {
-  --tw-gradient-from: #b80500;
-}
-.weasy-portal :is(
-  [class~="to-amber-600"], [class~="to-orange-600"],
-  [class~="to-yellow-600"]
-) {
-  --tw-gradient-to: #84201b;
-}
-/* Contrast-safe brand tones where the original utility appears on a dark card. */
-.weasy-portal [class~="bg-emerald-500/15"] {
-  background-color: #51433f;
-}
-.weasy-portal [class~="bg-emerald-500/15"][class~="text-emerald-300"],
-.weasy-portal [class~="bg-slate-900"] [class~="text-emerald-400"],
-.weasy-portal [class~="bg-slate-900"] [class~="text-orange-400"] {
-  color: #fff2ea;
-}
-.weasy-portal [class~="bg-emerald-500/15"][class~="border-emerald-500/25"] {
-  border-color: #a48c82;
-}
-@media (prefers-reduced-motion: reduce) {
-  .weasy-portal *, .weasy-portal *::before, .weasy-portal *::after {
-    scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
   }
 }
