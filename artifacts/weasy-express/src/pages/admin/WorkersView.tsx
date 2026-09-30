@@ -64,7 +64,6 @@ export default function WorkersView() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const fetchWorkers = useCallback(async () => {
-    setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/api/admin/workers`, { headers: adminHeaders() });
       const d = await r.json();

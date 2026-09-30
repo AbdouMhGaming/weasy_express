@@ -170,3 +170,17 @@ mtime_ms = 1790286952511
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/d54cadd3-b037-45fc-b753-6a4c21c5fd31/6426d835-b777-48ff-bd62-02a3d584a68d"
 storage_version_token = "1790286992625086"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "XHZuHwcMR3O4z-XF04eS5"
+uri = "file://deploy/weasy-express-2026-09-30.zip"
+type = "unspecified"
+title = "Weasy Express — Hostinger build (30 Sep 2026)"
+description = "New 7.4 MB Hostinger deployment ZIP with frontend, API server, package manifest, and README."
+logical_id = "0ed3f5c1-1be5-4681-b80d-02d293cf12f5"
+content_hash = "sha256:442a47d23854d6fbe58d8d52eff74b3fcb7e22c5cc878964715ec8d5d5e0d07b"
+size = 7780172
+mtime_ms = 1790797424147
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/0ed3f5c1-1be5-4681-b80d-02d293cf12f5/8aa7d914-1727-4a97-b5a3-290db5df9c1f"
+storage_version_token = "1790797552047160"
+content_type = "application/octet-stream"

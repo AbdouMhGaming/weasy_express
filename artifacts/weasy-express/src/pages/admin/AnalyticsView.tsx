@@ -398,7 +398,6 @@ export default function AnalyticsView({ onUnauth }: { onUnauth: () => void }) {
   useEffect(() => { loadOptions(); }, [loadOptions]);
 
   const load = useCallback(async (f: Filters) => {
-    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (f.from)          params.set("from",           f.from);

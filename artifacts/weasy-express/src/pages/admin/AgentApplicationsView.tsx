@@ -34,7 +34,6 @@ export default function AgentApplicationsView({ onUnauth }: { onUnauth: () => vo
   const [saving, setSaving] = useState(false);
 
   const fetchApplications = useCallback(async () => {
-    setLoading(true);
     setError("");
     try {
       const response = await fetch(`${API_BASE}/api/admin/agent-applications`, { headers: adminHeaders() });
@@ -108,7 +107,7 @@ export default function AgentApplicationsView({ onUnauth }: { onUnauth: () => vo
           <p className="text-sm text-gray-500 mt-1">{t("admin.agentApplications.subtitle")}</p>
         </div>
         <button onClick={fetchApplications} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
-          <span className={loading ? "animate-spin" : ""}>↻</span>{t("admin.agentApplications.refresh")}
+          <span>↻</span>{t("admin.agentApplications.refresh")}
         </button>
       </div>
 

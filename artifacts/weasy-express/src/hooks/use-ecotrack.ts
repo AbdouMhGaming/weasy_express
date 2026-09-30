@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, authenticatedFetch, adminHeaders, readApiJson } from "@/lib/api";
+import type { PushPortal } from "@/lib/pushPreferences";
 
 const BASE = `${API_BASE}/api/expediteur/ecotrack`;
 const getDynamicBase = () => {
@@ -8,6 +9,11 @@ const getDynamicBase = () => {
   if (window.location.pathname.startsWith("/admin")) return `${API_BASE}/api/admin/ecotrack`;
   return BASE;
 };
+const getNotificationsBase = (portal: PushPortal) => portal === "suivi"
+  ? `${API_BASE}/api/suivi/ecotrack`
+  : portal === "admin"
+    ? `${API_BASE}/api/admin/ecotrack`
+    : BASE;
 const fetch = authenticatedFetch;
 
 // Dashboard
@@ -563,11 +569,15 @@ export function useLabelEcotrackOrder() {
   });
 }
 
-export function useEcotrackNotifications() {
+export function ecotrackNotificationsQueryKey(portal: PushPortal, username: string) {
+  return ["ecotrack", "notifications", portal, username.trim()] as const;
+}
+
+export function useEcotrackNotifications(portal: PushPortal, username: string) {
   return useQuery({
-    queryKey: ["ecotrack", "notifications"],
+    queryKey: ecotrackNotificationsQueryKey(portal, username),
     queryFn: async () => {
-      const res = await fetch(`${getDynamicBase()}/notifications?limit=100`, { headers: adminHeaders() });
+      const res = await fetch(`${getNotificationsBase(portal)}/notifications?limit=100`, { headers: adminHeaders() });
       if (res.status === 401 || res.status === 403 || res.status === 409) {
         throw new Error("disconnected");
       }
@@ -587,20 +597,21 @@ export function useEcotrackNotifications() {
     refetchOnWindowFocus: true,
     staleTime: 0,
     retry: 2,
+    enabled: !!username.trim(),
   });
 }
 
-export function useMarkNotificationRead() {
+export function useMarkNotificationRead(portal: PushPortal, username: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number | string) => {
-      await fetch(`${getDynamicBase()}/notifications/${id}/read`, {
+      await fetch(`${getNotificationsBase(portal)}/notifications/${id}/read`, {
         method: "PUT",
         headers: adminHeaders()
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ecotrack", "notifications"] });
+      queryClient.invalidateQueries({ queryKey: ecotrackNotificationsQueryKey(portal, username) });
     },
   });
 }

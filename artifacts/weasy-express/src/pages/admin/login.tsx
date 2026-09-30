@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import logoPath from "@assets/logo-removebg-preview_1777142961208.png";
 import { API_BASE } from "@/lib/api";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
@@ -86,6 +87,7 @@ export default function AdminLogin() {
                     {LANG_LABELS[lng]}
                   </button>
                 ))}
+                <ThemeToggle className="ml-1 min-h-9 min-w-9 p-1.5" />
               </div>
             </div>
 

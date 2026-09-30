@@ -96,7 +96,6 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   const [updating, setUpdating]     = useState(false);
 
   const fetchPayouts = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/expediteur/payouts`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }

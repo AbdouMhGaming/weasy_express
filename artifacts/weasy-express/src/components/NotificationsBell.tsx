@@ -3,21 +3,70 @@ import { Bell, MessageSquare, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEcotrackNotifications, useMarkNotificationRead } from "@/hooks/use-ecotrack";
 import { API_BASE } from "@/lib/api";
+import {
+  clearCurrentBrowserPushOwner,
+  getPushPreferenceKey,
+  isCurrentBrowserPushOwner,
+  isPushEnabledForUser,
+  PUSH_BROWSER_OWNER_KEY,
+  setCurrentBrowserPushOwner,
+  setPushEnabledForUser,
+  type PushPortal,
+} from "@/lib/pushPreferences";
 import { TrackingDetailModal } from "@/pages/admin/EcotrackWorkspaceView";
 
-export function NotificationsBell() {
+export interface NotificationsBellProps {
+  portal?: PushPortal;
+  username?: string;
+}
+
+export function NotificationsBell({ portal: portalProp, username: usernameProp }: NotificationsBellProps = {}) {
   const { t } = useTranslation();
+  const portal = portalProp ?? (typeof window !== "undefined" && window.location.pathname.startsWith("/suivi")
+    ? "suivi"
+    : typeof window !== "undefined" && window.location.pathname.startsWith("/expediteurs")
+      ? "expediteur"
+      : "admin");
+  const username = usernameProp ?? (typeof window === "undefined"
+    ? ""
+    : localStorage.getItem(portal === "suivi" ? "suivi_username" : portal === "expediteur" ? "exp_username" : "admin_username") ?? "");
   const [open, setOpen] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(() => localStorage.getItem("push_enabled") === "1");
+  const preferenceKey = getPushPreferenceKey(portal, username);
+  const [, setPushPreferenceRevision] = useState(0);
+  const pushEnabled = isPushEnabledForUser(portal, username);
   const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState("");
   const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number, mode: "remarks" | "details"} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const { data, isLoading, refetch } = useEcotrackNotifications();
-  const markRead = useMarkNotificationRead();
+  const { data, isLoading, refetch } = useEcotrackNotifications(portal, username);
+  const markRead = useMarkNotificationRead(portal, username);
+  const pushSupported = typeof window !== "undefined" &&
+    "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
 
   const notifications = data?.notifications || [];
   const unreadCount = data?.unreadCount || 0;
+
+  useEffect(() => {
+    const syncPreference = (event: Event) => {
+      const changedKey = (event as CustomEvent<{ key?: string }>).detail?.key;
+      if (changedKey === preferenceKey) setPushPreferenceRevision(revision => revision + 1);
+    };
+    const syncStorage = (event: StorageEvent) => {
+      if (event.key === preferenceKey || event.key === PUSH_BROWSER_OWNER_KEY) {
+        setPushPreferenceRevision(revision => revision + 1);
+      }
+    };
+    const syncOwner = () => setPushPreferenceRevision(revision => revision + 1);
+    window.addEventListener("weasy:push-preference-changed", syncPreference);
+    window.addEventListener("weasy:push-owner-changed", syncOwner);
+    window.addEventListener("storage", syncStorage);
+    return () => {
+      window.removeEventListener("weasy:push-preference-changed", syncPreference);
+      window.removeEventListener("weasy:push-owner-changed", syncOwner);
+      window.removeEventListener("storage", syncStorage);
+    };
+  }, [portal, username, preferenceKey]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -44,41 +93,66 @@ export function NotificationsBell() {
   };
 
   async function togglePush() {
-    if (pushLoading || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (pushLoading || !pushSupported) return;
     setPushLoading(true);
+    setPushError("");
+    let newlyCreatedSubscription: PushSubscription | null = null;
+    let subscriptionSaved = false;
     try {
-      const token = localStorage.getItem("exp_token") || "";
+      const tokenKey = portal === "suivi" ? "suivi_token" : portal === "expediteur" ? "exp_token" : "admin_token";
+      const token = localStorage.getItem(tokenKey) ?? "";
+      if (!token) throw new Error("unauthorized");
       const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
       if (pushEnabled) {
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
+        if (isCurrentBrowserPushOwner(portal, username)) {
+          if (!sub) throw new Error("subscription_missing");
           const response = await fetch(`${API_BASE}/api/push/unsubscribe`, {
             method: "DELETE", headers, body: JSON.stringify({ endpoint: sub.endpoint }),
           });
           if (!response.ok) throw new Error("unsubscribe_failed");
+          const result = await response.json() as { deleted?: boolean };
+          if (result.deleted !== true) throw new Error("subscription_not_owned");
+          if (!isCurrentBrowserPushOwner(portal, username)) {
+            throw new Error("push_owner_changed");
+          }
           await sub.unsubscribe();
+          clearCurrentBrowserPushOwner(portal, username);
         }
-        localStorage.removeItem("push_enabled");
-        setPushEnabled(false);
+        setPushEnabledForUser(portal, username, false);
       } else {
-        if (!("Notification" in window) || await Notification.requestPermission() !== "granted") return;
+        if (Notification.permission !== "granted" && await Notification.requestPermission() !== "granted") {
+          throw new Error("notification_permission_denied");
+        }
         const response = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers });
         if (!response.ok) throw new Error("vapid_failed");
         const { key } = await response.json() as { key: string };
         if (!key) throw new Error("vapid_failed");
         const raw = atob((key + "=".repeat((4 - key.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
         const bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
-        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+          newlyCreatedSubscription = sub;
+        }
         const saved = await fetch(`${API_BASE}/api/push/subscribe`, {
           method: "POST", headers, body: JSON.stringify(sub.toJSON()),
         });
         if (!saved.ok) throw new Error("subscribe_failed");
-        localStorage.setItem("push_enabled", "1");
-        setPushEnabled(true);
+        subscriptionSaved = true;
+        setCurrentBrowserPushOwner(portal, username);
+        setPushEnabledForUser(portal, username, true);
       }
     } catch (error) {
       console.error("Push notification preference could not be updated", error);
+      if (newlyCreatedSubscription && !subscriptionSaved) {
+        try {
+          await newlyCreatedSubscription.unsubscribe();
+        } catch (cleanupError) {
+          console.error("Unpersisted push subscription could not be revoked", cleanupError);
+        }
+      }
+      setPushError(t("admin.notifications.pushError", "Could not update notification settings. Please try again."));
     } finally {
       setPushLoading(false);
     }
@@ -90,6 +164,8 @@ export function NotificationsBell() {
         onClick={() => setOpen(!open)}
         className="relative h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:text-[#E10600] hover:bg-red-50 transition-all"
         aria-label={t("admin.notifications.title")}
+        aria-expanded={open}
+        data-testid="button-open-notifications"
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
@@ -136,16 +212,18 @@ export function NotificationsBell() {
               </div>
             )}
           </div>
-          {"Notification" in window && "serviceWorker" in navigator && (
+          {pushSupported && (
             <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-between gap-3">
               <span className="text-xs text-slate-600">{t("admin.notifications.title")}</span>
               <button type="button" onClick={togglePush} disabled={pushLoading}
                 aria-pressed={pushEnabled}
+                data-testid="button-toggle-push-notifications"
                 className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${pushEnabled ? "bg-red-50 text-[#E10600]" : "bg-slate-100 text-slate-600"}`}>
-                {pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
+                {pushLoading ? t("admin.notifBanner.loading", "Updating…") : pushEnabled ? t("admin.sidebar.notificationsOn") : t("admin.sidebar.notificationsOff")}
               </button>
             </div>
           )}
+          {pushError && <p className="px-4 pb-3 text-xs text-red-600" role="alert">{pushError}</p>}
         </div>
       )}
 

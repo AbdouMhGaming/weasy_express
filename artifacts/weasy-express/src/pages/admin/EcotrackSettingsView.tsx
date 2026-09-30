@@ -25,7 +25,6 @@ export default function EcotrackSettingsView() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/expediteur/ecotrack/settings`, {
         headers: expediteurHeaders(),

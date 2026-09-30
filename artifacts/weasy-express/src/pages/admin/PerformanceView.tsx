@@ -55,7 +55,6 @@ export default function PerformanceView({ onUnauth }: { onUnauth: () => void }) 
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
     try {
       const [sRes, cRes, tRes] = await Promise.all([
         fetch(`${API_BASE}/api/admin/stats`, { headers: adminHeaders() }),

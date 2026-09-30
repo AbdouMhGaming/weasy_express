@@ -176,14 +176,19 @@ export default function QueueView() {
 
   // ── Fetch ──────────────────────────────────────────────────────────────
 
-  const fetchTickets = useCallback(async () => {
-    setLoading(true);
+  const fetchTickets = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     setLoadError(false);
     try {
       const r = await fetch(`${API_BASE}/api/tickets`, { headers: adminHeaders() });
       const d = await r.json();
-      if (r.ok && d.ok) setTickets(d.tickets ?? []);
-      else setLoadError(true);
+      if (r.ok && d.ok) {
+        const nextTickets: Ticket[] = d.tickets ?? [];
+        setTickets(nextTickets);
+        setSelected(previous => previous
+          ? nextTickets.find(ticket => ticket.id === previous.id) ?? previous
+          : previous);
+      } else setLoadError(true);
     } catch {
       setLoadError(true);
     } finally { setLoading(false); }
@@ -466,10 +471,10 @@ export default function QueueView() {
           <div className="flex items-center justify-center py-24 gap-2 text-gray-400 text-sm">
             <Spinner />{t("admin.queue.loading")}
           </div>
-        ) : loadError ? (
+        ) : loadError && tickets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
             <p className="text-red-600 text-sm font-medium">{t("admin.queue.loadError")}</p>
-            <button onClick={fetchTickets} className="mt-3 px-4 py-2 bg-[#E10600] hover:bg-[#C50500] text-white text-sm font-bold rounded-xl">
+            <button onClick={() => fetchTickets(true)} className="mt-3 px-4 py-2 bg-[#E10600] hover:bg-[#C50500] text-white text-sm font-bold rounded-xl">
               {t("admin.queue.retry")}
             </button>
           </div>

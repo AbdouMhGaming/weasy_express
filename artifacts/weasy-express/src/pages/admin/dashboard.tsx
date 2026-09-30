@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { usePagination, PaginationBar } from "@/components/Pagination";
 const HOSTINGER_PUBLIC_BUILD = import.meta.env.VITE_HOSTINGER_BUILD === "true";
@@ -31,6 +32,9 @@ import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { WILAYA_LIST } from "@/lib/wilayas";
 import { useEcotrackDashboard } from "@/hooks/use-ecotrack";
 import { humanizeEcotrackStatus } from "./EcotrackWorkspaceView";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { clearCurrentBrowserPushOwner, isCurrentBrowserPushOwner, setPushEnabledForUser } from "@/lib/pushPreferences";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -119,17 +123,6 @@ const ROLE_COLOR: Record<AdminRole, string> = {
   admin_team: "bg-purple-50 text-purple-600",
 };
 const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
-
-// ── Shared push-notification helper ───────────────────────────────────────────
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  const bytes = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i++) bytes[i] = rawData.charCodeAt(i);
-  return bytes;
-}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
@@ -695,6 +688,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   }
   const [officeReports, setOfficeReports] = useState<OfficeReportRow[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsLoaded, setReportsLoaded] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
 
   const fetchTopStats = useCallback(async () => {
@@ -716,7 +710,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
       if (res.status !== 200) return;
       const data = await res.json();
       if (data.ok) setOfficeReports(data.reports ?? []);
-    } catch { } finally { setReportsLoading(false); }
+    } catch { } finally { setReportsLoading(false); setReportsLoaded(true); }
   }, []);
 
   useEffect(() => { fetchTopStats(); fetchOfficeReports(); }, [fetchTopStats, fetchOfficeReports]);
@@ -725,7 +719,6 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const dashboardMapSvg = useMemo(() => buildMapSvg(stats), [stats]);
 
   const fetchStats = useCallback(async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams();
       const range = getDateRangeFromPreset(timePreset, filterFrom, filterTo);
@@ -1443,7 +1436,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
             </button>
           </div>
         </div>
-        {reportsLoading ? (
+        {reportsLoading && !reportsLoaded ? (
           <div className="py-10 flex justify-center">
             <svg className="animate-spin w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -2157,7 +2150,6 @@ function ExpediteursView({ onUnauth, lockedHub }: { onUnauth: () => void; locked
   const [editErr, setEditErr]     = useState("");
 
   const fetchList = useCallback(async () => {
-    setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/api/admin/expediteurs`, { headers: adminHeaders() });
       if (r.status === 401) { onUnauth(); return; }
@@ -2405,7 +2397,6 @@ function AdminsView({ currentUsername, onUnauth }: { currentUsername: string; on
   const [editError, setEditError] = useState("");
 
   const fetchAdmins = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/admins`, { headers: adminHeaders() });
       if (res.status === 401) { onUnauth(); return; }
@@ -2799,100 +2790,11 @@ function ChangePasswordModal({ onClose, role }: { onClose: () => void; role: str
   );
 }
 
-// ── Notification prompt banner ─────────────────────────────────────────────────
-
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function NotificationBanner({ role }: { role: string }) {
-  const { t } = useTranslation();
-  const [visible, setVisible] = useState<boolean>(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-    if (localStorage.getItem("push_enabled") === "1") return false;
-    if (Notification.permission === "denied") return false;
-    const dismissedAt = localStorage.getItem("notif_prompted_at");
-    if (dismissedAt) {
-      const ms = Date.now() - parseInt(dismissedAt, 10);
-      if (ms < SEVEN_DAYS_MS) return false;
-    }
-    return true;
-  });
-  const [loading, setLoading] = useState(false);
-
-  function dismiss() {
-    localStorage.setItem("notif_prompted_at", String(Date.now()));
-    setVisible(false);
-  }
-
-  async function handleEnable() {
-    if (loading) return;
-    if (Notification.permission === "denied") { dismiss(); return; }
-    setLoading(true);
-    try {
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") { dismiss(); return; }
-      const reg = await navigator.serviceWorker.ready;
-      const _tok = localStorage.getItem(role === "expediteur" ? "exp_token" : "admin_token") ?? "";
-      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, { headers: { Authorization: `Bearer ${_tok}`, "Content-Type": "application/json" } });
-      const { key: vapidKey } = (await vapidRes.json()) as { key: string };
-      if (!vapidKey) { dismiss(); return; }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
-      await fetch(`${API_BASE}/api/push/subscribe`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${_tok}`, "Content-Type": "application/json" },
-        body: JSON.stringify(sub.toJSON()),
-      });
-      localStorage.setItem("push_enabled", "1");
-      localStorage.setItem("notif_prompted_at", String(Date.now()));
-      setVisible(false);
-    } catch (err) {
-      console.error("NotificationBanner enable error:", err);
-      dismiss();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!visible) return null;
-
-  return (
-    <div className="mx-4 mt-4 mb-0 md:mx-6 md:mt-5 flex items-start gap-3 bg-[#0F172A] text-white rounded-xl px-4 py-3 shadow-lg">
-      {/* Bell icon */}
-      <span className="mt-0.5 shrink-0 text-[#E10600]">
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
-        </svg>
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold leading-snug">{t("admin.notifBanner.title")}</p>
-        <p className="text-xs text-white/60 mt-0.5 leading-snug">{t("admin.notifBanner.desc")}</p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0 mt-0.5">
-        <button
-          onClick={handleEnable}
-          disabled={loading}
-          className="text-xs font-bold bg-[#E10600] hover:bg-[#C50500] text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60 flex items-center gap-1.5"
-        >
-          {loading && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-          {t("admin.notifBanner.enable")}
-        </button>
-        <button
-          onClick={dismiss}
-          className="text-xs text-white/50 hover:text-white/80 px-2 py-1.5 rounded-lg transition-colors"
-        >
-          {t("admin.notifBanner.notNow")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
   const [location, navigate] = useLocation();
+  const queryClient = useQueryClient();
   // Expediteur sessions use separate localStorage keys (exp_*) so admins can visit
   // /expediteurs and log in as an expediteur without touching their admin session.
   const isSuiviPath = location.startsWith("/suivi");
@@ -3011,7 +2913,7 @@ export default function AdminDashboard() {
   const [officesLoading, setOfficesLoading] = useState(true);
   const [officesError, setOfficesError] = useState("");
 
-  async function unauth() {
+  const unauth = useCallback(async () => {
     // Unsubscribe from push BEFORE clearing the session.
     // We await it (with a 3-second safety timeout) so the fetch completes
     // before navigate() is called — fire-and-forget was getting aborted.
@@ -3021,37 +2923,38 @@ export default function AdminDashboard() {
       ? localStorage.getItem("exp_token")
       : localStorage.getItem("admin_token");
 
-    if (role !== "suivi") {
+    if (isCurrentBrowserPushOwner(portal, username)) {
       try {
         if ("serviceWorker" in navigator && "PushManager" in window && pushToken) {
           const reg = await navigator.serviceWorker.ready;
           const sub = await reg.pushManager.getSubscription();
           if (sub) {
-            await Promise.race([
-              (async () => {
-                await fetch(`${API_BASE}/api/push/unsubscribe`, {
+            let shouldRevokeBrowser = false;
+            try {
+              const response = await Promise.race([
+                fetch(`${API_BASE}/api/push/unsubscribe`, {
                   method: "DELETE",
                   headers: { Authorization: `Bearer ${pushToken}`, "Content-Type": "application/json" },
                   body: JSON.stringify({ endpoint: sub.endpoint }),
-                  keepalive: true,   // survives navigation
-                });
-                await sub.unsubscribe(); // revoke browser endpoint
-              })(),
-              new Promise<void>(resolve => setTimeout(resolve, 3000)), // never block logout > 3 s
-            ]);
+                  keepalive: true,
+                }),
+                new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
+              ]);
+              // A no-op DELETE means another account owns this endpoint. Do not
+              // revoke their subscription, even if our local preference is stale.
+              shouldRevokeBrowser = !response || !response.ok || (await response.json() as { deleted?: boolean }).deleted === true;
+            } catch {
+              // A failed API call must not leave this browser receiving pushes
+              // for the user who just logged out.
+              shouldRevokeBrowser = true;
+            }
+            if (shouldRevokeBrowser && isCurrentBrowserPushOwner(portal, username)) await sub.unsubscribe();
           }
         }
       } catch { /* never block logout on push errors */ }
-
-      // Remember that push was on so we can re-subscribe after the next login.
-      if (localStorage.getItem("push_enabled") === "1") {
-        localStorage.setItem(
-          isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin",
-          "1",
-        );
-      }
-      localStorage.removeItem("push_enabled");
+      clearCurrentBrowserPushOwner(portal, username);
     }
+    setPushEnabledForUser(portal, username, false);
 
     localStorage.removeItem(viewStorageKey);
 
@@ -3076,10 +2979,11 @@ export default function AdminDashboard() {
       localStorage.removeItem("admin_username");
       navigate("/admin/login");
     }
-  }
+    queryClient.clear();
+  }, [isSuiviPath, isExpediteurPath, navigate, portal, username, viewStorageKey, queryClient]);
 
   const fetchPartners = useCallback(async () => {
-    setPartnersLoading(true); setPartnersError("");
+    setPartnersError("");
     try {
       const res = await fetch(`${API_BASE}/api/admin/partners`, { headers: adminHeaders() });
       if (res.status === 401) { unauth(); return; }
@@ -3092,7 +2996,7 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchOffices = useCallback(async () => {
-    setOfficesLoading(true); setOfficesError("");
+    setOfficesError("");
     try {
       const res = await fetch(`${API_BASE}/api/admin/offices`, { headers: adminHeaders() });
       if (res.status === 401) { unauth(); return; }
@@ -3131,49 +3035,6 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  // Auto-resubscribe if the user had notifications on before they logged out.
-  // The flag (push_was_enabled_exp / push_was_enabled_admin) is saved by unauth()
-  // so it survives the session wipe, then we consume it silently here after login.
-  useEffect(() => {
-    const flagKey = isExpediteurPath ? "push_was_enabled_exp" : "push_was_enabled_admin";
-    if (localStorage.getItem(flagKey) !== "1") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    if (!("Notification" in window) || Notification.permission !== "granted") {
-      // Permission was revoked — forget the preference
-      localStorage.removeItem(flagKey);
-      return;
-    }
-    // Consume the flag immediately so retries don't stack
-    localStorage.removeItem(flagKey);
-
-    const tok = localStorage.getItem(isExpediteurPath ? "exp_token" : "admin_token") ?? "";
-    if (!tok) return;
-
-    (async () => {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const vapidRes = await fetch(`${API_BASE}/api/push/vapid-public-key`, {
-          headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-        });
-        const { key: vapidKey } = (await vapidRes.json()) as { key: string };
-        if (!vapidKey) return;
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        });
-        await fetch(`${API_BASE}/api/push/subscribe`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-          body: JSON.stringify(sub.toJSON()),
-        });
-        localStorage.setItem("push_enabled", "1");
-      } catch (err) {
-        console.warn("Auto-resubscribe failed:", err);
-      }
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isExpediteurPath]);
-
   const isAdmin = role === "admin";
 
   return (
@@ -3190,6 +3051,10 @@ export default function AdminDashboard() {
           </svg>
         </button>
         <img src={logoWhitePath} alt="Weasy Express" className="h-7 w-auto object-contain ml-3" />
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
+          <NotificationsBell portal={portal} username={username} />
+        </div>
       </div>
       {/* Backdrop for mobile sidebar */}
       {sidebarOpen && (
@@ -3208,7 +3073,10 @@ export default function AdminDashboard() {
         isCollapsed={isCollapsed} toggleCollapse={toggleCollapse} isPermitted={isPermitted}
       />
       <main className={`flex-1 min-h-screen overflow-y-auto pt-14 md:pt-0 transition-all duration-300 ${isCollapsed ? "md:ml-[72px]" : "md:ml-64"}`}>
-        <NotificationBanner role={role} />
+        <div className="hidden md:flex sticky top-0 z-30 h-14 items-center justify-end gap-2 px-6 border-b border-gray-100 bg-white">
+          <ThemeToggle />
+          <NotificationsBell portal={portal} username={username} />
+        </div>
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (
             view === "profile" ? <ProfileView username={username} onChangePassword={() => setShowChangePass(true)} /> :

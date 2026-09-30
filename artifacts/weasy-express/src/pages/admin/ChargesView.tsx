@@ -42,6 +42,14 @@ function TrashIcon() {
   );
 }
 
+function PrintIcon() {
+  return (
+    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8V4h10v4M7 17H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-2m-10-3h10v6H7v-6zM17 12h.01" />
+    </svg>
+  );
+}
+
 export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
   const role = useMemo(() => getSessionRole(), []);
@@ -51,31 +59,38 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const [cats, setCats] = useState<Category[]>([]);
   const [summary, setSummary] = useState<{ byCategory: Record<string, number>; totalCharges: number; totalIncome: number } | null>(null);
   const [charges, setCharges] = useState<Charge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [appliedDateRange, setAppliedDateRange] = useState({ from: "", to: "" });
   const [filterCategory, setFilterCategory] = useState("");
   const [filterSubCategory, setFilterSubCategory] = useState("");
   const [outcomeSort, setOutcomeSort] = useState<"newest" | "oldest" | "amount-desc" | "amount-asc">("newest");
   const [incomeSort, setIncomeSort] = useState<"newest" | "oldest" | "amount-desc" | "amount-asc">("newest");
   const [chargePreset, setChargePreset] = useState<"all" | "today" | "yesterday" | "7d" | "30d">("all");
+  const requestId = useRef(0);
 
   function applyChargePreset(preset: "all" | "today" | "yesterday" | "7d" | "30d") {
     setChargePreset(preset);
     const today = new Date();
     const fmt = (d: Date) => d.toISOString().split("T")[0];
-    if (preset === "all") { setFilterFrom(""); setFilterTo(""); }
-    else if (preset === "today") { const s = fmt(today); setFilterFrom(s); setFilterTo(s); }
+    let from = "";
+    let to = "";
+    if (preset === "all") { from = ""; to = ""; }
+    else if (preset === "today") { from = fmt(today); to = fmt(today); }
     else if (preset === "yesterday") {
       const y = new Date(today); y.setDate(y.getDate() - 1);
-      const s = fmt(y); setFilterFrom(s); setFilterTo(s);
+      from = fmt(y); to = fmt(y);
     } else if (preset === "7d") {
       const f = new Date(today); f.setDate(f.getDate() - 6);
-      setFilterFrom(fmt(f)); setFilterTo(fmt(today));
+      from = fmt(f); to = fmt(today);
     } else if (preset === "30d") {
       const f = new Date(today); f.setDate(f.getDate() - 29);
-      setFilterFrom(fmt(f)); setFilterTo(fmt(today));
+      from = fmt(f); to = fmt(today);
     }
+    setFilterFrom(from);
+    setFilterTo(to);
+    setAppliedDateRange({ from, to });
   }
 
   // ── Outcome modal state ──
@@ -125,23 +140,29 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   }, []);
 
   const fetchAll = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     try {
       const qs = new URLSearchParams();
-      if (filterFrom) qs.set("from", filterFrom);
-      if (filterTo) qs.set("to", filterTo);
+      if (appliedDateRange.from) qs.set("from", appliedDateRange.from);
+      if (appliedDateRange.to) qs.set("to", appliedDateRange.to);
       const q = qs.toString() ? `?${qs.toString()}` : "";
       const [s, c] = await Promise.all([
         fetch(`${API_BASE}/api/admin/charges-summary${q}`, { headers: adminHeaders() }),
         fetch(`${API_BASE}/api/admin/charges${q}`, { headers: adminHeaders() }),
       ]);
+      if (currentRequest !== requestId.current) return;
       if (s.status === 401 || c.status === 401) { onUnauthRef.current(); return; }
       const [sd, cd] = await Promise.all([s.json(), c.json()]);
+      if (currentRequest !== requestId.current) return;
       if (sd.ok) setSummary(sd);
       if (cd.ok) setCharges(cd.charges ?? []);
-    } catch { } finally { setLoading(false); }
-  }, [filterFrom, filterTo]);
+    } catch { } finally {
+      if (currentRequest === requestId.current) setInitialLoading(false);
+    }
+  }, [appliedDateRange]);
 
-  useEffect(() => { fetchCategories(); fetchAll(); }, [fetchCategories, fetchAll]);
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   function resetChgModal() {
     setChgAmt(""); setChgDesc(""); setChgFile(null); setChgFileErr(""); setChgSubCat("");
@@ -358,8 +379,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
             { title: t("admin.charges.list.chargesTitle"), rows: outcomes },
             { title: t("admin.charges.list.incomeTitle"), rows: incomes },
           ])}
-            className="flex items-center gap-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl transition-colors">
-            {t("admin.charges.print.both")}
+            title={t("admin.charges.print.both")} aria-label={t("admin.charges.print.both")}
+            className="flex h-12 w-12 items-center justify-center border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl transition-colors">
+            <PrintIcon />
           </button>
           <button onClick={() => setShowIncome(true)}
             className="flex items-center gap-2 text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-sm transition-colors">
@@ -404,12 +426,10 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
             <input type="date" value={filterTo} onChange={(e) => { setFilterTo(e.target.value); setChargePreset("all"); }}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]" />
           </div>
-          <button onClick={fetchAll} className="px-4 py-2 text-sm font-bold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl shadow-sm transition-colors">{t("admin.charges.apply")}</button>
+          <button onClick={() => setAppliedDateRange({ from: filterFrom, to: filterTo })} className="px-4 py-2 text-sm font-bold bg-[#E10600] hover:bg-[#C50500] text-white rounded-xl shadow-sm transition-colors">{t("admin.charges.apply")}</button>
           {(filterFrom || filterTo) && (
-            <button onClick={() => { setFilterFrom(""); setFilterTo(""); setChargePreset("all"); }} className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.reset")}</button>
+            <button onClick={() => { setFilterFrom(""); setFilterTo(""); setChargePreset("all"); setAppliedDateRange({ from: "", to: "" }); }} className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.reset")}</button>
           )}
-        </div>
-        <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.filters.category")}</label>
             <select value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setFilterSubCategory(""); }}
@@ -444,7 +464,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           { label: t("admin.charges.kpi.entries"), value: visibleCharges.length, color: "text-gray-900", noDzd: true },
         ].map((k) => (
           <div key={k.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            {loading ? <Spinner /> : (
+            {initialLoading ? <Spinner /> : (
               <p className={`text-2xl font-bold ${k.color} leading-none`}>
                 {fmtN(k.value)}{!k.noDzd && <span className="text-sm font-normal text-gray-400 ml-1">DZD</span>}
               </p>
@@ -463,7 +483,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           return (
             <div key={cat.cat_key} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col items-center text-center gap-2">
               <span className="text-2xl">{cat.icon}</span>
-              <p className="text-base font-bold text-gray-900 leading-none">{loading ? "—" : fmtN(catTotal)}</p>
+              <p className="text-base font-bold text-gray-900 leading-none">{initialLoading ? "—" : fmtN(catTotal)}</p>
               <p className="text-xs text-gray-400">DZD</p>
               <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
                 <div className="h-1.5 rounded-full bg-[#E10600] transition-all" style={{ width: `${pct}%` }} />
@@ -490,11 +510,12 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                 <option value="amount-desc">{t("admin.charges.sort.highestAmount")}</option><option value="amount-asc">{t("admin.charges.sort.lowestAmount")}</option>
               </select>
               <button onClick={() => printLedger(t("admin.charges.list.chargesTitle"), [{ title: t("admin.charges.list.chargesTitle"), rows: outcomes }])}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">{t("admin.charges.print.charges")}</button>
+                title={t("admin.charges.print.charges")} aria-label={t("admin.charges.print.charges")}
+                className="flex h-10 w-10 items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"><PrintIcon /></button>
               <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{outcomes.length}</span>
             </div>
           </div>
-          {loading ? (
+          {initialLoading ? (
             <div className="py-16 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.charges.loading")}</div>
           ) : outcomes.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">{t("admin.charges.list.noCharges")}</div>
@@ -529,7 +550,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               })}
             </div>
           )}
-          {!loading && outcomes.length > 0 && <PaginationBar {...pagedOutcomes} />}
+          {!initialLoading && outcomes.length > 0 && <PaginationBar {...pagedOutcomes} />}
         </div>
 
         {/* Income list */}
@@ -546,11 +567,12 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                 <option value="amount-desc">{t("admin.charges.sort.highestAmount")}</option><option value="amount-asc">{t("admin.charges.sort.lowestAmount")}</option>
               </select>
               <button onClick={() => printLedger(t("admin.charges.list.incomeTitle"), [{ title: t("admin.charges.list.incomeTitle"), rows: incomes }])}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">{t("admin.charges.print.income")}</button>
+                title={t("admin.charges.print.income")} aria-label={t("admin.charges.print.income")}
+                className="flex h-10 w-10 items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"><PrintIcon /></button>
               <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{incomes.length}</span>
             </div>
           </div>
-          {loading ? (
+          {initialLoading ? (
             <div className="py-16 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.charges.loading")}</div>
           ) : incomes.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">{t("admin.charges.list.noIncome")}</div>
@@ -585,7 +607,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               })}
             </div>
           )}
-          {!loading && incomes.length > 0 && <PaginationBar {...pagedIncomes} />}
+          {!initialLoading && incomes.length > 0 && <PaginationBar {...pagedIncomes} />}
         </div>
       </div>
 

@@ -504,7 +504,6 @@ export default function DechargesView() {
   const pagedCommissions = usePagination(filteredCommissions);
 
   const fetchDecharges = useCallback(async () => {
-    setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/api/admin/decharges`, { headers: adminHeaders() });
       const d = await r.json();
@@ -529,7 +528,6 @@ export default function DechargesView() {
   }, []);
 
   const fetchCommissions = useCallback(async () => {
-    setCommLoading(true);
     try {
       const r = await fetch(`${API_BASE}/api/admin/station-commissions`, { headers: adminHeaders() });
       const d = await r.json();

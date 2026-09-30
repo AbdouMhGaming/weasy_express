@@ -223,7 +223,6 @@ export default function OfficeDashboardView({ onUnauth, isAdmin }: { onUnauth: (
   };
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
     try {
       const [sRes, rRes] = await Promise.all([
         fetch(`${API_BASE}/api/office/reports/stats`,  { headers: adminHeaders() }),

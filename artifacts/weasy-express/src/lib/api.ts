@@ -1,3 +1,5 @@
+import { clearCurrentBrowserPushOwner, isCurrentBrowserPushOwner, setPushEnabledForUser, type PushPortal } from "./pushPreferences";
+
 const envApiUrl = import.meta.env.VITE_API_URL as string | undefined;
 
 export const API_BASE: string =
@@ -51,26 +53,48 @@ export function expireCurrentSession(): never {
     sessionExpiryRedirectStarted = true;
     const isSuiviPath = window.location.pathname.startsWith("/suivi");
     const isExpPath = window.location.pathname.startsWith("/expediteurs");
+    const portal: PushPortal = isSuiviPath ? "suivi" : isExpPath ? "expediteur" : "admin";
+    const username = localStorage.getItem(isSuiviPath ? "suivi_username" : isExpPath ? "exp_username" : "admin_username") ?? "";
+    const ownsBrowserPush = isCurrentBrowserPushOwner(portal, username);
+    const loginPath = isSuiviPath ? "/suivi/login" : isExpPath ? "/expediteurs/login" : "/admin/login";
 
     localStorage.removeItem("push_enabled");
+    setPushEnabledForUser(portal, username, false);
     if (isSuiviPath) {
       localStorage.removeItem("suivi_token");
       localStorage.removeItem("suivi_role");
       localStorage.removeItem("suivi_username");
-      window.location.replace("/suivi/login");
     } else if (isExpPath) {
       localStorage.removeItem("exp_token");
       localStorage.removeItem("exp_role");
       localStorage.removeItem("exp_username");
       localStorage.removeItem("exp_is_team");
       localStorage.removeItem("exp_permissions");
-      window.location.replace("/expediteurs/login");
     } else {
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_role");
       localStorage.removeItem("admin_username");
       localStorage.removeItem("admin_office_hub");
-      window.location.replace("/admin/login");
+    }
+    if (!ownsBrowserPush) {
+      window.location.replace(loginPath);
+    } else {
+      // An expired token cannot delete its server record, but the browser must
+      // stop receiving pushes for that user before opening the login page.
+      void (async () => {
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          const subscription = await registration?.pushManager.getSubscription();
+          if (subscription && isCurrentBrowserPushOwner(portal, username)) {
+            await subscription.unsubscribe();
+          }
+        } catch {
+          // A service-worker failure must not prevent the login redirect.
+        } finally {
+          clearCurrentBrowserPushOwner(portal, username);
+          window.location.replace(loginPath);
+        }
+      })();
     }
   }
   throw new Error("session_expired");

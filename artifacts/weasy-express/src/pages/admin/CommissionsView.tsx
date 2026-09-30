@@ -237,7 +237,6 @@ export default function CommissionsView() {
 
   // ── Fetch SP entries from DB ───────────────────────────────────────────────
   const fetchSp = useCallback(async () => {
-    setSpLoading(true);
     try {
       const params = new URLSearchParams();
       if (!showAllTime) {
@@ -332,7 +331,6 @@ export default function CommissionsView() {
 
   // ── Fetch returns from DB ──────────────────────────────────────────────────
   const fetchReturns = useCallback(async () => {
-    setReturnsLoading(true);
     try {
       const params = new URLSearchParams();
       if (!showAllTime) {
@@ -424,7 +422,6 @@ export default function CommissionsView() {
   }, []);
 
   const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true);
     try {
       const params = new URLSearchParams();
       if (!showAllTime) {
