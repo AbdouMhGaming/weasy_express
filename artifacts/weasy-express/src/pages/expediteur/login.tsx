@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import logoPath from "@assets/logo-removebg-preview_1777142961208.png";
+import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 import { API_BASE } from "@/lib/api";
 import i18n, { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 
@@ -67,7 +68,8 @@ export default function ExpediteurLogin() {
           <div className="px-8 py-10">
             {/* Logo + lang switcher */}
             <div className="flex items-center justify-between mb-8">
-              <img src={logoPath} alt="Weasy Express" className="h-12 w-auto object-contain" />
+              <img src={logoPath} alt="Weasy Express" className="h-12 w-auto object-contain dark:hidden" />
+              <img src={logoWhitePath} alt="Weasy Express" className="hidden h-12 w-auto object-contain dark:block" />
               <div className="flex items-center gap-1">
                 {SUPPORTED_LANGUAGES.map((lng) => (
                   <button

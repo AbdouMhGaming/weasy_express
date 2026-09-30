@@ -573,7 +573,7 @@ export function ecotrackNotificationsQueryKey(portal: PushPortal, username: stri
   return ["ecotrack", "notifications", portal, username.trim()] as const;
 }
 
-export function useEcotrackNotifications(portal: PushPortal, username: string) {
+export function useEcotrackNotifications(portal: PushPortal, username: string, enabled = true) {
   return useQuery({
     queryKey: ecotrackNotificationsQueryKey(portal, username),
     queryFn: async () => {
@@ -597,7 +597,7 @@ export function useEcotrackNotifications(portal: PushPortal, username: string) {
     refetchOnWindowFocus: true,
     staleTime: 0,
     retry: 2,
-    enabled: !!username.trim(),
+    enabled: enabled && !!username.trim(),
   });
 }
 

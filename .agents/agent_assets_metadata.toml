@@ -184,3 +184,17 @@ mtime_ms = 1790797424147
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/0ed3f5c1-1be5-4681-b80d-02d293cf12f5/8aa7d914-1727-4a97-b5a3-290db5df9c1f"
 storage_version_token = "1790797552047160"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "4pVSwXdiP7oWl0b4uWSRv"
+uri = "file://deploy/weasy-express-2026-09-30-theme-controls.zip"
+type = "unspecified"
+title = "Weasy Express — updated Hostinger build"
+description = "Hostinger ZIP with push-only controls outside Expéditeurs and refined dark-mode contrast (7.4 MB)."
+logical_id = "27a9a0f7-388f-4496-a7a0-054277d51f6d"
+content_hash = "sha256:06648ce77f7938cf1c8f0202d1aed6c073640398cff501b771ce1c8e3d9272f8"
+size = 7780730
+mtime_ms = 1790798385284
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/27a9a0f7-388f-4496-a7a0-054277d51f6d/321eb9e5-a14a-412a-884b-1f86cdac5f8f"
+storage_version_token = "1790798421944376"
+content_type = "application/octet-stream"

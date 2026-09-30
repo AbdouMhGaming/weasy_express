@@ -502,6 +502,7 @@ const en: Translations = {
       officeDashboard: "My Dashboard",
       notificationsOn: "Notifications enabled",
       notificationsOff: "Enable notifications",
+      notificationsDisable: "Disable notifications",
       notificationsDenied: "Notifications blocked (check settings)",
       changePassword: "Change password",
       logout: "Sign out",

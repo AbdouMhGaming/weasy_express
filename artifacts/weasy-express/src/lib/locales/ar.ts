@@ -502,6 +502,7 @@ const ar: Translations = {
       officeDashboard: "لوحة التحكم الخاصة بي",
       notificationsOn: "الإشعارات مفعّلة",
       notificationsOff: "تفعيل الإشعارات",
+      notificationsDisable: "تعطيل الإشعارات",
       notificationsDenied: "الإشعارات محظورة (انظر الإعدادات)",
       changePassword: "تغيير كلمة المرور",
       logout: "تسجيل الخروج",

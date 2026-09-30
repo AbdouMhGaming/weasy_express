@@ -500,6 +500,7 @@ const fr = {
       officeDashboard: "Mon Tableau de bord",
       notificationsOn: "Notifications activées",
       notificationsOff: "Activer les notifications",
+      notificationsDisable: "Désactiver les notifications",
       notificationsDenied: "Notifications bloquées (voir paramètres)",
       changePassword: "Changer le mot de passe",
       logout: "Déconnexion",

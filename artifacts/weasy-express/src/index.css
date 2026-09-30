@@ -139,29 +139,30 @@
 
 .dark {
   color-scheme: dark;
-  --background: 220 16% 10%;
-  --foreground: 210 20% 94%;
+  /* Warm ink surfaces echo the red brand without turning the UI slate-grey. */
+  --background: 18 13% 9%;
+  --foreground: 24 18% 93%;
   
-  --border: 220 12% 25%;
-  --input: 220 12% 25%;
-  --ring: 1.6 98.3% 45.3%;
+  --border: 16 11% 28%;
+  --input: 16 11% 28%;
+  --ring: 4 100% 69%;
 
-  --card: 220 14% 15%;
-  --card-foreground: 210 20% 94%;
-  --card-border: 220 12% 25%;
+  --card: 18 11% 15%;
+  --card-foreground: 24 18% 93%;
+  --card-border: 16 11% 28%;
 
-  --popover: 220 14% 17%;
-  --popover-foreground: 210 20% 94%;
-  --popover-border: 220 12% 25%;
+  --popover: 18 11% 18%;
+  --popover-foreground: 24 18% 93%;
+  --popover-border: 16 11% 28%;
 
   --primary: 1.6 98.3% 45.3%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 12% 23%;
-  --secondary-foreground: 210 20% 94%;
+  --secondary: 18 10% 24%;
+  --secondary-foreground: 24 18% 93%;
 
-  --muted: 220 12% 23%;
-  --muted-foreground: 216 10% 73%;
+  --muted: 18 10% 23%;
+  --muted-foreground: 22 12% 72%;
 
   --accent: 1.6 98.3% 45.3%;
   --accent-foreground: 0 0% 100%;
@@ -169,13 +170,13 @@
   --destructive: 0 62.8% 39%;
   --destructive-foreground: 0 0% 98%;
 
-  --sidebar: 220 14% 14%;
-  --sidebar-foreground: 210 20% 94%;
-  --sidebar-border: 220 12% 25%;
+  --sidebar: 18 11% 15%;
+  --sidebar-foreground: 24 18% 93%;
+  --sidebar-border: 16 11% 28%;
   --sidebar-primary: 1.6 98.3% 45.3%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 12% 23%;
-  --sidebar-accent-foreground: 210 20% 94%;
+  --sidebar-accent: 18 10% 23%;
+  --sidebar-accent-foreground: 24 18% 93%;
   --sidebar-ring: 1.6 98.3% 45.3%;
   --button-outline: rgba(232, 237, 243, .18);
   --badge-outline: rgba(232, 237, 243, .12);
@@ -193,33 +194,30 @@
 }
 
 /*
- * Legacy pages use literal Tailwind colors instead of theme tokens. These
- * overrides target neutral UI utilities only, leaving photographic overlays,
- * red brand buttons, semantic status colors, maps, and image pixels untouched.
- * Kept outside @layer so they win over generated utility declarations.
+ * Legacy literal neutrals: only neutral UI surfaces. Do not rewrite translucent
+ * whites, gradients, colored badges, hero controls or image/map overlays.
+ * Outside @layer intentionally, so these beat legacy Tailwind utilities.
  */
-
-.dark :is([class~="bg-white"], [class~="bg-white/95"], [class~="bg-white/90"], [class~="bg-white/70"], [class~="bg-white/50"]) {
+.dark :is([class~="bg-white"]:not([class~="text-[#E10600]"]):not([class~="text-primary"]),
+  [class~="bg-white/95"]) {
   background-color: hsl(var(--card));
-}
-/* The public hero's white-on-red CTA is intentionally a light brand element. */
-.dark [class~="bg-white"][class~="text-[#E10600]"] {
-  background-color: #fff;
 }
 .dark :is([class~="bg-gray-50"], [class~="bg-slate-50"], [class~="bg-[#f7f8fa]"]) {
   background-color: hsl(var(--background));
 }
-.dark :is([class~="bg-gray-100"], [class~="bg-slate-100"], [class~="bg-[#fff0ee]"], [class~="bg-[#fce9e7]"]) {
+.dark :is([class~="bg-gray-50/60"], [class~="bg-gray-50/70"], [class~="bg-gray-50/80"],
+  [class~="bg-gray-100"], [class~="bg-slate-100"]) {
   background-color: hsl(var(--muted));
 }
 .dark :is([class~="bg-gray-200"], [class~="bg-slate-200"], [class~="bg-[#e2e8f0]"]) {
-  background-color: hsl(220 12% 28%);
+  background-color: hsl(18 10% 30%);
 }
 .dark :is([class~="border-gray-50"], [class~="border-gray-100"], [class~="border-gray-200"], [class~="border-gray-300"],
-  [class~="border-slate-50"], [class~="border-slate-100"], [class~="border-slate-200"], [class~="border-[#eee3e1]"],
-  [class~="border-[#e9dedb]"], [class~="border-[#ead4d0]"]) {
+  [class~="border-slate-50"], [class~="border-slate-100"], [class~="border-slate-200"],
+  [class~="border-[#eee3e1]"], [class~="border-[#e9dedb]"], [class~="border-[#ead4d0]"]) {
   border-color: hsl(var(--border));
 }
+/* Do not turn light-on-red labels dark, or turn text on colored status pills white. */
 .dark :is([class~="text-gray-900"], [class~="text-gray-800"], [class~="text-gray-700"],
   [class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"],
   [class~="text-[#292322]"], [class~="text-[#353535]"], [class~="text-[#1A1A1A]"], [class~="text-[#514844]"]) {
@@ -229,17 +227,29 @@
   [class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"], [class~="text-slate-300"]) {
   color: hsl(var(--muted-foreground));
 }
-/* Keep brand red, but brighten red lettering (not red fills) for dark-surface contrast. */
+/* Neutral cancelled/unknown badges stay legible on the new muted fill. */
+.dark [class~="bg-gray-100"]:is([class~="text-gray-500"], [class~="text-gray-600"]),
+.dark [class~="bg-gray-200"]:is([class~="text-gray-500"], [class~="text-gray-600"]) {
+  color: hsl(var(--foreground));
+}
+/* Warm red lettering on ink; preserve red on intentionally white CTAs. */
 .dark :is([class~="text-[#E10600]"], [class~="text-[#C50500]"], [class~="text-[#B80500]"],
   [class~="text-[#a60702]"], [class~="text-[#ad120e]"], [class~="text-[#9e0904]"]) {
-  color: #ff7771;
+  color: #ff827a;
 }
-.dark [class~="bg-white"][class~="text-[#E10600]"] {
-  color: #E10600;
-}
+.dark [class~="bg-white"][class~="text-[#E10600]"] { color: #b80500; }
 
-/* Shared legacy inputs/tables/modals, including elements with no explicit bg utility. */
-.dark :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+/* The admin's explicit rose sidebar controls should follow its dark panel,
+   while its red masthead and active nav retain their brand fill. */
+.dark aside[class~="bg-white"] :is([class~="bg-[#fff0ee]"], [class~="bg-[#fce9e7]"]) {
+  background-color: hsl(3 26% 25%);
+}
+.dark aside[class~="bg-white"] [class~="hover:bg-[#fff0ee]"]:hover { background-color: hsl(3 26% 25%); }
+.dark aside[class~="bg-white"] [class~="bg-[#b80500]"] { color: #fff; }
+
+/* Inputs: restrict to ordinary fields; checkboxes/radios, branded controls
+   and translucent search overlays retain their own styling. */
+.dark :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
   color: hsl(var(--foreground));
   background-color: hsl(var(--card));
   border-color: hsl(var(--border));
@@ -249,13 +259,18 @@
 .dark option { background-color: hsl(var(--popover)); color: hsl(var(--popover-foreground)); }
 .dark :is(th, td) { border-color: hsl(var(--border)); }
 .dark :is([class~="from-gray-100"], [class~="from-slate-50"]) { --tw-gradient-from: hsl(var(--muted)); }
-.dark [class~="to-gray-200"] { --tw-gradient-to: hsl(var(--background)); }
-.dark [class~="hover:bg-gray-50"]:hover,
-.dark [class~="hover:bg-slate-50"]:hover,
-.dark [class~="hover:bg-[#fff0ee]"]:hover { background-color: hsl(var(--muted)); }
-.dark :is([class~="bg-gray-50/60"], [class~="bg-gray-50/70"]):hover { background-color: hsl(var(--muted)); }
+.dark [class~="to-gray-200"] { --tw-gradient-to: hsl(var(--card)); }
+.dark :is([class~="hover:bg-gray-50"], [class~="hover:bg-slate-50"],
+  [class~="hover:bg-gray-50/60"], [class~="hover:bg-gray-50/70"]):hover {
+  background-color: hsl(var(--muted));
+}
 
-/* The scrolled public header changes surface; use the existing white logo
-   instead of tinting, filtering or modifying either image. */
+/* Public home has deliberate white controls on red and a white map tooltip
+   on a dark section. Keep those islands white, including their text. */
+.dark section[class~="bg-[#1A1A1A]"] [class~="bg-white"] { background-color: #fff; }
+.dark section[class~="bg-[#1A1A1A]"] [class~="text-[#1A1A1A]"] { color: #1a1a1a; }
+.dark section[class~="bg-[#1A1A1A]"] [class~="text-muted-foreground"] { color: #595959; }
+.dark section[class~="bg-[#1A1A1A]"] [class~="bg-white"] [class~="text-[#E10600]"] { color: #b80500; }
+.dark footer [class~="bg-white"] { background-color: #fff; }
 .dark header[class~="bg-white/95"] .relative > img:first-of-type { opacity: 1; }
 .dark header[class~="bg-white/95"] .relative > img:nth-of-type(2) { opacity: 0; }

@@ -39,7 +39,9 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
   const [activeTracking, setActiveTracking] = useState<{tracking: string, expediteurId?: string | number, mode: "remarks" | "details"} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const { data, isLoading, refetch } = useEcotrackNotifications(portal, username);
+  // Only Expéditeurs have an in-app notification history. Other portal
+  // headers offer browser push preferences without fetching or showing it.
+  const { data, isLoading, refetch } = useEcotrackNotifications(portal, username, portal === "expediteur");
   const markRead = useMarkNotificationRead(portal, username);
   const pushSupported = typeof window !== "undefined" &&
     "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
@@ -156,6 +158,36 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
     } finally {
       setPushLoading(false);
     }
+  }
+
+  if (portal !== "expediteur") {
+    const label = pushEnabled
+      ? t("admin.sidebar.notificationsDisable")
+      : t("admin.sidebar.notificationsOff");
+    return (
+      <div className="relative flex items-center">
+        <button
+          type="button"
+          onClick={togglePush}
+          disabled={!pushSupported || pushLoading}
+          aria-label={label}
+          aria-pressed={pushEnabled}
+          title={label}
+          data-testid="button-toggle-push-notifications"
+          className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-2.5 text-xs font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            pushEnabled
+              ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/70 dark:text-red-200 dark:hover:bg-red-900/70"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <Bell className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">{pushLoading ? t("admin.notifBanner.loading", "Updating…") : label}</span>
+        </button>
+        {pushError && (
+          <p role="alert" className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-red-200 bg-white p-2 text-xs text-red-600 dark:text-red-300 shadow-lg">{pushError}</p>
+        )}
+      </div>
+    );
   }
 
   return (
