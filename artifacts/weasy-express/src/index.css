@@ -139,30 +139,30 @@
 
 .dark {
   color-scheme: dark;
-  /* Warm ink surfaces echo the red brand without turning the UI slate-grey. */
-  --background: 18 13% 9%;
-  --foreground: 24 18% 93%;
+  /* Neutral charcoal surfaces; red belongs to existing brand actions only. */
+  --background: 0 0% 8%;
+  --foreground: 0 0% 95%;
   
-  --border: 16 11% 28%;
-  --input: 16 11% 28%;
-  --ring: 4 100% 69%;
+  --border: 0 0% 26%;
+  --input: 0 0% 26%;
+  --ring: 1.6 98.3% 45.3%;
 
-  --card: 18 11% 15%;
-  --card-foreground: 24 18% 93%;
-  --card-border: 16 11% 28%;
+  --card: 0 0% 13%;
+  --card-foreground: 0 0% 95%;
+  --card-border: 0 0% 26%;
 
-  --popover: 18 11% 18%;
-  --popover-foreground: 24 18% 93%;
-  --popover-border: 16 11% 28%;
+  --popover: 0 0% 16%;
+  --popover-foreground: 0 0% 95%;
+  --popover-border: 0 0% 26%;
 
   --primary: 1.6 98.3% 45.3%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 18 10% 24%;
-  --secondary-foreground: 24 18% 93%;
+  --secondary: 0 0% 21%;
+  --secondary-foreground: 0 0% 95%;
 
-  --muted: 18 10% 23%;
-  --muted-foreground: 22 12% 72%;
+  --muted: 0 0% 19%;
+  --muted-foreground: 0 0% 72%;
 
   --accent: 1.6 98.3% 45.3%;
   --accent-foreground: 0 0% 100%;
@@ -170,13 +170,13 @@
   --destructive: 0 62.8% 39%;
   --destructive-foreground: 0 0% 98%;
 
-  --sidebar: 18 11% 15%;
-  --sidebar-foreground: 24 18% 93%;
-  --sidebar-border: 16 11% 28%;
+  --sidebar: 0 0% 13%;
+  --sidebar-foreground: 0 0% 95%;
+  --sidebar-border: 0 0% 26%;
   --sidebar-primary: 1.6 98.3% 45.3%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 18 10% 23%;
-  --sidebar-accent-foreground: 24 18% 93%;
+  --sidebar-accent: 0 0% 19%;
+  --sidebar-accent-foreground: 0 0% 95%;
   --sidebar-ring: 1.6 98.3% 45.3%;
   --button-outline: rgba(232, 237, 243, .18);
   --badge-outline: rgba(232, 237, 243, .12);
@@ -210,7 +210,7 @@
   background-color: hsl(var(--muted));
 }
 .dark :is([class~="bg-gray-200"], [class~="bg-slate-200"], [class~="bg-[#e2e8f0]"]) {
-  background-color: hsl(18 10% 30%);
+  background-color: hsl(0 0% 29%);
 }
 .dark :is([class~="border-gray-50"], [class~="border-gray-100"], [class~="border-gray-200"], [class~="border-gray-300"],
   [class~="border-slate-50"], [class~="border-slate-100"], [class~="border-slate-200"],
@@ -232,19 +232,18 @@
 .dark [class~="bg-gray-200"]:is([class~="text-gray-500"], [class~="text-gray-600"]) {
   color: hsl(var(--foreground));
 }
-/* Warm red lettering on ink; preserve red on intentionally white CTAs. */
+/* Red lettering stays a legible brand accent; preserve red on white CTAs. */
 .dark :is([class~="text-[#E10600]"], [class~="text-[#C50500]"], [class~="text-[#B80500]"],
   [class~="text-[#a60702]"], [class~="text-[#ad120e]"], [class~="text-[#9e0904]"]) {
   color: #ff827a;
 }
 .dark [class~="bg-white"][class~="text-[#E10600]"] { color: #b80500; }
 
-/* The admin's explicit rose sidebar controls should follow its dark panel,
-   while its red masthead and active nav retain their brand fill. */
+/* Neutral dark sidebar controls; red masthead and active nav keep their brand fill. */
 .dark aside[class~="bg-white"] :is([class~="bg-[#fff0ee]"], [class~="bg-[#fce9e7]"]) {
-  background-color: hsl(3 26% 25%);
+  background-color: hsl(var(--muted));
 }
-.dark aside[class~="bg-white"] [class~="hover:bg-[#fff0ee]"]:hover { background-color: hsl(3 26% 25%); }
+.dark aside[class~="bg-white"] [class~="hover:bg-[#fff0ee]"]:hover { background-color: hsl(var(--muted)); }
 .dark aside[class~="bg-white"] [class~="bg-[#b80500]"] { color: #fff; }
 
 /* Inputs: restrict to ordinary fields; checkboxes/radios, branded controls

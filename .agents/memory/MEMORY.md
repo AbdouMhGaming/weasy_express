@@ -14,6 +14,7 @@
 - [Ecotrack API behavior](ecotrack-api-behavior.md) — production invalid-token responses differ from the docs; treat HTTP 401 “Unauthenticated.” as an invalid credential.
 - [Ecotrack translation audit](ecotrack-translation-audit.md) — every Ecotrack UI change must verify all referenced keys resolve in EN/FR/AR; never rely on a successful Vite build.
 - [Ecotrack dashboard density](ecotrack-dashboard-density.md) — user prefers the compact paired dashboard layout; collapsed sidebar must be icon-only and expand Orders before category selection.
+- [Dark-mode palette](dark-mode-palette.md) — Weasy Express dark mode must use neutral charcoal, not warm brown, yellow, or rose-tinted surfaces.
 - [Ecotrack delay timing](ecotrack-delay-timing.md) — delay thresholds are global per wilaya/status; overdue time starts at the recorded current-status entry, with remote timestamps only as fallback.
 - [Portal session expiry](portal-session-expiry.md) — protected Expediteur/Admin requests must treat HTTP 401 as session expiry and redirect to the path-specific login, not as an Ecotrack disconnect.
 - [Cross-portal Ecotrack identity](cross-portal-ecotrack-identity.md) — privileged order operations must pair tracking with owner ID; Suivi sessions and admin-team permissions are isolated and deny by default.

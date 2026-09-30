@@ -198,3 +198,17 @@ mtime_ms = 1790798385284
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/27a9a0f7-388f-4496-a7a0-054277d51f6d/321eb9e5-a14a-412a-884b-1f86cdac5f8f"
 storage_version_token = "1790798421944376"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "bajv1gcxfbUhL7UXO97Pz"
+uri = "file://deploy/weasy-express-2026-09-30-neutral-dark.zip"
+type = "unspecified"
+title = "Weasy Express — neutral dark-mode Hostinger build"
+description = "Corrected Hostinger ZIP using neutral charcoal dark surfaces instead of warm-tinted backgrounds."
+logical_id = "8452ddc6-df71-4268-9756-ecbad5c38a50"
+content_hash = "sha256:827e52a9c8821dedda15b31ce3f0b176a00d1c3dc06227ffbe8c639d006ac372"
+size = 7780669
+mtime_ms = 1790798619947
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/8452ddc6-df71-4268-9756-ecbad5c38a50/13975e42-4d47-44d0-b555-51ea8a2d0e08"
+storage_version_token = "1790798678299405"
+content_type = "application/octet-stream"
