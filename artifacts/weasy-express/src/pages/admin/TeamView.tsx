@@ -28,41 +28,56 @@ interface ParentUser {
 
 const HOSTINGER_PUBLIC_BUILD = import.meta.env.VITE_HOSTINGER_BUILD === "true";
 
-const SECTIONS_BY_ROLE: Record<string, { key: string; label: string }[]> = {
+const SECTIONS_BY_ROLE: Record<string, { key: string; labelKey: string }[]> = {
+  // Keep these permission IDs in sync with TEAM_PERMISSIONS in the API.
   admin: [
-    ...(!HOSTINGER_PUBLIC_BUILD ? [
-      { key: "ecotrack", label: "Retards Ecotrack" },
-    ] : []),
-    { key: "expediteurs", label: "Expediteurs" },
-    { key: "queue", label: "Queue" },
-    { key: "payouts", label: "Payouts" },
-    { key: "team", label: "Team" },
-    { key: "returns", label: "Returns" },
-    { key: "merchants", label: "Merchants" },
-    { key: "messaging", label: "Messaging" },
-    { key: "analytics", label: "Analytics" },
+    ...(!HOSTINGER_PUBLIC_BUILD ? [{ key: "ecotrack", labelKey: "admin.team.sections.ecotrack" }] : []),
+    { key: "team", labelKey: "admin.team.sections.team" },
+    { key: "expediteurs", labelKey: "admin.team.sections.expediteurs" },
+    { key: "users", labelKey: "admin.team.sections.users" },
+    { key: "queue", labelKey: "admin.team.sections.queue" },
+    { key: "payouts", labelKey: "admin.team.sections.payouts" },
+    { key: "returns", labelKey: "admin.team.sections.returns" },
+    { key: "merchants", labelKey: "admin.team.sections.merchants" },
+    { key: "messaging", labelKey: "admin.team.sections.messaging" },
+    { key: "analytics", labelKey: "admin.team.sections.analytics" },
+  ],
+  admin_team: [
+    ...(!HOSTINGER_PUBLIC_BUILD ? [{ key: "ecotrack", labelKey: "admin.team.sections.ecotrack" }] : []),
+    { key: "team", labelKey: "admin.team.sections.team" },
+    { key: "expediteurs", labelKey: "admin.team.sections.expediteurs" },
+    { key: "users", labelKey: "admin.team.sections.users" },
+    { key: "queue", labelKey: "admin.team.sections.queue" },
+    { key: "payouts", labelKey: "admin.team.sections.payouts" },
+    { key: "returns", labelKey: "admin.team.sections.returns" },
+    { key: "merchants", labelKey: "admin.team.sections.merchants" },
+    { key: "messaging", labelKey: "admin.team.sections.messaging" },
+    { key: "analytics", labelKey: "admin.team.sections.analytics" },
   ],
   expediteur: [
     ...(!HOSTINGER_PUBLIC_BUILD ? [
-      { key: "ecotrack", label: "Commandes" },
-      { key: "ecotrack-desks", label: "Agences" },
-      { key: "ecotrack-fees", label: "Service fees" },
-      { key: "ecotrack-products", label: "Produit" },
+      { key: "ecotrack-dashboard", labelKey: "admin.team.sections.ecotrackDashboard" },
+      { key: "ecotrack", labelKey: "admin.team.sections.ecotrack" },
+      { key: "ecotrack-desks", labelKey: "admin.team.sections.ecotrackDesks" },
+      { key: "ecotrack-fees", labelKey: "admin.team.sections.ecotrackFees" },
+      { key: "ecotrack-products", labelKey: "admin.team.sections.ecotrackProducts" },
+      { key: "ecotrack-reports", labelKey: "admin.team.sections.ecotrackReports" },
+      { key: "ecotrack-delays", labelKey: "admin.team.sections.ecotrackDelays" },
     ] : []),
-    { key: "queue",   label: "Queue" },
-    { key: "payouts", label: "Payouts" },
-    { key: "team",    label: "Team" },
+    { key: "queue", labelKey: "admin.team.sections.queue" },
+    { key: "payouts", labelKey: "admin.team.sections.payouts" },
+    { key: "team", labelKey: "admin.team.sections.team" },
   ],
   office: [
-    { key: "office-dashboard", label: "Dashboard" },
-    { key: "expediteurs",      label: "Expediteurs" },
-    { key: "queue",            label: "Queue" },
-    { key: "payouts",          label: "Payouts" },
-    { key: "team",             label: "Team" },
-    { key: "returns",          label: "Returns" },
-    { key: "merchants",        label: "Merchants" },
-    { key: "messaging",        label: "Messaging" },
-    { key: "analytics",        label: "Analytics" },
+    { key: "office-dashboard", labelKey: "admin.team.sections.officeDashboard" },
+    { key: "expediteurs", labelKey: "admin.team.sections.expediteurs" },
+    { key: "queue", labelKey: "admin.team.sections.queue" },
+    { key: "payouts", labelKey: "admin.team.sections.payouts" },
+    { key: "team", labelKey: "admin.team.sections.team" },
+    { key: "returns", labelKey: "admin.team.sections.returns" },
+    { key: "merchants", labelKey: "admin.team.sections.merchants" },
+    { key: "messaging", labelKey: "admin.team.sections.messaging" },
+    { key: "analytics", labelKey: "admin.team.sections.analytics" },
   ],
 };
 
@@ -73,18 +88,45 @@ function parsePerm(raw: string | null): string[] {
 const inputCls =
   "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600] transition-all";
 
+const TEAM_PERMISSION_LABEL_KEYS: Record<string, string> = {
+  "ecotrack-dashboard": "admin.team.sections.ecotrackDashboard",
+  ecotrack: "admin.team.sections.ecotrack",
+  "ecotrack-desks": "admin.team.sections.ecotrackDesks",
+  "ecotrack-fees": "admin.team.sections.ecotrackFees",
+  "ecotrack-products": "admin.team.sections.ecotrackProducts",
+  "ecotrack-reports": "admin.team.sections.ecotrackReports",
+  "ecotrack-delays": "admin.team.sections.ecotrackDelays",
+  "office-dashboard": "admin.team.sections.officeDashboard",
+  expediteurs: "admin.team.sections.expediteurs",
+  users: "admin.team.sections.users",
+  queue: "admin.team.sections.queue",
+  payouts: "admin.team.sections.payouts",
+  team: "admin.team.sections.team",
+  returns: "admin.team.sections.returns",
+  merchants: "admin.team.sections.merchants",
+  messaging: "admin.team.sections.messaging",
+  analytics: "admin.team.sections.analytics",
+};
+
 // ── Role badge ─────────────────────────────────────────────────────────────────
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation();
   const cfg: Record<string, string> = {
     office:      "bg-blue-50 text-blue-700 border-blue-100",
     expediteur:  "bg-violet-50 text-violet-700 border-violet-100",
     admin:       "bg-gray-50 text-gray-700 border-gray-200",
     admin_team:  "bg-purple-50 text-purple-700 border-purple-100",
   };
+  const roleLabelKey: Record<string, string> = {
+    office: "admin.team.roleLabel.office",
+    expediteur: "admin.team.roleLabel.expediteur",
+    admin: "admin.team.roleLabel.admin",
+    admin_team: "admin.team.roleLabel.adminTeam",
+  };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${cfg[role] ?? cfg.admin}`}>
-      {role}
+      {t(roleLabelKey[role] ?? "admin.team.roleLabel.member")}
     </span>
   );
 }
@@ -94,7 +136,7 @@ function RoleBadge({ role }: { role: string }) {
 function PermChecklist({
   sections, selected, onChange,
 }: {
-  sections: { key: string; label: string }[];
+  sections: { key: string; labelKey: string }[];
   selected: string[];
   onChange: (key: string) => void;
 }) {
@@ -106,16 +148,16 @@ function PermChecklist({
       {sections.length === 0 ? (
         <p className="text-xs text-gray-400 italic">—</p>
       ) : (
-        <div className="space-y-2 bg-gray-50 rounded-xl p-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 bg-gray-50 rounded-xl p-3">
           {sections.map((sec) => (
-            <label key={sec.key} className="flex items-center gap-3 cursor-pointer group">
+            <label key={sec.key} className="flex min-h-8 items-center gap-3 cursor-pointer group">
               <input
                 type="checkbox"
                 checked={selected.includes(sec.key)}
                 onChange={() => onChange(sec.key)}
                 className="w-4 h-4 accent-[#E10600] rounded"
               />
-              <span className="text-sm text-gray-700 group-hover:text-gray-900">{sec.label}</span>
+              <span className="text-sm text-gray-700 group-hover:text-gray-900">{t(sec.labelKey)}</span>
             </label>
           ))}
         </div>
@@ -131,8 +173,8 @@ function Modal({ title, subtitle, onClose, children, footer }: {
   children: React.ReactNode; footer: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-50">
           <div>
@@ -146,7 +188,7 @@ function Modal({ title, subtitle, onClose, children, footer }: {
           </button>
         </div>
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6 py-4 space-y-4">{children}</div>
         {/* Footer */}
         <div className="px-6 pb-6 pt-3 border-t border-gray-50 flex gap-3">{footer}</div>
       </div>
@@ -226,7 +268,10 @@ function AddModal({
       else if (data.error === "username_taken")    setError(t("admin.team.usernameTaken"));
       else if (data.error === "parent_required")   setError(t("admin.team.parentRequired"));
       else if (data.error === "parent_not_found")  setError(t("admin.team.parentNotFound"));
+      else if (data.error === "invalid_fields")    setError(t("admin.team.formError"));
       else setError(t("admin.team.saveError"));
+    } catch {
+      setError(t("admin.team.networkError"));
     } finally { setSaving(false); }
   }
 
@@ -243,7 +288,7 @@ function AddModal({
             {t("admin.team.cancel")}
           </button>
           <button onClick={submit} disabled={saving} className="flex-1 py-2.5 text-sm font-semibold bg-[#E10600] text-white rounded-xl hover:bg-[#C50500] disabled:opacity-60">
-            {saving ? "…" : t("admin.team.save")}
+            {saving ? t("admin.team.creating") : t("admin.team.save")}
           </button>
         </>
       }
@@ -273,7 +318,7 @@ function AddModal({
                   </svg>
                 )}
                 <div>
-                  <p>{type === "admin" ? "Admin" : type === "office" ? t("admin.team.linkOffice") : t("admin.team.linkExpediteur")}</p>
+                  <p>{type === "admin" ? t("admin.team.roleLabel.admin") : type === "office" ? t("admin.team.linkOffice") : t("admin.team.linkExpediteur")}</p>
                 </div>
               </button>
             ))}
@@ -288,7 +333,7 @@ function AddModal({
             {linkType === "office" ? t("admin.team.linkOffice") : t("admin.team.linkExpediteur")}
           </label>
           {filteredParents.length === 0 ? (
-            <p className="text-sm text-gray-400 italic py-2">{t("admin.analytics.empty")}</p>
+            <p className="text-sm text-gray-400 italic py-2">{t("admin.team.noParentAccounts")}</p>
           ) : (
             <select value={parentUsername} onChange={e => setParentUsername(e.target.value)} className={inputCls}>
               <option value="">{t("admin.team.selectParent")}</option>
@@ -301,7 +346,7 @@ function AddModal({
           )}
           {selectedParent?.office_hub && (
             <p className="text-xs text-gray-400 mt-1">
-              Hub: <span className="font-semibold text-gray-600">{selectedParent.office_hub}</span>
+              {t("admin.team.hub")}: <span className="font-semibold text-gray-600">{selectedParent.office_hub}</span>
             </p>
           )}
         </div>
@@ -314,14 +359,14 @@ function AddModal({
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.team.fields.username")}</label>
             <input
               type="text" value={username} onChange={e => setUsername(e.target.value)}
-              className={inputCls} placeholder="username" autoComplete="off"
+              className={inputCls} placeholder={t("admin.team.fields.usernamePlaceholder")} autoComplete="off"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t("admin.team.fields.password")}</label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)}
-              className={inputCls} placeholder="Min. 8 characters" autoComplete="new-password"
+              className={inputCls} placeholder={t("admin.team.fields.passwordHint")} autoComplete="new-password"
             />
           </div>
           <PermChecklist sections={sections} selected={perms} onChange={togglePerm} />
@@ -455,7 +500,7 @@ function EditModal({
               </select>
               {selectedParent && selectedParent.username !== account.parent_username && (
                 <p className="text-xs text-amber-600 mt-1.5 font-medium">
-                  ⚠ Permissions will be adjusted to match {selectedParent.role} sections.
+                  ⚠ {t("admin.team.permissionRoleWarning", { role: t(`admin.team.roleLabel.${selectedParent.role === "admin_team" ? "adminTeam" : selectedParent.role}`) })}
                 </p>
               )}
             </div>
@@ -471,7 +516,7 @@ function EditModal({
         </label>
         <input
           type="password" value={password} onChange={e => setPassword(e.target.value)}
-          className={inputCls} placeholder="Leave blank to keep current" autoComplete="new-password"
+          className={inputCls} placeholder={t("admin.team.fields.leavePasswordBlank")} autoComplete="new-password"
         />
       </div>
 
@@ -599,17 +644,17 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
               value={selectedParentRole}
               onChange={(e) => { setSelectedParentRole(e.target.value); setPage(1); }}
             >
-              <option value="">Tous les types</option>
-              <option value="admin">Admin</option>
-              <option value="office">Office</option>
-              <option value="expediteur">Expéditeur</option>
+              <option value="">{t("admin.team.allTypes")}</option>
+              <option value="admin">{t("admin.team.roleLabel.admin")}</option>
+              <option value="office">{t("admin.team.roleLabel.office")}</option>
+              <option value="expediteur">{t("admin.team.roleLabel.expediteur")}</option>
             </select>
             <select
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#E10600]/20 min-w-[150px]"
               value={selectedParentUsername}
               onChange={(e) => { setSelectedParentUsername(e.target.value); setPage(1); }}
             >
-              <option value="">Tous les comptes</option>
+              <option value="">{t("admin.team.allAccounts")}</option>
               {allParents
                 .filter(p => !selectedParentRole || p.role === selectedParentRole)
                 .map(p => <option key={p.username} value={p.username}>{p.username}</option>)
@@ -647,7 +692,7 @@ export default function TeamView({ onUnauth }: { onUnauth: () => void }) {
                         <RoleBadge role={a.role} />
                       </div>
                       <p className="text-xs text-slate-500 mt-1 truncate">
-                        {perms.length > 0 ? perms.join(", ") : t("admin.team.noPerms")}
+                         {perms.length > 0 ? perms.map(permission => t(TEAM_PERMISSION_LABEL_KEYS[permission] ?? permission)).join(", ") : t("admin.team.noPerms")}
                       </p>
                       {isAdmin && a.parent_username && (
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">

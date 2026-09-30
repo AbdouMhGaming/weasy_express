@@ -39,6 +39,12 @@ description: Full implementation of Expediteur user type, payout requests, team 
 - Created via `/api/admin/team` routes in expediteurs.ts.
 - Sub-accounts inherit parent role; permission subset shown in TeamView.tsx.
 
+Sender-team section permissions must be backed by matching server-side access, not only by visible navigation. Retain the legacy broad Ecotrack grant when adding narrower read-only sections; an empty permission set retains the project's existing all-sections behavior.
+
+**Why:** A checkbox for a section that its API rejects is misleading, and removing existing broad-grant access from older team accounts would break working pages.
+
+**How to apply:** Add new team section grants to both the form/server allowlist and the smallest relevant API reads; keep sensitive order mutations under the original broad Ecotrack grant. Hide options for features excluded from the public build.
+
 **Why:** Expediteur is a separate role from commercial. Keep expediteur CRUD routes separate from admin/office/finance/commercial routes to avoid coupling.
 
 ## Ecotrack analytics source

@@ -209,6 +209,7 @@ function SidebarInner({
     <button
       onClick={() => { setView(v); onClose(); }}
       title={isCollapsed ? label : undefined}
+      aria-label={isCollapsed ? label : undefined}
       aria-current={view === v ? "page" : undefined}
       className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#B80500] ${
         view === v ? "bg-[#b80500] text-white shadow-sm" : "text-[#353535] hover:text-[#a60702] hover:bg-[#fff0ee]"
@@ -237,7 +238,7 @@ function SidebarInner({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          {role !== "suivi" && toggleCollapse && (
+          {toggleCollapse && (
           <button onClick={toggleCollapse} title="Toggle Sidebar" aria-label="Toggle sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#514844] hover:text-[#a60702] hover:bg-[#fff0ee] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#B80500]">
             <svg className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
           </button>
@@ -518,8 +519,8 @@ function SidebarInner({
         <div className="flex-1" />
       )}
 
-      <div className={`px-3 pb-5 space-y-1 border-t border-[#eee3e1] pt-4 shrink-0 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
-        <div className={`gap-1 pb-2 ${isCollapsed ? "hidden" : "flex items-center px-3"}`}>
+      <div className={`px-3 pb-5 space-y-1 border-t border-[#eee3e1] pt-4 shrink-0 ${isCollapsed ? "md:flex md:flex-col md:items-center" : ""}`}>
+        <div className={`gap-1 pb-2 ${isCollapsed ? "flex items-center px-3 md:hidden" : "flex items-center px-3"}`}>
           {SUPPORTED_LANGUAGES.map((lng) => (
             <button
               key={lng}
@@ -2985,16 +2986,18 @@ export default function AdminDashboard() {
   }, [view, isPermitted, defaultView, setView, navigate]);
   const [showChangePass, setShowChangePass] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarStorageKey = isSuiviPath ? "suivi_sidebar_collapsed" : "admin_sidebar_collapsed";
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    return localStorage.getItem("admin_sidebar_collapsed") === "1";
+    const saved = localStorage.getItem(sidebarStorageKey);
+    return saved === null ? isSuiviPath : saved === "1";
   });
   const toggleCollapse = useCallback(() => {
     setIsCollapsed(prev => {
       const next = !prev;
-      localStorage.setItem("admin_sidebar_collapsed", next ? "1" : "0");
+      localStorage.setItem(sidebarStorageKey, next ? "1" : "0");
       return next;
     });
-  }, []);
+  }, [sidebarStorageKey]);
 
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(true);

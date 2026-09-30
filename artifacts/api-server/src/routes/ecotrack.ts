@@ -17,7 +17,7 @@ const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 const productUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-async function accountFor(req: AuthedRequest): Promise<any | null> {
+async function accountFor(req: AuthedRequest, requiredPermission: string | string[] = "ecotrack"): Promise<any | null> {
   if (req.adminRole !== "expediteur") return null;
   const conn = await pool.getConnection();
   try {
@@ -35,7 +35,9 @@ async function accountFor(req: AuthedRequest): Promise<any | null> {
       return null;
     }
     // Empty permissions retain the project's existing "all sections" behavior.
-    if (permissions.length > 0 && !permissions.includes("ecotrack")) return null;
+    if (!Array.isArray(permissions)) return null;
+    const required = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    if (permissions.length > 0 && !required.some(permission => permissions.includes(permission))) return null;
 
     const [[rootAccount]] = await conn.execute(
       "SELECT id, parent_id FROM admins WHERE id=? AND role='expediteur' AND parent_id IS NULL LIMIT 1",
@@ -44,8 +46,8 @@ async function accountFor(req: AuthedRequest): Promise<any | null> {
     return rootAccount ?? null;
   } finally { conn.release(); }
 }
-async function credentials(req: AuthedRequest) {
-  const account = await accountFor(req);
+async function credentials(req: AuthedRequest, requiredPermission: string | string[] = "ecotrack") {
+  const account = await accountFor(req, requiredPermission);
   if (!account) throw new EcotrackError("forbidden", 403, null);
   const conn = await pool.getConnection();
   try {
@@ -126,7 +128,7 @@ function percentChange(current: number, previous: number) {
 const createFields = ["reference", "nom_client", "telephone", "telephone_2", "adresse", "code_postal", "commune", "code_wilaya", "montant", "remarque", "produit", "stock", "quantite", "produit_a_recuperer", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
 const updateFields = ["tracking", "reference", "client", "tel", "tel2", "adresse", "code_postal", "commune", "wilaya", "montant", "remarque", "product", "boutique", "type", "stop_desk", "weight", "fragile", "gps_link"];
 
-async function upstream(req: AuthedRequest) { return credentials(req); }
+async function upstream(req: AuthedRequest, requiredPermission: string | string[] = "ecotrack") { return credentials(req, requiredPermission); }
 
 router.use("/expediteur/ecotrack", adminAuth);
 router.use("/admin/ecotrack", adminAuth);
@@ -139,7 +141,7 @@ const wilayaExpression = `CAST(COALESCE(
 
 router.get("/expediteur/ecotrack/reports", async (req: AuthedRequest, res) => {
   try {
-    const { expediteurId } = await credentials(req);
+    const { expediteurId } = await credentials(req, ["ecotrack", "ecotrack-reports"]);
     const from = analyticsDate(req.query.from), to = analyticsDate(req.query.to);
     const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
     const where = ["c.expediteur_id=?"];
@@ -176,7 +178,7 @@ router.get("/expediteur/ecotrack/reports", async (req: AuthedRequest, res) => {
 
 router.get("/expediteur/ecotrack/delays", async (req: AuthedRequest, res) => {
   try {
-    const { expediteurId } = await credentials(req);
+    const { expediteurId } = await credentials(req, ["ecotrack", "ecotrack-delays"]);
     const requestedStatus = normalizedStatus(req.query.status);
     const wilaya = Math.max(0, Math.min(58, Number(req.query.wilaya) || 0));
     const search = String(req.query.search ?? "").trim().slice(0, 255);
@@ -370,7 +372,7 @@ router.put("/admin/ecotrack/delay-thresholds", async (req: AuthedRequest, res) =
 
 router.get("/expediteur/ecotrack/dashboard", async (req: AuthedRequest, res) => {
   try {
-    const { expediteurId } = await credentials(req);
+    const { expediteurId } = await credentials(req, ["ecotrack", "ecotrack-dashboard"]);
     const conn = await pool.getConnection();
     try {
       const [[total]] = await conn.execute(`SELECT COUNT(*) total, COALESCE(SUM(montant),0) amount,
@@ -394,7 +396,7 @@ router.get("/expediteur/ecotrack/dashboard", async (req: AuthedRequest, res) => 
 
 router.get("/expediteur/ecotrack/analytics", async (req: AuthedRequest, res) => {
   try {
-    const { expediteurId } = await credentials(req);
+    const { expediteurId } = await credentials(req, ["ecotrack", "ecotrack-dashboard"]);
     const from = analyticsDate(req.query.from);
     const to = analyticsDate(req.query.to);
     const wilaya = String(req.query.wilaya ?? "").trim().slice(0, 16);
@@ -1011,7 +1013,7 @@ async function orderHistory(req: AuthedRequest, res: any) {
   try {
     let ownerId: number | null = null;
     if (req.adminRole === "expediteur") {
-      const account = await accountFor(req);
+      const account = await accountFor(req, ["ecotrack", "ecotrack-dashboard", "ecotrack-delays"]);
       ownerId = account?.id ?? null;
     } else if (req.adminRole === "admin" || req.adminRole === "admin_team" || req.adminRole === "suivi") {
       const requestedOwner = Number(req.query.expediteurId ?? req.query.ownerId);
@@ -1056,7 +1058,7 @@ async function orderRemarks(req: AuthedRequest, res: any) {
   if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
   try {
     const ownerId = req.adminRole === "expediteur"
-      ? (await accountFor(req))?.id
+      ? (await accountFor(req, ["ecotrack", "ecotrack-dashboard", "ecotrack-delays"]))?.id
       : Number(req.query.expediteurId);
     if (req.adminRole !== "expediteur" && (!Number.isInteger(ownerId) || ownerId <= 0)) {
       return res.status(400).json({ ok: false, error: "expediteurId_required" });
@@ -1108,7 +1110,7 @@ router.get("/suivi/ecotrack/orders/:tracking/remarks", orderRemarks);
 async function notificationScope(req: AuthedRequest, conn: any) {
   if (req.adminRole === "admin" || req.adminRole === "suivi") return null;
   if (req.adminRole === "expediteur") {
-    const account = await accountFor(req);
+    const account = await accountFor(req, ["ecotrack", "ecotrack-dashboard"]);
     return account?.id ?? -1;
   }
   return -1;
@@ -1296,7 +1298,10 @@ router.put("/expediteur/ecotrack/products/:id", productUpload.single("photo"), a
 
 for (const [name, path] of Object.entries({ wilayas: "/api/v1/get/wilayas", communes: "/api/v1/get/communes", desks: "/api/v1/get/desks", fees: "/api/v1/get/fees", products: "/api/v1/get/products/list" })) {
   router.get(`/expediteur/ecotrack/${name}`, async (req: AuthedRequest, res) => {
-    try { const { expediteurId, token } = await upstream(req); const suffix = name === "communes" ? `:${String(req.query.wilaya_id ?? "")}` : name === "products" ? `:${String(req.query.page ?? 1)}` : "";
+    try {
+      const requiredPermission = name === "wilayas" ? ["ecotrack", "ecotrack-dashboard"] : "ecotrack";
+      const { expediteurId, token } = await upstream(req, requiredPermission);
+      const suffix = name === "communes" ? `:${String(req.query.wilaya_id ?? "")}` : name === "products" ? `:${String(req.query.page ?? 1)}` : "";
       const key = `${expediteurId}:${name}${suffix}`, saved = references.get(key);
       if (saved && saved.until > Date.now()) return res.json({ ok: true, data: saved.value, cached: true });
       const result = await ecotrackRequest(token, path, { params: name === "communes" ? { wilaya_id: req.query.wilaya_id } : name === "products" ? { page: req.query.page } : {} });

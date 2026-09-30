@@ -9,7 +9,7 @@ import { queueEcotrackFullSync, withEcotrackAccountLock } from "../lib/ecotrackS
 const router = Router();
 const TEAM_PERMISSIONS: Record<string, string[]> = {
   office: ["office-dashboard","expediteurs","queue","payouts","team","returns","merchants","messaging","analytics"],
-  expediteur: ["ecotrack","ecotrack-desks","ecotrack-fees","ecotrack-products","queue","payouts","team"],
+  expediteur: ["ecotrack-dashboard","ecotrack","ecotrack-desks","ecotrack-fees","ecotrack-products","ecotrack-reports","ecotrack-delays","queue","payouts","team"],
   admin_team: ["ecotrack","team","expediteurs","queue","payouts","returns","merchants","messaging","analytics","users"],
 };
 // Scope the guard to this router's non-admin prefix. /admin routes are already
