@@ -1076,7 +1076,11 @@ async function orderRemarks(req: AuthedRequest, res: any) {
       ) as any;
       if (!row) return res.status(404).json({ ok: false, error: "order_not_found" });
       if (!row.token_ciphertext) return res.status(409).json({ ok: false, error: "ecotrack_not_connected" });
-      token = ecotrackToken(row.token_ciphertext, row.token_iv, row.token_auth_tag);
+      try {
+        token = ecotrackToken(row.token_ciphertext, row.token_iv, row.token_auth_tag);
+      } catch {
+        return res.status(409).json({ ok: false, error: "ecotrack_credentials_reconnect_required" });
+      }
     } finally { conn.release(); }
 
     // This is Ecotrack's actual remark history (station, driver, sender), not
@@ -1086,7 +1090,16 @@ async function orderRemarks(req: AuthedRequest, res: any) {
       : Array.isArray(response.body?.data) ? response.body.data : null;
     if (!remarks) throw new EcotrackError("Invalid Ecotrack remark history", 502, null);
     return res.json({ ok: true, remarks });
-  } catch (e) { return error(res, e); }
+  } catch (e) {
+    // An upstream Ecotrack 401 means this Expediteur's API credential needs
+    // attention; it is not a failed Suivi session. Keep portal 401s reserved
+    // for the suiviAuth middleware so authenticatedFetch cannot log out a
+    // valid cross-account reader.
+    if (e instanceof EcotrackError && e.status === 401) {
+      return error(res, new EcotrackError("Ecotrack credentials are invalid", 502, e.body, e.retryAfter, true));
+    }
+    return error(res, e);
+  }
 }
 router.get("/expediteur/ecotrack/orders/:tracking/remarks", orderRemarks);
 router.get("/admin/ecotrack/orders/:tracking/remarks", orderRemarks);

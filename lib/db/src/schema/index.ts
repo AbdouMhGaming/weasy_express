@@ -95,6 +95,7 @@ export const chargesTable = mysqlTable("charges", {
   amountDzd: int("amount_dzd").notNull().default(0),
   description: text("description"),
   chargeDate: varchar("charge_date", { length: 10 }).notNull(),
+  createdBy: varchar("created_by", { length: 100 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

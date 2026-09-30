@@ -64,14 +64,14 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-4" dir="ltr">
+    <div className="min-h-[100dvh] bg-[#f8f5f3] flex items-center justify-center p-4 sm:p-8" dir="ltr">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+        <div className="bg-[#fffdfb] rounded-2xl shadow-[0_20px_70px_rgba(36,32,31,.09)] border border-[#e8dfda] overflow-hidden">
           <div className="h-2 bg-gradient-to-r from-[#E10600] to-[#B80500]" />
           <div className="px-8 py-10">
             {/* Logo + lang switcher */}
             <div className="flex items-center justify-between mb-8">
-              <img src={logoPath} alt="Weasy Express" className="h-12 w-auto object-contain" />
+              <img src={logoPath} alt="Weasy Express" className="h-20 w-auto object-contain -my-3" />
               <div className="flex items-center gap-1">
                 {SUPPORTED_LANGUAGES.map((lng) => (
                   <button

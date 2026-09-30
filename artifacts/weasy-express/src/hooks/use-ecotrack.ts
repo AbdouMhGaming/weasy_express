@@ -135,31 +135,26 @@ export function useEcotrackOrders(
 
 // Order details
 export function useEcotrackOrderDetail(tracking: string, expediteurId?: number | string, enabled = true) {
+  const endpoint = getDynamicBase();
   return useQuery({
-    queryKey: ["ecotrack", "order", tracking, expediteurId],
+    queryKey: ["ecotrack", endpoint, "order", tracking, expediteurId],
     queryFn: async () => {
-      let url = `${getDynamicBase()}/orders/${encodeURIComponent(tracking)}/history`;
+      let url = `${endpoint}/orders/${encodeURIComponent(tracking)}/history`;
       if (expediteurId && typeof window !== "undefined" && !window.location.pathname.startsWith("/expediteurs")) {
         url += `?expediteurId=${expediteurId}`;
       }
-       // Do not use authenticatedFetch here: a detail request can legitimately
-       // fail with 400/404 when the owner pairing is stale, and a transient
-       // detail failure must never clear an otherwise valid Suivi session.
-       // Keep the portal token explicit so this request cannot inherit an
-       // admin/expediteur token from another tab.
-       const headers = typeof window !== "undefined" && window.location.pathname.startsWith("/suivi")
-         ? { ...adminHeaders(), Authorization: `Bearer ${localStorage.getItem("suivi_token") ?? ""}` }
-         : adminHeaders();
-       const res = await globalThis.fetch(url, { headers });
-       if (res.status === 401) throw new Error("detail_unauthorized");
-       if (res.status === 403 || res.status === 409) throw new Error("disconnected");
+      // A 401 on this local API route can only mean the portal session is no
+      // longer valid. Owner mismatches and missing orders are 4xx responses
+      // (for example 404) and must not clear a valid Suivi session.
+      const res = await fetch(url, { headers: adminHeaders() });
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
 
       return { ...body, info: body.order };
     },
     enabled: !!tracking && enabled,
-    refetchInterval: 30_000,
+    retry: false,
+    refetchInterval: false,
   });
 }
 
@@ -175,14 +170,15 @@ export interface EcotrackRemark {
 }
 
 export function useEcotrackRemarks(tracking: string, expediteurId?: number | string, enabled = true) {
+  const endpoint = getDynamicBase();
   return useQuery({
-    queryKey: ["ecotrack", "remarks", tracking, expediteurId],
+    queryKey: ["ecotrack", endpoint, "remarks", tracking, expediteurId],
     queryFn: async (): Promise<EcotrackRemark[]> => {
       const params = new URLSearchParams();
       if (expediteurId && !window.location.pathname.startsWith("/expediteurs")) {
         params.set("expediteurId", String(expediteurId));
       }
-      const url = `${getDynamicBase()}/orders/${encodeURIComponent(tracking)}/remarks${params.size ? `?${params}` : ""}`;
+      const url = `${endpoint}/orders/${encodeURIComponent(tracking)}/remarks${params.size ? `?${params}` : ""}`;
       const res = await fetch(url, { headers: adminHeaders() });
       const body = await readApiJson(res);
       if (!res.ok || !body.ok) throw new Error(body.error || "load_failed");
@@ -190,6 +186,9 @@ export function useEcotrackRemarks(tracking: string, expediteurId?: number | str
       return body.remarks;
     },
     enabled: !!tracking && enabled,
+    retry: false,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
 }

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { API_BASE, adminHeaders, getSessionRole } from "@/lib/api";
 import { usePagination, PaginationBar } from "@/components/Pagination";
-import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type ChargeType = "outcome" | "income";
 
@@ -10,13 +9,19 @@ interface Category { id: number; cat_key: string; name: string; icon: string; pa
 interface Charge {
   id: number; category: string; amount_dzd: number;
   description: string | null; charge_date: string; type: ChargeType;
-  attachment_name: string | null; created_at: string;
+  attachment_name: string | null; created_at: string | Date; created_by: string | null;
 }
 
 const fmtN = (n: number) => n.toLocaleString("fr-DZ");
 const fmtD = (s: string) => {
   try { return new Date(s).toLocaleDateString("fr-DZ", { day: "2-digit", month: "short", year: "numeric" }); }
   catch { return s; }
+};
+const fmtTimestamp = (value: string | Date) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString("fr-DZ", { dateStyle: "medium", timeStyle: "medium" });
 };
 const MAX_FILE_MB = 10;
 
@@ -40,6 +45,8 @@ function TrashIcon() {
 export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const { t } = useTranslation();
   const role = useMemo(() => getSessionRole(), []);
+  const onUnauthRef = useRef(onUnauth);
+  onUnauthRef.current = onUnauth;
 
   const [cats, setCats] = useState<Category[]>([]);
   const [summary, setSummary] = useState<{ byCategory: Record<string, number>; totalCharges: number; totalIncome: number } | null>(null);
@@ -47,6 +54,10 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const [loading, setLoading] = useState(true);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterSubCategory, setFilterSubCategory] = useState("");
+  const [outcomeSort, setOutcomeSort] = useState<"newest" | "oldest" | "amount-desc" | "amount-asc">("newest");
+  const [incomeSort, setIncomeSort] = useState<"newest" | "oldest" | "amount-desc" | "amount-asc">("newest");
   const [chargePreset, setChargePreset] = useState<"all" | "today" | "yesterday" | "7d" | "30d">("all");
 
   function applyChargePreset(preset: "all" | "today" | "yesterday" | "7d" | "30d") {
@@ -114,7 +125,6 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (filterFrom) qs.set("from", filterFrom);
@@ -124,15 +134,14 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
         fetch(`${API_BASE}/api/admin/charges-summary${q}`, { headers: adminHeaders() }),
         fetch(`${API_BASE}/api/admin/charges${q}`, { headers: adminHeaders() }),
       ]);
-      if (s.status === 401) { onUnauth(); return; }
+      if (s.status === 401 || c.status === 401) { onUnauthRef.current(); return; }
       const [sd, cd] = await Promise.all([s.json(), c.json()]);
       if (sd.ok) setSummary(sd);
       if (cd.ok) setCharges(cd.charges ?? []);
     } catch { } finally { setLoading(false); }
-  }, [filterFrom, filterTo, onUnauth]);
+  }, [filterFrom, filterTo]);
 
   useEffect(() => { fetchCategories(); fetchAll(); }, [fetchCategories, fetchAll]);
-  useAutoRefresh(fetchAll, 30_000);
 
   function resetChgModal() {
     setChgAmt(""); setChgDesc(""); setChgFile(null); setChgFileErr(""); setChgSubCat("");
@@ -202,8 +211,24 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
     fetchAll();
   }
 
-  const outcomes = useMemo(() => charges.filter(c => c.type === "outcome" || !c.type), [charges]);
-  const incomes = useMemo(() => charges.filter(c => c.type === "income"), [charges]);
+  const visibleCharges = useMemo(() => {
+    if (!filterCategory) return filterSubCategory ? charges.filter(c => c.category === filterSubCategory) : charges;
+    const children = childrenOf(filterCategory).map(c => c.cat_key);
+    return charges.filter(c => filterSubCategory
+      ? c.category === filterSubCategory
+      : c.category === filterCategory || children.includes(c.category));
+  }, [charges, filterCategory, filterSubCategory, childrenOf]);
+  const sortCharges = useCallback((items: Charge[], sort: "newest" | "oldest" | "amount-desc" | "amount-asc") => {
+    return [...items].sort((a, b) => {
+      if (sort === "amount-desc") return Number(b.amount_dzd) - Number(a.amount_dzd);
+      if (sort === "amount-asc") return Number(a.amount_dzd) - Number(b.amount_dzd);
+      const aDate = new Date(a.created_at).getTime();
+      const bDate = new Date(b.created_at).getTime();
+      return sort === "newest" ? bDate - aDate : aDate - bDate;
+    });
+  }, []);
+  const outcomes = useMemo(() => sortCharges(visibleCharges.filter(c => c.type === "outcome" || !c.type), outcomeSort), [visibleCharges, outcomeSort, sortCharges]);
+  const incomes = useMemo(() => sortCharges(visibleCharges.filter(c => c.type === "income"), incomeSort), [visibleCharges, incomeSort, sortCharges]);
   const pagedOutcomes = usePagination(outcomes);
   const pagedIncomes = usePagination(incomes);
   const totalOutcome = summary?.totalCharges ?? 0;
@@ -211,6 +236,44 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
   const balance = totalIncome - totalOutcome;
 
   const getCat = (key: string) => cats.find(c => c.cat_key === key);
+
+  function printLedger(title: string, sections: Array<{ title: string; rows: Charge[] }>) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.alert(t("admin.charges.print.popupsBlocked"));
+      return;
+    }
+    const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+    })[char]!);
+    const sectionMarkup = sections.map(section => `
+      <section><h2>${escapeHtml(section.title)}</h2>
+        <table><thead><tr>
+          <th>${escapeHtml(t("admin.charges.print.category"))}</th>
+          <th>${escapeHtml(t("admin.charges.print.description"))}</th>
+          <th>${escapeHtml(t("admin.charges.print.chargeDate"))}</th>
+          <th>${escapeHtml(t("admin.charges.print.addedBy"))}</th>
+          <th>${escapeHtml(t("admin.charges.print.addedAt"))}</th>
+          <th>${escapeHtml(t("admin.charges.print.amount"))}</th>
+        </tr></thead>
+        <tbody>${section.rows.map(charge => `<tr>
+          <td>${escapeHtml(getCat(charge.category)?.name ?? charge.category)}</td>
+          <td>${escapeHtml(charge.description || "—")}</td>
+          <td>${escapeHtml(fmtD(charge.charge_date))}</td>
+          <td>${escapeHtml(charge.created_by || "—")}</td>
+          <td>${escapeHtml(fmtTimestamp(charge.created_at))}</td>
+          <td class="amount">${escapeHtml(fmtN(Number(charge.amount_dzd)))}</td>
+        </tr>`).join("")}</tbody></table>
+      </section>`).join("");
+    const generatedAt = new Date().toLocaleString();
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+      <style>body{font:14px Arial,sans-serif;color:#222;margin:28px}h1{font-size:22px}h2{font-size:17px;margin-top:24px}p{color:#666}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{text-align:left;border:1px solid #ddd;padding:8px}th{background:#f3f3f3}.amount{text-align:right;font-weight:bold}@media print{body{margin:10mm}}</style>
+      </head><body><h1>${escapeHtml(title)}</h1><p>${escapeHtml(t("admin.charges.print.generated", { date: generatedAt }))}</p>${sectionMarkup}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  }
 
   // Token for attachment links (avoid 401 in new tab)
   const adminToken = localStorage.getItem("admin_token") ?? "";
@@ -291,6 +354,13 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           <p className="text-sm text-gray-500 mt-0.5">{t("admin.charges.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => printLedger("Charges and income", [
+            { title: t("admin.charges.list.chargesTitle"), rows: outcomes },
+            { title: t("admin.charges.list.incomeTitle"), rows: incomes },
+          ])}
+            className="flex items-center gap-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl transition-colors">
+            {t("admin.charges.print.both")}
+          </button>
           <button onClick={() => setShowIncome(true)}
             className="flex items-center gap-2 text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-sm transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
@@ -339,6 +409,30 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
             <button onClick={() => { setFilterFrom(""); setFilterTo(""); setChargePreset("all"); }} className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.reset")}</button>
           )}
         </div>
+        <div className="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.filters.category")}</label>
+            <select value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setFilterSubCategory(""); }}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]">
+              <option value="">{t("admin.charges.filters.allCategories")}</option>
+              {parentCats.map(c => <option key={c.cat_key} value={c.cat_key}>{c.name}</option>)}
+            </select>
+          </div>
+          {filterCategory && childrenOf(filterCategory).length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">{t("admin.charges.filters.subCategory")}</label>
+              <select value={filterSubCategory} onChange={(e) => setFilterSubCategory(e.target.value)}
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#E10600]/30 focus:border-[#E10600]">
+                <option value="">{t("admin.charges.filters.allSubCategories")}</option>
+                {childrenOf(filterCategory).map(c => <option key={c.cat_key} value={c.cat_key}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          {(filterCategory || filterSubCategory) && (
+            <button onClick={() => { setFilterCategory(""); setFilterSubCategory(""); }}
+              className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">{t("admin.charges.filters.clearCategory")}</button>
+          )}
+        </div>
       </div>
 
       {/* KPI Row */}
@@ -347,7 +441,7 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
           { label: t("admin.charges.kpi.totalOutcome"), value: totalOutcome, color: "text-[#E10600]" },
           { label: t("admin.charges.kpi.totalIncome"), value: totalIncome, color: "text-emerald-600" },
           { label: t("admin.charges.kpi.balance"), value: balance, color: balance >= 0 ? "text-emerald-600" : "text-[#E10600]" },
-          { label: t("admin.charges.kpi.entries"), value: charges.length, color: "text-gray-900", noDzd: true },
+          { label: t("admin.charges.kpi.entries"), value: visibleCharges.length, color: "text-gray-900", noDzd: true },
         ].map((k) => (
           <div key={k.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             {loading ? <Spinner /> : (
@@ -389,7 +483,16 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               <span className="w-2.5 h-2.5 rounded-full bg-[#E10600] shrink-0" />
               <h2 className="font-bold text-gray-900">{t("admin.charges.list.chargesTitle")}</h2>
             </div>
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{outcomes.length}</span>
+            <div className="flex items-center gap-2">
+              <select aria-label={t("admin.charges.sort.charges")} value={outcomeSort} onChange={(e) => setOutcomeSort(e.target.value as typeof outcomeSort)}
+                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                <option value="newest">{t("admin.charges.sort.newest")}</option><option value="oldest">{t("admin.charges.sort.oldest")}</option>
+                <option value="amount-desc">{t("admin.charges.sort.highestAmount")}</option><option value="amount-asc">{t("admin.charges.sort.lowestAmount")}</option>
+              </select>
+              <button onClick={() => printLedger(t("admin.charges.list.chargesTitle"), [{ title: t("admin.charges.list.chargesTitle"), rows: outcomes }])}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">{t("admin.charges.print.charges")}</button>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{outcomes.length}</span>
+            </div>
           </div>
           {loading ? (
             <div className="py-16 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.charges.loading")}</div>
@@ -405,8 +508,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800">{cat?.name ?? c.category}</p>
                       {c.description && <p className="text-xs text-gray-500 truncate">{c.description}</p>}
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <p className="text-xs text-gray-400">{fmtD(c.charge_date)}</p>
+                        <p className="text-xs text-gray-400">{t("admin.charges.addedBy", { user: c.created_by || "—", date: fmtTimestamp(c.created_at) })}</p>
                         {c.attachment_name && (
                           <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment?token=${encodeURIComponent(adminToken)}`} target="_blank" rel="noopener noreferrer"
                             className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 font-medium">
@@ -435,7 +539,16 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
               <h2 className="font-bold text-gray-900">{t("admin.charges.list.incomeTitle")}</h2>
             </div>
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{incomes.length}</span>
+            <div className="flex items-center gap-2">
+              <select aria-label={t("admin.charges.sort.income")} value={incomeSort} onChange={(e) => setIncomeSort(e.target.value as typeof incomeSort)}
+                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                <option value="newest">{t("admin.charges.sort.newest")}</option><option value="oldest">{t("admin.charges.sort.oldest")}</option>
+                <option value="amount-desc">{t("admin.charges.sort.highestAmount")}</option><option value="amount-asc">{t("admin.charges.sort.lowestAmount")}</option>
+              </select>
+              <button onClick={() => printLedger(t("admin.charges.list.incomeTitle"), [{ title: t("admin.charges.list.incomeTitle"), rows: incomes }])}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">{t("admin.charges.print.income")}</button>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-semibold">{incomes.length}</span>
+            </div>
           </div>
           {loading ? (
             <div className="py-16 flex items-center justify-center gap-2 text-gray-400 text-sm"><Spinner />{t("admin.charges.loading")}</div>
@@ -451,8 +564,9 @@ export default function ChargesView({ onUnauth }: { onUnauth: () => void }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800">{cat?.name ?? c.category}</p>
                       {c.description && <p className="text-xs text-gray-500 truncate">{c.description}</p>}
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <p className="text-xs text-gray-400">{fmtD(c.charge_date)}</p>
+                        <p className="text-xs text-gray-400">{t("admin.charges.addedBy", { user: c.created_by || "—", date: fmtTimestamp(c.created_at) })}</p>
                         {c.attachment_name && (
                           <a href={`${API_BASE}/api/admin/charges/${c.id}/attachment?token=${encodeURIComponent(adminToken)}`} target="_blank" rel="noopener noreferrer"
                             className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 font-medium">

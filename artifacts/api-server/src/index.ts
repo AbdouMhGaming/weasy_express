@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureEcotrackStorage, startEcotrackLiveSync } from "./lib/ecotrackSync";
+import { ensureChargesStorage } from "./lib/chargesStorage";
 
 const rawPort = process.env["PORT"];
 const parsed = rawPort ? Number(rawPort) : NaN;
@@ -22,6 +23,11 @@ const server = app.listen(port, host, async () => {
     startEcotrackLiveSync();
   } catch (err) {
     logger.error({ err }, "Ecotrack storage initialization failed");
+  }
+  try {
+    await ensureChargesStorage();
+  } catch (err) {
+    logger.error({ err }, "Charges audit storage initialization failed");
   }
 });
 

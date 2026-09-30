@@ -1013,8 +1013,14 @@ router.get("/admin/charges-summary", adminAuth, financeOrAdminOnly, async (req, 
       if (q.from) { where += " AND charge_date >= ?"; params.push(q.from); }
       if (q.to) { where += " AND charge_date <= ?"; params.push(q.to); }
       const [catRows] = await conn.execute(
-        `SELECT category, SUM(amount_dzd) as total FROM charges ${where} AND type = 'outcome' GROUP BY category`, params
-      ) as [Array<{ category: string; total: string | number }>, unknown];
+        `SELECT COALESCE(parent.cat_key, category.cat_key) AS parent_category,
+                SUM(charges.amount_dzd) AS total
+           FROM charges
+           LEFT JOIN charge_categories AS category ON category.cat_key = charges.category
+           LEFT JOIN charge_categories AS parent ON parent.id = category.parent_id
+          ${where} AND charges.type = 'outcome'
+          GROUP BY COALESCE(parent.cat_key, category.cat_key)`, params
+      ) as [Array<{ parent_category: string; total: string | number }>, unknown];
       const [outcomeRows] = await conn.execute(
         `SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges ${where} AND type = 'outcome'`, params
       ) as [Array<{ total: string | number }>, unknown];
@@ -1022,7 +1028,7 @@ router.get("/admin/charges-summary", adminAuth, financeOrAdminOnly, async (req, 
         `SELECT COALESCE(SUM(amount_dzd), 0) as total FROM charges ${where} AND type = 'income'`, params
       ) as [Array<{ total: string | number }>, unknown];
       const byCategory: Record<string, number> = {};
-      for (const r of catRows) byCategory[r.category] = Number(r.total);
+      for (const r of catRows) if (r.parent_category) byCategory[r.parent_category] = Number(r.total);
       res.json({
         ok: true, byCategory,
         totalCharges: Number(outcomeRows[0]?.total ?? 0),
@@ -1048,8 +1054,14 @@ router.get("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) => 
       if (q.category) { where += " AND category = ?"; params.push(q.category); }
       if (q.type) { where += " AND type = ?"; params.push(q.type); }
       const [rows] = await conn.execute(
-        `SELECT id, category, amount_dzd, description, charge_date, type, attachment_name, created_at FROM charges ${where} ORDER BY charge_date DESC, created_at DESC`, params
-      );
+        `SELECT id, category, amount_dzd, description, charge_date, type,
+                attachment_name, created_at, created_by
+           FROM charges ${where} ORDER BY charge_date DESC, created_at DESC`, params
+      ) as [Array<{
+        id: number; category: string; amount_dzd: number; description: string | null;
+        charge_date: string; type: "outcome" | "income"; attachment_name: string | null;
+        created_at: string | Date; created_by: string | null;
+      }>, unknown];
       res.json({ ok: true, charges: rows });
     } finally { conn.release(); }
   } catch (err) {
@@ -1127,8 +1139,8 @@ router.post("/admin/charges", adminAuth, financeOrAdminOnly, async (req, res) =>
         res.status(400).json({ ok: false, error: "invalid_category" }); return;
       }
       await conn.execute(
-        "INSERT INTO charges (category, amount_dzd, description, charge_date, type, attachment_name, attachment_data) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [category, amount, description, chargeDate, type, attachmentName, attachmentData]
+        "INSERT INTO charges (category, amount_dzd, description, charge_date, type, attachment_name, attachment_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [category, amount, description, chargeDate, type, attachmentName, attachmentData, (req as AuthedRequest).adminUsername ?? null]
       );
       res.json({ ok: true });
     } finally { conn.release(); }

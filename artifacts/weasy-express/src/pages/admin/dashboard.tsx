@@ -96,13 +96,13 @@ function wilayaHeatColor(count: number, maxCount: number): string {
 
 const STATUS_COLOR: Record<PartnerStatus, string> = {
   pending: "bg-amber-100 text-amber-800",
-  reviewing: "bg-blue-100 text-blue-800",
+  reviewing: "bg-red-50 text-red-800",
   approved: "bg-emerald-100 text-emerald-800",
   rejected: "bg-red-100 text-red-800",
 };
 const ORDER_STATUS_STYLE: Record<OrderStatus, string> = {
   pending: "bg-amber-100 text-amber-700",
-  in_transit: "bg-blue-100 text-blue-700",
+  in_transit: "bg-red-50 text-red-800",
   delivered: "bg-emerald-100 text-emerald-700",
   returned: "bg-orange-100 text-orange-700",
   failed: "bg-red-100 text-red-700",
@@ -110,7 +110,7 @@ const ORDER_STATUS_STYLE: Record<OrderStatus, string> = {
 };
 const ROLE_COLOR: Record<AdminRole, string> = {
   admin: "bg-purple-100 text-purple-800",
-  office: "bg-blue-100 text-blue-800",
+  office: "bg-red-50 text-red-800",
   finance: "bg-emerald-100 text-emerald-800",
   commercial: "bg-orange-100 text-orange-800",
   expediteur: "bg-amber-100 text-amber-800",
@@ -188,7 +188,7 @@ function SidebarInner({
   const [isSettingsOpen, setIsSettingsOpen] = useState(view === "profile" || view === "ecotrack-settings");
 
   const groupHeader = (label: string) => (
-    <div className={`px-3 pt-4 pb-2 text-[10px] font-bold text-white/40 uppercase tracking-widest ${isCollapsed ? "md:sr-only" : ""}`}>
+    <div className={`px-3 pt-5 pb-2 text-[10px] font-bold text-white/65 uppercase tracking-[.16em] ${isCollapsed ? "md:sr-only" : ""}`}>
       {label}
     </div>
   );
@@ -209,35 +209,36 @@ function SidebarInner({
     <button
       onClick={() => { setView(v); onClose(); }}
       title={isCollapsed ? label : undefined}
-      className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-        view === v ? "bg-[#E10600] text-white shadow-lg shadow-red-900/30" : "text-white/60 hover:text-white hover:bg-white/5"
+      aria-current={view === v ? "page" : undefined}
+      className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+        view === v ? "bg-[#E10600] text-white shadow-sm" : "text-white/80 hover:text-white hover:bg-white/10"
       }`}
     >
       {icon}
       <span className={isCollapsed ? "md:hidden" : ""}>{label}</span>
       {badge > 0 && (
-        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${view === v ? "bg-white/20 text-white" : "bg-white/10 text-white/60"} ${isCollapsed ? "md:hidden" : ""}`}>{badge}</span>
+        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${view === v ? "bg-white/20 text-white" : "bg-white/15 text-white"} ${isCollapsed ? "md:hidden" : ""}`}>{badge}</span>
       )}
     </button>
   );
 
   return (
-    <aside className={`fixed inset-y-0 left-0 bg-[#0F172A] flex flex-col z-40 shadow-xl transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"} ${isCollapsed ? "w-64 md:w-[72px]" : "w-64"}`}>
-      <div className={`px-5 py-5 border-b border-white/10 flex flex-col ${isCollapsed ? "md:items-center md:px-2" : ""}`}>
+    <aside className={`fixed inset-y-0 left-0 bg-[#24201F] flex flex-col z-40 shadow-[4px_0_24px_rgba(38,19,17,.08)] transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"} ${isCollapsed ? "w-64 md:w-[72px]" : "w-64"}`}>
+      <div className={`px-5 py-6 border-b border-white/15 border-t-[3px] border-t-[#E10600] flex flex-col ${isCollapsed ? "md:items-center md:px-2" : ""}`}>
         <img src={logoWhitePath} alt="Weasy Express" className={`object-contain transition-all duration-300 ${isCollapsed ? "h-8 w-12" : "h-10 w-auto"}`} />
-        <p className={`text-white/40 text-xs mt-2 font-medium uppercase tracking-widest ${isCollapsed ? "md:hidden" : ""}`}>{t("admin.sidebar.label")}</p>
+        <p className={`text-white/70 text-[10px] mt-3 font-bold uppercase tracking-[.18em] ${isCollapsed ? "md:hidden" : ""}`}>{t("admin.sidebar.label")}</p>
       </div>
 
       <div className={`px-5 py-3 border-b border-white/5 flex items-center gap-2 ${isCollapsed ? "md:justify-center md:px-2" : "justify-between"}`}>
         <div className={isCollapsed ? "md:hidden" : ""}>
-          <p className="text-white/80 text-xs font-semibold truncate">{username}</p>
+          <p className="text-white text-xs font-semibold truncate">{username}</p>
           <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full mt-1 ${ROLE_COLOR[role]}`}>
             {t(`admin.roles.${role}`)}
           </span>
         </div>
         <div className="flex items-center gap-1">
           {role !== "suivi" && toggleCollapse && (
-          <button onClick={toggleCollapse} title="Toggle Sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all">
+          <button onClick={toggleCollapse} title="Toggle Sidebar" className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 hover:text-white hover:bg-white/10 transition-all">
             <svg className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
           </button>
         )}
@@ -268,7 +269,7 @@ function SidebarInner({
           {!HOSTINGER_PUBLIC_BUILD && (isPermitted("ecotrack-delays") || isPermitted("ecotrack-delay-configuration")) && (
             <div>
               <button type="button" onClick={() => setIsDelaysOpen(open => !open)}
-                aria-expanded={isDelaysOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 ${isCollapsed ? "md:justify-center" : ""}`}
+                aria-expanded={isDelaysOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 ${isCollapsed ? "md:justify-center" : ""}`}
                 title={isCollapsed ? t("admin.sidebar.ecotrackDelays") : undefined}>
                 <Clock className="w-5 h-5 shrink-0" />
                 <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.ecotrackDelays")}</span>
@@ -390,8 +391,8 @@ function SidebarInner({
                 title={isCollapsed ? t("admin.ecotrackPortal.nav") : undefined}
                 className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   view.startsWith("ecotrack-status-")
-                    ? "bg-white/10 text-white"
-                    : "text-white/60 hover:text-white hover:bg-white/5"
+                    ? "bg-white/15 text-white"
+                    : "text-white/80 hover:text-white hover:bg-white/10"
                 }`}
               >
                 <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7h-3V4H3a2 2 0 00-2 2v11h2a3 3 0 006 0h6a3 3 0 006 0h2v-5l-3-5zM6 19a2 2 0 110-4 2 2 0 010 4zm12 0a2 2 0 110-4 2 2 0 010 4zM17 9h2l2 3h-4V9z" /></svg>
@@ -416,7 +417,7 @@ function SidebarInner({
                         className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors ${
                           active
                             ? "bg-[#E10600] text-white font-semibold"
-                            : "text-white/55 hover:bg-white/5 hover:text-white"
+                            : "text-white/80 hover:bg-white/10 hover:text-white"
                         }`}
                       >
                         <span className="min-w-0 flex-1 truncate text-start" title={humanizeEcotrackStatus(status, t)}>
@@ -424,7 +425,7 @@ function SidebarInner({
                         </span>
                         {Number(item.count) > 0 && (
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                            active ? "bg-white/20 text-white" : "bg-white/10 text-white/50"
+                            active ? "bg-white/20 text-white" : "bg-white/15 text-white"
                           }`}>
                             {item.count}
                           </span>
@@ -478,7 +479,7 @@ function SidebarInner({
                 setIsSettingsOpen(true);
               } else setIsSettingsOpen(open => !open);
             }}
-              aria-expanded={isSettingsOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 ${isCollapsed ? "md:justify-center" : ""}`}
+              aria-expanded={isSettingsOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 ${isCollapsed ? "md:justify-center" : ""}`}
               title={isCollapsed ? t("admin.sidebar.settings") : undefined}>
               <Settings2 className="w-5 h-5 shrink-0" />
               <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.settings")}</span>
@@ -491,7 +492,7 @@ function SidebarInner({
               {!HOSTINGER_PUBLIC_BUILD && !sidebarIsTeam && navItem("ecotrack-settings", t("admin.sidebar.api"), 0,
                 <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               )}
-              <button onClick={onLogout} title={isCollapsed ? t("admin.sidebar.logout") : undefined} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all`}>
+              <button onClick={onLogout} title={isCollapsed ? t("admin.sidebar.logout") : undefined} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition-all`}>
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                 <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.logout")}</span>
               </button>
@@ -524,18 +525,18 @@ function SidebarInner({
               key={lng}
               onClick={() => i18n.changeLanguage(lng)}
               className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${
-                i18n.language === lng ? "bg-white/20 text-white" : "text-white/40 hover:text-white hover:bg-white/10"
+                i18n.language === lng ? "bg-[#E10600] text-white" : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
               {LANG_LABELS[lng]}
             </button>
           ))}
         </div>
-        {role !== "expediteur" && <><button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
+        {role !== "expediteur" && <><button onClick={onChangePassword} title={t("admin.sidebar.changePassword")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
           <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.changePassword")}</span>
         </button>
-        <button onClick={onLogout} title={t("admin.sidebar.logout")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all`}>
+        <button onClick={onLogout} title={t("admin.sidebar.logout")} className={`w-full flex items-center ${isCollapsed ? "md:justify-center" : ""} gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition-all`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
           <span className={isCollapsed ? "md:hidden" : ""}>{t("admin.sidebar.logout")}</span>
         </button></>}
@@ -878,7 +879,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
   const kpiCards = useMemo(() => stats ? [
     { label: t("admin.dashboard.kpi.total"), value: stats.total, color: "from-slate-600 to-slate-700", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
     { label: t("admin.dashboard.kpi.delivered"), value: stats.delivered, color: "from-emerald-500 to-emerald-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-    { label: t("admin.dashboard.kpi.inTransit"), value: stats.in_transit, color: "from-blue-500 to-blue-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg> },
+    { label: t("admin.dashboard.kpi.inTransit"), value: stats.in_transit, color: "from-red-600 to-red-700", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg> },
     { label: t("admin.dashboard.kpi.returned"), value: stats.returned, color: "from-orange-500 to-orange-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg> },
     { label: t("admin.dashboard.kpi.pending"), value: stats.pending, color: "from-amber-500 to-amber-600", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
     { label: t("admin.dashboard.kpi.successRate"), value: `${stats.successRate}%`, color: "from-[#E10600] to-[#B80500]", icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
@@ -1063,7 +1064,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                   onClick={() => setStatusFilter(s as OrderStatus | "all")}
                   className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
                     statusFilter === s
-                      ? "bg-[#0F172A] text-white"
+                      ? "bg-[#24201F] text-white"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   }`}
                 >
@@ -1117,7 +1118,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
               {/* ── Mobile cards (< sm) ── */}
               <div className="sm:hidden divide-y divide-gray-100 overflow-y-auto max-h-[520px]">
                 {ordersPag.paged.map((o) => (
-                  <div key={o.id} className={`px-4 py-3 flex flex-col gap-2 ${o.source === "pdf" ? "bg-blue-50/20" : "hover:bg-gray-50/60"} transition-colors`}>
+                  <div key={o.id} className={`px-4 py-3 flex flex-col gap-2 ${o.source === "pdf" ? "bg-red-50/30" : "hover:bg-gray-50/60"} transition-colors`}>
                     {/* Top row: tracking + status + actions */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1125,7 +1126,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                           {o.trackingNumber ?? `#${Math.abs(o.id)}`}
                         </span>
                         {o.source === "pdf" && (
-                          <span className="text-xs text-blue-600 font-semibold flex items-center gap-0.5">
+                          <span className="text-xs text-red-700 font-semibold flex items-center gap-0.5">
                             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8 17v-1h8v1H8zm0-3v-1h8v1H8zm0-3V10h5v1H8z"/></svg>
                             PDF
                           </span>
@@ -1137,7 +1138,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                         </span>
                         {o.source !== "pdf" ? (
                           <>
-                            <button onClick={() => openEdit(o)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                            <button onClick={() => openEdit(o)} className="p-1.5 text-gray-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </button>
                             <button onClick={() => deleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
@@ -1191,14 +1192,14 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {ordersPag.paged.map((o) => (
-                      <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors ${o.source === "pdf" ? "bg-blue-50/20" : ""}`}>
+                      <tr key={o.id} className={`hover:bg-gray-50/60 transition-colors ${o.source === "pdf" ? "bg-red-50/30" : ""}`}>
                         <td className="px-5 py-3">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded w-fit">
                               {o.trackingNumber ?? `#${Math.abs(o.id)}`}
                             </span>
                             {o.source === "pdf" && (
-                              <span className="text-xs text-blue-600 font-semibold flex items-center gap-0.5">
+                              <span className="text-xs text-red-700 font-semibold flex items-center gap-0.5">
                                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8 17v-1h8v1H8zm0-3v-1h8v1H8zm0-3V10h5v1H8z"/></svg>
                                 PDF
                               </span>
@@ -1226,7 +1227,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
                         <td className="px-3 py-3">
                           {o.source !== "pdf" ? (
                             <div className="flex items-center gap-1">
-                              <button onClick={() => openEdit(o)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                              <button onClick={() => openEdit(o)} className="p-1.5 text-gray-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               </button>
                               <button onClick={() => deleteOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
@@ -1248,7 +1249,7 @@ function DashboardView({ onUnauth, onRefreshBadge }: { onUnauth: () => void; onR
           </div>
 
           {/* Heatmap */}
-          <div className="xl:col-span-5 bg-[#0F172A] rounded-2xl shadow-sm overflow-hidden flex flex-col">
+          <div className="xl:col-span-5 bg-[#24201F] rounded-2xl shadow-sm overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-white/10">
               <h2 className="font-bold text-white text-base">{t("admin.dashboard.map.title")}</h2>
               <p className="text-white/40 text-xs mt-0.5">{t("admin.dashboard.map.subtitle")}</p>
@@ -2856,7 +2857,7 @@ function NotificationBanner({ role }: { role: string }) {
   if (!visible) return null;
 
   return (
-    <div className="mx-4 mt-4 mb-0 md:mx-6 md:mt-5 flex items-start gap-3 bg-[#0F172A] text-white rounded-xl px-4 py-3 shadow-lg">
+    <div className="mx-4 mt-4 mb-0 md:mx-6 md:mt-5 flex items-start gap-3 bg-[#24201F] text-white rounded-xl px-4 py-3 shadow-sm border-l-[3px] border-[#E10600]">
       {/* Bell icon */}
       <span className="mt-0.5 shrink-0 text-[#E10600]">
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -3173,12 +3174,12 @@ export default function AdminDashboard() {
   const isAdmin = role === "admin";
 
   return (
-    <div className="min-h-screen bg-gray-50 flex" dir="ltr">
+    <div className="weasy-portal min-h-[100dvh] flex" dir="ltr">
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-[#0F172A] flex items-center px-4 shadow-lg">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-[#24201F] border-b-[3px] border-[#E10600] flex items-center px-4 shadow-sm">
         <button
           onClick={() => setSidebarOpen(true)}
-          className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-all"
+          className="text-white hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-all"
           aria-label="Open menu"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3203,7 +3204,7 @@ export default function AdminDashboard() {
         isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}
         isCollapsed={isCollapsed} toggleCollapse={toggleCollapse} isPermitted={isPermitted}
       />
-      <main className={`flex-1 min-h-screen overflow-y-auto pt-14 md:pt-0 transition-all duration-300 ${isCollapsed ? "md:ml-[72px]" : "md:ml-64"}`}>
+      <main className={`flex-1 min-w-0 min-h-[100dvh] overflow-y-auto pt-14 md:pt-0 transition-all duration-300 ${isCollapsed ? "md:ml-[72px]" : "md:ml-64"}`}>
         <NotificationBanner role={role} />
         <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>}>
           {role === "expediteur" ? (

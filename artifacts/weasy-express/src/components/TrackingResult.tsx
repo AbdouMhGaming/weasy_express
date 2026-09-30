@@ -20,12 +20,12 @@ import {
 import { motion } from "framer-motion";
 
 const variantColor: Record<string, string> = {
-  primary: "bg-blue-500 border-blue-500 text-white",
+  primary: "bg-[#51433f] border-[#51433f] text-white",
   success: "bg-green-500 border-green-500 text-white",
   danger: "bg-red-500 border-red-500 text-white",
   warning: "bg-amber-500 border-amber-500 text-white",
-  info: "bg-sky-500 border-sky-500 text-white",
-  secondary: "bg-slate-400 border-slate-400 text-white",
+  info: "bg-[#51433f] border-[#51433f] text-white",
+  secondary: "bg-[#6d625e] border-[#6d625e] text-white",
 };
 
 export function TrackingResult({ result }: { result: TrackingResultType }) {
@@ -37,7 +37,7 @@ export function TrackingResult({ result }: { result: TrackingResultType }) {
       ? "bg-green-600 hover:bg-green-700"
       : kind === "cancelled"
       ? "bg-gray-600 hover:bg-gray-700"
-      : "bg-blue-600 hover:bg-blue-700";
+       : "bg-[#51433f] hover:bg-[#342b29]";
 
   return (
     <motion.div
@@ -182,7 +182,7 @@ export function TrackingResult({ result }: { result: TrackingResultType }) {
             )}
             {result.sender && (
               <InfoRow
-                icon={<User className="h-4 w-4 text-sky-600" />}
+               icon={<User className="h-4 w-4 text-[#51433f]" />}
                 label={t("tracking.result.sender")}
                 value={result.sender}
               />
@@ -277,7 +277,7 @@ function RouteCard({
   color: "emerald" | "red";
 }) {
   const colorMap = {
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+     emerald: "bg-[#f4ebe7] text-[#51433f] border-[#d9c7be]",
     red: "bg-red-50 text-[#E10600] border-red-100",
   };
   return (

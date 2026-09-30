@@ -19,3 +19,4 @@
 - [Cross-portal Ecotrack identity](cross-portal-ecotrack-identity.md) — privileged order operations must pair tracking with owner ID; Suivi sessions and admin-team permissions are isolated and deny by default.
 - [Ecotrack tracking collations](ecotrack-tracking-collations.md) — cached orders and local remarks use incompatible MySQL collations; compare cross-table tracking explicitly.
 - [Payout QR confirmations](payout-qr-confirmations.md) — QR scans confirm only for the signed-in owning Expéditeur via one-time POST; public links and third-party QR services must not change or receive payment state.
+- [Ecotrack credential recovery](ecotrack-credential-recovery.md) — undecryptable sender credentials require the original encryption key or that sender's reconnection; do not treat them as Suivi logout.

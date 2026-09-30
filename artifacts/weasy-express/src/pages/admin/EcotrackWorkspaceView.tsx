@@ -1418,7 +1418,11 @@ function BulkOrderRow({ row, index, wilayas, updateRow, removeRow }: {
 
 export function OrderDetailsModal({ order, onClose, children }: { order: any; onClose: () => void; children?: React.ReactNode }) {
   const { t } = useTranslation();
-  const { data: wilayas = [] } = useEcotrackWilayas(!children);
+  const isSuiviPortal = typeof window !== "undefined" && window.location.pathname.startsWith("/suivi");
+  // Suivi has no merchant-reference endpoint. The details already include
+  // Ecotrack's Wilaya fields, so don't request /expediteur/ecotrack/wilayas
+  // with a Suivi token (that correctly returns 401 and expires that session).
+  const { data: wilayas = [] } = useEcotrackWilayas(!children && !isSuiviPortal);
   const value = (...keys: string[]) => {
     for (const key of keys) {
       const candidate = order?.[key];
@@ -1555,7 +1559,11 @@ export function TrackingDetailModal({ tracking, expediteurId, mode = "remarks", 
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-5">
           {remarksLoading ? <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-[#E10600]" /></div>
-            : remarksError ? <p role="alert" className="text-sm text-red-700">{t("admin.ecotrackPortal.common.error")}: {remarksError.message}</p>
+            : remarksError ? <p role="alert" className="text-sm text-red-700">
+              {remarksError.message === "ecotrack_credentials_reconnect_required"
+                ? t("admin.ecotrackPortal.tracking.ecotrackReconnectRequired")
+                : `${t("admin.ecotrackPortal.common.error")}: ${remarksError.message}`}
+            </p>
             : visibleRemarks?.length ? visibleRemarks.map((item, index) => {
               const source = t(`admin.ecotrackPortal.tracking.${item.source === "station" ? "remarkStation" : item.source === "driver" ? "remarkDriver" : "remarkSender"}`);
               return <article key={`${item.createdAt}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
