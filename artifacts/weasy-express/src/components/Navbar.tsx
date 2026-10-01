@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, PackageOpen } from "lucide-react";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { ThemeToggle } from "./ThemeToggle";
 import logoPath from "@assets/logo-removebg-preview_1777142961208.png";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
 
@@ -92,13 +91,11 @@ export function Navbar() {
             </Button>
           </Link>
           <LanguageSwitcher />
-          <ThemeToggle />
         </nav>
 
         {/* Mobile Nav */}
         <div className="md:hidden flex items-center gap-1">
           <LanguageSwitcher />
-          <ThemeToggle />
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button

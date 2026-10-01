@@ -226,3 +226,17 @@ mtime_ms = 1790799393243
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/82bd6596-315d-4b03-8eef-2a3bf564c572/9c49113a-7185-4f14-9736-2f4c0defc3bf"
 storage_version_token = "1790799435621093"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "qO-4Pi-dfQ2wsmSbsISqS"
+uri = "file://deploy/weasy-express-2026-10-01-portals-only-dark.zip"
+type = "unspecified"
+title = "Weasy Express — portal-only dark mode build"
+description = "Hostinger ZIP: public website is light-only, with dark mode and saved theme preferences retained in the portals."
+logical_id = "5e689aed-e2b1-4cf0-a6a2-17b545fe7b04"
+content_hash = "sha256:e7ab91b37982e1e990f1c9f6fb16abeac7364d6d77b0395811533254d975465e"
+size = 7781130
+mtime_ms = 1790878237995
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/5e689aed-e2b1-4cf0-a6a2-17b545fe7b04/689ec54b-9a9b-4126-a5b7-216b465ca1f9"
+storage_version_token = "1790878297976299"
+content_type = "application/octet-stream"

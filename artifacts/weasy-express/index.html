@@ -3,9 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      // Apply only a previously chosen theme before CSS/React paints.
+      // The public website is always light; restore dark mode only in portals.
       try {
-        document.documentElement.classList.toggle("dark", localStorage.getItem("weasy-theme") === "dark");
+        var base = "%BASE_URL%".replace(/\/$/, "");
+        var pathname = window.location.pathname;
+        var route = base && pathname.indexOf(base + "/") === 0 ? pathname.slice(base.length) : pathname;
+        var isPortal = /^\/(admin|expediteurs|suivi)(\/|$)/.test(route);
+        document.documentElement.classList.toggle("dark", isPortal && localStorage.getItem("weasy-theme") === "dark");
       } catch {
         document.documentElement.classList.remove("dark");
       }

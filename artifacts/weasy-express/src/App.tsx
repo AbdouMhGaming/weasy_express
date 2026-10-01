@@ -1,4 +1,5 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { useLayoutEffect } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,10 +18,22 @@ import AdminLogin from "@/pages/admin/login";
 import AdminDashboard from "@/pages/admin/dashboard";
 import ExpediteurLogin from "@/pages/expediteur/login";
 import SuiviLogin from "@/pages/suivi/login";
+import { applyStoredTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 
 const queryClient = new QueryClient();
 
 function Router() {
+  const [location] = useLocation();
+
+  useLayoutEffect(() => {
+    applyStoredTheme();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) applyStoredTheme();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [location]);
+
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />

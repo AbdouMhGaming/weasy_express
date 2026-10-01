@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { isPortalPath, THEME_EVENT, THEME_STORAGE_KEY } from "@/lib/theme";
 
 /** Exported for the document bootstrap script and other theme-aware controls. */
-export const THEME_STORAGE_KEY = "weasy-theme";
-const THEME_EVENT = "weasy-theme-change";
+export { THEME_STORAGE_KEY } from "@/lib/theme";
 
 type ThemeToggleProps = {
   className?: string;
@@ -23,15 +23,9 @@ export function ThemeToggle({ className = "", showLabel = false }: ThemeTogglePr
 
   useEffect(() => {
     const sync = () => setIsDark(currentTheme());
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY && event.key !== null) return;
-      document.documentElement.classList.toggle("dark", event.newValue === "dark");
-      sync();
-    };
-    window.addEventListener("storage", onStorage);
     window.addEventListener(THEME_EVENT, sync);
+    sync();
     return () => {
-      window.removeEventListener("storage", onStorage);
       window.removeEventListener(THEME_EVENT, sync);
     };
   }, []);
@@ -39,7 +33,7 @@ export function ThemeToggle({ className = "", showLabel = false }: ThemeTogglePr
   const label = isDark ? t("theme.activateLight") : t("theme.activateDark");
   const toggle = () => {
     const next = !currentTheme();
-    document.documentElement.classList.toggle("dark", next);
+    document.documentElement.classList.toggle("dark", isPortalPath() && next);
     setIsDark(next);
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light");
@@ -48,6 +42,8 @@ export function ThemeToggle({ className = "", showLabel = false }: ThemeTogglePr
     }
     window.dispatchEvent(new Event(THEME_EVENT));
   };
+
+  if (!isPortalPath()) return null;
 
   return (
     <button
