@@ -14,3 +14,9 @@ The received-payment history must be a transaction ledger, not a flat list of pa
 **Why:** The user supplied Ecotrack screenshots clarifying these two business views. A confirmed archived parcel does not establish the payment transaction, all deductions, receipt document, or return handoff dates.
 
 **How to apply:** Obtain authoritative transaction and transfer data before filling these fields. Do not substitute the application's own payout requests for Ecotrack transactions, infer official net payments from delivery tariffs, or represent parcel creation dates as receipt dates.
+
+History must remain API-first. Uploaded screenshots and spreadsheet exports are reference material, not authorization to replace automatic Ecotrack synchronization with manual imports.
+
+**Why:** After supplying the requested Excel samples, the user explicitly reiterated that the histories should be found through the API and previously supplied documentation. The supplied status/tracking responses confirm archived returns but omit the handoff dates shown in the exports.
+
+**How to apply:** Investigate the actual Ecotrack page/data routes when the documented parcel endpoints lack ledger fields. Do not silently import reference files, guess transaction totals, or equate parcel tracking events with return-transfer validation events.
