@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
 import { adminAuth, hasTeamPermission, suiviAuth, type AuthedRequest } from "../lib/adminAuth";
 import { recordRemark } from "../lib/ecotrackEvents";
+import { CURRENT_NOTIFICATION_SOURCE_SQL } from "../lib/ecotrackNotificationScope";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
 import { cacheOrders, syncEcotrackAccount } from "../lib/ecotrackSync";
 import { canonicalOrderStatus, lookup, quoteFees, unwrap } from "../lib/ecotrackOrderRules";
@@ -889,7 +890,7 @@ async function refreshCachedOrder(expediteurId: number, token: string, id: strin
   });
   const body = result.body ?? {};
   const order = Array.isArray(body.data) ? body.data.find((item: any) => tracking(item?.tracking) === id) : null;
-  if (order) await cacheOrders(expediteurId, [order]);
+  if (order) await cacheOrders(expediteurId, [order], token);
 }
 router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res) => {
   try {
@@ -899,7 +900,7 @@ router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res)
     if (!item.reference) item.reference = `WEASY-${Date.now()}-1`;
     const result = await ecotrackRequest(token, "/api/v1/create/order", { method: "POST", body: item });
     const id = createdTracking(result.body);
-    if (id) await cacheOrders(expediteurId, [cachedCreatedOrder(item, id)]);
+    if (id) await cacheOrders(expediteurId, [cachedCreatedOrder(item, id)], token);
     return res.json({ ok: true, result: result.body, tracking: id });
   } catch (e) { return error(res, e); }
 });
@@ -935,7 +936,7 @@ router.post("/expediteur/ecotrack/create/orders", async (req: AuthedRequest, res
       return id ? [{ index: index + 1, clientId, reference: item.reference, tracking: id, cached: cachedCreatedOrder(item, id) }] : [];
     });
     const created = createdItems.map((item) => item.cached);
-    if (created.length) await cacheOrders(expediteurId, created);
+    if (created.length) await cacheOrders(expediteurId, created, token);
     const failures = resolved
       .filter(({ response }) => !createdTracking(response))
       .map(({ item, response, index, clientId }) => ({
@@ -1048,7 +1049,7 @@ async function addRemark(req: AuthedRequest, res: any, forcedOwnerId?: number) {
     // tracking/content as request parameters, not a JSON body.
     const result = await ecotrackRequest(token, "/api/v1/add/maj", { method: "POST", params: { tracking: id, content } });
     await recordRemark({
-      expediteurId, tracking: id, content,
+      expediteurId, tracking: id, content, sourceToken: token,
       authorUsername: req.adminUsername ?? "unknown", authorRole: req.adminRole ?? "unknown",
     });
     return res.json({ ok: true, result: result.body });
@@ -1193,9 +1194,10 @@ async function listNotifications(req: AuthedRequest, res: any) {
     const reader = notificationReader(req);
     // Staff and sender-team accounts must never receive the merchant's payout codes.
     const otpVisible = req.adminRole === "expediteur" && (!req.adminDataUsername || req.adminDataUsername === req.adminUsername);
-    const where = scope === null
+    const baseWhere = scope === null
       ? "WHERE n.event_type<>'payout_otp'"
       : `WHERE n.expediteur_id=?${otpVisible ? "" : " AND n.event_type<>'payout_otp'"}`;
+    const where = `${baseWhere} AND ${CURRENT_NOTIFICATION_SOURCE_SQL}`;
     const params: any[] = scope === null ? [] : [scope];
     const unread = String(req.query.unread ?? "") === "1" || String(req.query.unread ?? "") === "true";
     const finalWhere = unread ? (where ? `${where} AND nr.notification_id IS NULL` : "WHERE nr.notification_id IS NULL") : where;
@@ -1225,10 +1227,11 @@ async function markNotificationRead(req: AuthedRequest, res: any) {
   try {
     const scope = await notificationScope(req, conn);
     const reader = notificationReader(req);
-    const otpVisible = req.adminRole === "expediteur" && req.adminDataUsername === req.adminUsername;
-    const where = (scope === null ? "id=?" : "id=? AND expediteur_id=?") + (otpVisible ? "" : " AND event_type<>'payout_otp'");
+    const otpVisible = req.adminRole === "expediteur" && (!req.adminDataUsername || req.adminDataUsername === req.adminUsername);
+    const where = (scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?") +
+      (otpVisible ? "" : " AND n.event_type<>'payout_otp'") + ` AND ${CURRENT_NOTIFICATION_SOURCE_SQL}`;
     const params = scope === null ? [id] : [id, scope];
-    const [[notification]] = await conn.execute(`SELECT id FROM expediteur_ecotrack_notifications WHERE ${where} LIMIT 1`, params) as any;
+    const [[notification]] = await conn.execute(`SELECT n.id FROM expediteur_ecotrack_notifications n WHERE ${where} LIMIT 1`, params) as any;
     if (!notification) return res.status(404).json({ ok: false, error: "notification_not_found" });
     await conn.execute(
       `INSERT INTO expediteur_ecotrack_notification_reads (notification_id,reader_username,reader_audience)
@@ -1244,8 +1247,9 @@ async function notificationDetail(req: AuthedRequest, res: any) {
   try {
     const scope = await notificationScope(req, conn);
     const reader = notificationReader(req);
-    const otpVisible = req.adminRole === "expediteur" && req.adminDataUsername === req.adminUsername;
-    const where = (scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?") + (otpVisible ? "" : " AND n.event_type<>'payout_otp'");
+    const otpVisible = req.adminRole === "expediteur" && (!req.adminDataUsername || req.adminDataUsername === req.adminUsername);
+    const where = (scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?") +
+      (otpVisible ? "" : " AND n.event_type<>'payout_otp'") + ` AND ${CURRENT_NOTIFICATION_SOURCE_SQL}`;
     const params = scope === null ? [id] : [id, scope];
     const [[notification]] = await conn.execute(
       `SELECT n.*,nr.read_at readerReadAt,a.username expediteur FROM expediteur_ecotrack_notifications n

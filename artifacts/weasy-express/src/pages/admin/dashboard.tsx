@@ -181,7 +181,6 @@ function SidebarInner({
   }, [rawStatuses]);
 
   const [isCommandesOpen, setIsCommandesOpen] = useState(view.startsWith("ecotrack-status-"));
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDelaysOpen, setIsDelaysOpen] = useState(view === "ecotrack-delays" || view === "ecotrack-delay-configuration");
   const [isSettingsOpen, setIsSettingsOpen] = useState(view === "profile" || view === "ecotrack-settings");
 
@@ -450,22 +449,8 @@ function SidebarInner({
           {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-desks") && navItem("ecotrack-desks", t("admin.sidebar.agencies"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6" /></svg>
           )}
-          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && (
-            <div>
-              <button type="button" aria-expanded={isHistoryOpen} onClick={() => { if (isCollapsed && toggleCollapse) toggleCollapse(); setIsHistoryOpen(value => !value); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-                <History className="h-5 w-5 shrink-0" />
-                <span className={isCollapsed ? "md:hidden" : "flex-1 text-start"}>{t("admin.sidebar.history")}</span>
-                {!isCollapsed && (isHistoryOpen
-                  ? <ChevronDown className="h-4 w-4 shrink-0" />
-                  : <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />)}
-              </button>
-              {isHistoryOpen && !isCollapsed && <div className="ms-3 border-s border-gray-200 ps-2">
-                {navItem("ecotrack-history", t("portalUpdates.allParcels"), 0, <History className="h-4 w-4 shrink-0" />)}
-                {navItem("ecotrack-history-payments", t("portalUpdates.receivedPayments"), 0, <History className="h-4 w-4 shrink-0" />)}
-                {navItem("ecotrack-history-returns", t("portalUpdates.receivedReturns"), 0, <History className="h-4 w-4 shrink-0" />)}
-              </div>}
-            </div>
-          )}
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") &&
+            navItem("ecotrack-history", t("admin.sidebar.history"), 0, <History className="h-5 w-5 shrink-0" />)}
 
           {groupHeader(t("admin.sidebar.groups.finances"))}
           {expAllowed("payouts") && navItem("payouts", t("admin.sidebar.payouts"), 0,
@@ -2883,11 +2868,15 @@ export default function AdminDashboard() {
   }, [permittedViews, role]);
 
   const [view, setViewState] = useState<string>(() => {
-    const saved = localStorage.getItem(viewStorageKey) as string | null;
+    const stored = localStorage.getItem(viewStorageKey);
+    const saved = stored === "ecotrack-history-payments" || stored === "ecotrack-history-returns"
+      ? "ecotrack-history" : stored;
     return saved && isPermitted(saved) ? saved : defaultView;
   });
   const setView = useCallback((next: string) => {
-    const safe = isPermitted(next) ? next : defaultView;
+    const available = next === "ecotrack-history-payments" || next === "ecotrack-history-returns"
+      ? "ecotrack-history" : next;
+    const safe = isPermitted(available) ? available : defaultView;
     localStorage.setItem(viewStorageKey, safe);
     setViewState(safe);
   }, [defaultView, isPermitted, viewStorageKey]);
@@ -3102,8 +3091,6 @@ export default function AdminDashboard() {
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus="prete_a_expedier" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view.startsWith("ecotrack-status-") && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus={view.replace("ecotrack-status-", "")} onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history" onOpenSettings={() => setView("ecotrack-settings")} /> :
-            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history-payments" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history-payments" initialStatus="history_payments" onOpenSettings={() => setView("ecotrack-settings")} /> :
-            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history-returns" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history-returns" initialStatus="history_returns" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-desks" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="desks" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-fees" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="fees" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-products" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="products" onOpenSettings={() => setView("ecotrack-settings")} /> :

@@ -26,3 +26,9 @@ The carrier's website history paths are `/livraison/cashin/history` and `/return
 **Why:** Live read-only history requests received HTTP 401 with `Mobile app not available.` while `/api/v1/validate/token` confirmed the same token was valid. GET produced 405 with `Allow: POST`; the absence of a GET endpoint did not mean these routes were missing.
 
 **How to apply:** Obtain Ecotrack's supported access requirements or public equivalents before integrating these routes. Do not bypass the mobile-app restriction, assume enabling it alone grants access, or treat this capability denial as an expired shipping credential and disconnect the merchant.
+
+Keep the received-payment and received-return views temporarily hidden while their authoritative sources remain inaccessible; retain the original single Historique section.
+
+**Why:** After the carrier's history routes denied access, the user explicitly requested hiding both new views for now rather than keeping incomplete parcel-only substitutes visible.
+
+**How to apply:** Do not restore these views merely because archived parcel status lookup works. Restore them only with supported receipt/transaction access and the user's approval.

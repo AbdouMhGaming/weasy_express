@@ -162,7 +162,7 @@ export async function withEcotrackAccountLock<T>(
   }
 }
 
-export async function cacheOrders(expediteurId: number, orders: any[]) {
+export async function cacheOrders(expediteurId: number, orders: any[], sourceToken?: string) {
   if (!orders.length) return;
   const rows = orders.flatMap((order) => {
     const id = tracking(order?.tracking);
@@ -216,7 +216,7 @@ export async function cacheOrders(expediteurId: number, orders: any[]) {
         batch.flat(),
       );
       for (const event of suspensionEvents) {
-        await recordSuspension({ expediteurId, ...event });
+        if (sourceToken) await recordSuspension({ expediteurId, ...event, sourceToken });
       }
     }
   } finally {
@@ -296,7 +296,7 @@ async function syncChunk(
       throw error;
     }
     const body = result.body ?? {};
-    await cacheOrders(expediteurId, Array.isArray(body.data) ? body.data : []);
+    await cacheOrders(expediteurId, Array.isArray(body.data) ? body.data : [], token);
     lastPage = Number(body.last_page) || page;
     page = page >= lastPage ? 1 : page + 1;
     if (page === 1) {
@@ -354,7 +354,7 @@ export function syncEcotrackAccount(
           params: { page, start_date: dateRange.startDate, end_date: dateRange.endDate },
         });
         const body = result.body ?? {};
-        await cacheOrders(expediteurId, Array.isArray(body.data) ? body.data : []);
+        await cacheOrders(expediteurId, Array.isArray(body.data) ? body.data : [], token);
         lastPage = Number(body.last_page) || page;
         pagesFetched++;
         if (page >= lastPage) break;

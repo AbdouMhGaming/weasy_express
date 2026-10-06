@@ -64,7 +64,8 @@ export default function EcotrackSettingsView() {
       }
       setToken("");
       setShowToken(false);
-      queryClient.removeQueries({ queryKey: ["ecotrack"] });
+      await queryClient.cancelQueries({ queryKey: ["ecotrack"] });
+      await queryClient.resetQueries({ queryKey: ["ecotrack"] });
       setMessage({ type: "success", text: t("admin.ecotrack.saved") });
       await load();
     } catch (error) {
@@ -91,7 +92,8 @@ export default function EcotrackSettingsView() {
         headers: expediteurHeaders(),
       });
       if (!response.ok) throw new Error();
-      queryClient.removeQueries({ queryKey: ["ecotrack"] });
+      await queryClient.cancelQueries({ queryKey: ["ecotrack"] });
+      await queryClient.resetQueries({ queryKey: ["ecotrack"] });
       setConnection({ connected: false, tokenHint: null, status: "disconnected", lastValidatedAt: null });
       setMessage({ type: "success", text: t("admin.ecotrack.disconnected") });
     } catch {

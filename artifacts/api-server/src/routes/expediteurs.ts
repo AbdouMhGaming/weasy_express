@@ -5,6 +5,7 @@ import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
 import { decryptEcotrackToken, encryptEcotrackToken, normalizeEcotrackToken, validateEcotrackToken } from "../lib/ecotrack";
 import { clearEcotrackRuntimeCache } from "../lib/ecotrackRuntimeCache";
+import { notificationSource } from "../lib/ecotrackNotificationScope";
 import { queueEcotrackFullSync, withEcotrackAccountLock } from "../lib/ecotrackSync";
 
 const router = Router();
@@ -119,6 +120,11 @@ router.put("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequest
            last_validated_at = NOW()`,
         [account.id, encrypted.ciphertext, encrypted.iv, encrypted.authTag, encrypted.hint],
       );
+      await conn.execute(
+        `INSERT INTO expediteur_ecotrack_notification_connections (expediteur_id,source_hash)
+         VALUES (?,?) ON DUPLICATE KEY UPDATE source_hash=VALUES(source_hash)`,
+        [account.id, notificationSource(token)],
+      );
       await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?", [account.id]);
       await conn.execute("DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?", [account.id]);
       await conn.execute(
@@ -156,6 +162,7 @@ router.delete("/expediteur/ecotrack/settings", adminAuth, async (req: AuthedRequ
     try {
       await conn.beginTransaction();
       await conn.execute("DELETE FROM expediteur_ecotrack_credentials WHERE expediteur_id = ?", [account.id]);
+      await conn.execute("DELETE FROM expediteur_ecotrack_notification_connections WHERE expediteur_id = ?", [account.id]);
       await conn.execute("DELETE FROM expediteur_ecotrack_order_cache WHERE expediteur_id = ?", [account.id]);
       await conn.execute("DELETE FROM expediteur_ecotrack_sync_state WHERE expediteur_id = ?", [account.id]);
       await conn.commit();

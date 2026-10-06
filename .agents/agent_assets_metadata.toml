@@ -268,3 +268,17 @@ mtime_ms = 1791314194993
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/cd176a52-acb0-42ee-93c0-4dfe2664a1b8/537d022a-d7c5-49cb-b926-c8a4662d5142"
 storage_version_token = "1791314222131614"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "VGHmZN6mZ90qPOHeUjYek"
+uri = "file://deploy/weasy-express-2026-10-06-history-notifications.zip"
+type = "unspecified"
+title = "Weasy Express — History & Notifications Build"
+description = "New Hostinger build: original Historique restored; received-history pages hidden; notifications scoped to the connected Ecotrack API, with payout OTP notices preserved."
+logical_id = "0d511022-31aa-4f33-bde8-c88c4092aa66"
+content_hash = "sha256:10e259c2ffd4fc48206408fa8029558a57e74d2736c8ee664aa0b0bfcf5f5b7d"
+size = 7803063
+mtime_ms = 1791318159168
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/0d511022-31aa-4f33-bde8-c88c4092aa66/3cd140b6-eb7f-4139-80ed-d1d4458983d8"
+storage_version_token = "1791318315273634"
+content_type = "application/octet-stream"
