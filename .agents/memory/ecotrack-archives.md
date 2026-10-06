@@ -20,3 +20,9 @@ History must remain API-first. Uploaded screenshots and spreadsheet exports are 
 **Why:** After supplying the requested Excel samples, the user explicitly reiterated that the histories should be found through the API and previously supplied documentation. The supplied status/tracking responses confirm archived returns but omit the handoff dates shown in the exports.
 
 **How to apply:** Investigate the actual Ecotrack page/data routes when the documented parcel endpoints lack ledger fields. Do not silently import reference files, guess transaction totals, or equate parcel tracking events with return-transfer validation events.
+
+The carrier's website history paths are `/livraison/cashin/history` and `/returns/history`. Matching routes exist at `/api/v1/livraison/cashin/history` and `/api/v1/returns/history`, but require POST. Access is not established by a valid public shipping API token.
+
+**Why:** Live read-only history requests received HTTP 401 with `Mobile app not available.` while `/api/v1/validate/token` confirmed the same token was valid. GET produced 405 with `Allow: POST`; the absence of a GET endpoint did not mean these routes were missing.
+
+**How to apply:** Obtain Ecotrack's supported access requirements or public equivalents before integrating these routes. Do not bypass the mobile-app restriction, assume enabling it alone grants access, or treat this capability denial as an expired shipping credential and disconnect the merchant.
