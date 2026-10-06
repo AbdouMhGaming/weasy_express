@@ -1,6 +1,8 @@
 node_modules
 dist
 build
+!artifacts/weasy-express/build/
+!artifacts/weasy-express/build/compatibleCss.ts
 *.log
 *.zip
 *.tar.gz

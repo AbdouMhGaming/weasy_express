@@ -56,17 +56,18 @@ if (staticDir && fs.existsSync(staticDir)) {
       index: false,
       maxAge: "1h",
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith("index.html")) {
-          res.setHeader("Cache-Control", "no-cache");
-        }
+        if (filePath.endsWith("index.html") || filePath.endsWith("/sw.js")) res.setHeader("Cache-Control", "no-cache, must-revalidate");
+        else if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       },
     }),
   );
 
   const indexHtml = path.join(staticDir, "index.html");
-  app.get(/^(?!\/api\/).*/, (_req, res, next) => {
+  app.get(/^(?!\/api\/).*/, (req, res, next) => {
+    // A missing JS/CSS/image must be a 404, not HTML with a misleading 200.
+    if (req.path.startsWith("/assets/") || /\.(?:js|mjs|css|map|png|jpe?g|webp|gif|svg|ico|woff2?|json|webmanifest)$/i.test(req.path)) return res.status(404).end();
     if (!fs.existsSync(indexHtml)) return next();
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
     res.sendFile(indexHtml);
   });
 }

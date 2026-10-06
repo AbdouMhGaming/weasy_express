@@ -25,6 +25,7 @@ const EcotrackFailuresView   = HOSTINGER_PUBLIC_BUILD ? null : lazy(() => import
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, History, Clock, Settings2, User } from "lucide-react";
 import logoWhitePath from "@assets/weasy_logo_white_no_bg.png";
+import { BrandImage } from "@/components/BrandImage";
 import AlgeriaMapSvg from "@/assets/algeria-map.svg?raw";
 import { API_BASE, adminHeaders } from "@/lib/api";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
@@ -126,7 +127,7 @@ const LANG_LABELS: Record<string, string> = { fr: "FR", ar: "ع", en: "EN" };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-type SidebarView = "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-delay-configuration" | "ecotrack-failures" | "profile";
+type SidebarView = "ecotrack-history" | "ecotrack-history-payments" | "ecotrack-history-returns" | "dashboard" | "partners" | "agent-applications" | "offices" | "admins" | "expediteurs" | "performance" | "charges" | "commissions" | "settings" | "office-dashboard" | "workers" | "decharges" | "queue" | "returns" | "merchants" | "payouts" | "messaging" | "team" | "analytics" | "ecotrack" | "ecotrack-desks" | "ecotrack-fees" | "ecotrack-products" | "ecotrack-settings" | "ecotrack-dashboard" | "ecotrack-reports" | "ecotrack-delays" | "ecotrack-delay-configuration" | "ecotrack-failures" | "profile";
 
 function SidebarInner({
   view, setView, role, username, onLogout, onChangePassword,
@@ -151,7 +152,7 @@ function SidebarInner({
       "prete_a_expedier", "en_ramassage", "vers_station", "en_station",
       "vers_wilaya", "en_preparation", "en_livraison", "suspendu",
       "livre_non_encaisse", "encaisse_non_paye", "paiements_prets",
-      "retour_chez_livreur", "retour_en_traitement", "retour_recu",
+      "retour_chez_livreur", "retour_en_traitement", "retours_prets", "retour_recu",
     ];
     const aliases: Record<string, string> = {
       pret_a_expedier: "prete_a_expedier",
@@ -163,11 +164,14 @@ function SidebarInner({
       "encaissé_non_payé": "encaisse_non_paye",
       paiement_pret: "paiements_prets", "paiement_prêt": "paiements_prets", "paiements_prêts": "paiements_prets",
       retour_en_transit: "retour_en_traitement",
-      return_received: "retour_recu", retour_en_stock: "retour_recu",
+      return_received: "retour_recu",
+      retour_recu: "retours_prets", retour_archive: "retour_recu",
+      retour_pret: "retours_prets", retours_pret: "retours_prets",
+      retour_prêt: "retours_prets", retours_prêts: "retours_prets", return_ready: "retours_prets",
     };
     const counts = new Map(ordered.map((status) => [status, 0]));
     for (const item of rawStatuses) {
-      const raw = String(item.status ?? "").toLocaleLowerCase();
+      const raw = String(item.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/[\s-]+/g, "_");
       const canonical = aliases[raw] ?? raw;
       if (counts.has(canonical)) counts.set(canonical, (counts.get(canonical) ?? 0) + (Number(item.count) || 0));
     }
@@ -177,6 +181,7 @@ function SidebarInner({
   }, [rawStatuses]);
 
   const [isCommandesOpen, setIsCommandesOpen] = useState(view.startsWith("ecotrack-status-"));
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDelaysOpen, setIsDelaysOpen] = useState(view === "ecotrack-delays" || view === "ecotrack-delay-configuration");
   const [isSettingsOpen, setIsSettingsOpen] = useState(view === "profile" || view === "ecotrack-settings");
 
@@ -218,9 +223,9 @@ function SidebarInner({
 
   return (
     <aside aria-label={t("admin.sidebar.label")} className={`fixed inset-y-0 left-0 bg-white border-r border-[#e9dedb] flex flex-col z-40 shadow-[4px_0_24px_rgba(38,19,17,.08)] transition-all duration-300 ease-in-out md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"} ${isCollapsed ? "w-64 md:w-[72px]" : "w-64"}`}>
-      <div className={`bg-gradient-to-br from-[#E10600] to-[#a90000] flex flex-col items-center justify-center shrink-0 ${isCollapsed ? "md:px-2" : ""}`}>
-        <img src={`${import.meta.env.BASE_URL}logo-white.png`} alt="Weasy Express" className={`w-[220px] h-[88px] object-cover object-center ${isCollapsed ? "md:hidden" : ""}`} />
-        <img src={`${import.meta.env.BASE_URL}weasy-mark-white.png`} alt="Weasy Express" className={`hidden ${isCollapsed ? "md:block" : ""} w-14 h-[88px] object-contain`} />
+      <div style={{ backgroundColor: "#E10600" }} className={`bg-gradient-to-br from-[#E10600] to-[#a90000] flex flex-col items-center justify-center shrink-0 ${isCollapsed ? "md:px-2" : ""}`}>
+        <BrandImage src={`${import.meta.env.BASE_URL}logo-white.png`} alt="Weasy Express" className={`w-[220px] h-[88px] object-cover object-center ${isCollapsed ? "md:hidden" : ""}`} />
+        <BrandImage src={`${import.meta.env.BASE_URL}weasy-mark-white.png`} alt="Weasy Express" className={`hidden ${isCollapsed ? "md:block" : ""} w-14 h-[88px] object-contain`} />
       </div>
 
       <div className={`px-4 py-3 border-b border-[#eee3e1] flex items-center gap-2 ${isCollapsed ? "md:justify-center md:px-2" : "justify-between"}`}>
@@ -445,8 +450,19 @@ function SidebarInner({
           {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack-desks") && navItem("ecotrack-desks", t("admin.sidebar.agencies"), 0,
             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 21h18M5 21V7l7-4 7 4v14M9 10h6M9 14h6M9 18h6" /></svg>
           )}
-          {(!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack")) && navItem("ecotrack-history", t("admin.sidebar.history"), 0,
-            <History className="w-5 h-5 shrink-0" />
+          {!HOSTINGER_PUBLIC_BUILD && expAllowed("ecotrack") && (
+            <div>
+              <button type="button" aria-expanded={isHistoryOpen} onClick={() => { if (isCollapsed && toggleCollapse) toggleCollapse(); setIsHistoryOpen(value => !value); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                <History className="h-5 w-5 shrink-0" />
+                <span className={isCollapsed ? "md:hidden" : "flex-1 text-start"}>{t("admin.sidebar.history")}</span>
+                {!isCollapsed && <span aria-hidden="true">{isHistoryOpen ? "−" : "+"}</span>}
+              </button>
+              {isHistoryOpen && !isCollapsed && <div className="ms-3 border-s border-gray-200 ps-2">
+                {navItem("ecotrack-history", t("portalUpdates.allParcels"), 0, <History className="h-4 w-4 shrink-0" />)}
+                {navItem("ecotrack-history-payments", t("portalUpdates.receivedPayments"), 0, <History className="h-4 w-4 shrink-0" />)}
+                {navItem("ecotrack-history-returns", t("portalUpdates.receivedReturns"), 0, <History className="h-4 w-4 shrink-0" />)}
+              </div>}
+            </div>
           )}
 
           {groupHeader(t("admin.sidebar.groups.finances"))}
@@ -2860,7 +2876,7 @@ export default function AdminDashboard() {
     if (role === "expediteur" && v === "profile") return true;
     if ((permittedViews as string[]).includes(v)) return true;
     if (v.startsWith("ecotrack-status-") && (permittedViews as string[]).includes("ecotrack")) return true;
-    if (v === "ecotrack-history" && (permittedViews as string[]).includes("ecotrack")) return true;
+    if (v.startsWith("ecotrack-history") && (permittedViews as string[]).includes("ecotrack")) return true;
     return false;
   }, [permittedViews, role]);
 
@@ -3050,7 +3066,7 @@ export default function AdminDashboard() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <img src={logoWhitePath} alt="Weasy Express" className="h-7 w-auto object-contain ml-3" />
+        <BrandImage src={logoWhitePath} alt="Weasy Express" className="h-7 w-auto object-contain ml-3" />
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
           <NotificationsBell portal={portal} username={username} />
@@ -3084,6 +3100,8 @@ export default function AdminDashboard() {
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus="prete_a_expedier" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view.startsWith("ecotrack-status-") && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="commands" initialStatus={view.replace("ecotrack-status-", "")} onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history-payments" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history-payments" initialStatus="history_payments" onOpenSettings={() => setView("ecotrack-settings")} /> :
+            !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-history-returns" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="history-returns" initialStatus="history_returns" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-desks" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="desks" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-fees" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="fees" onOpenSettings={() => setView("ecotrack-settings")} /> :
             !HOSTINGER_PUBLIC_BUILD && view === "ecotrack-products" && EcotrackWorkspaceView ? <EcotrackWorkspaceView mode="products" onOpenSettings={() => setView("ecotrack-settings")} /> :

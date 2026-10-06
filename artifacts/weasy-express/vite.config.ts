@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { compatibleCss } from "./build/compatibleCss";
 
 const rawPort = process.env.PORT;
 
@@ -31,6 +32,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    compatibleCss(),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
@@ -55,6 +57,7 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   build: {
+    target: ["chrome100", "firefox100", "safari15.4"],
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },

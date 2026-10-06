@@ -165,6 +165,7 @@ export default function AdminLogin() {
               <button
                 type="submit"
                 disabled={loading}
+                style={{ backgroundColor: "#E10600" }}
                 className="w-full py-3 bg-gradient-to-r from-[#E10600] to-[#C50500] hover:from-[#C50500] hover:to-[#A50400] text-white font-bold rounded-xl shadow-md shadow-red-200 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               >
                 {loading ? (

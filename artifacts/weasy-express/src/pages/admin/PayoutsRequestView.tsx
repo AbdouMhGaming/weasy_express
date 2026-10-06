@@ -5,6 +5,7 @@ import { usePagination, PaginationBar } from "@/components/Pagination";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { generatePayoutPDF } from "./PayoutReceiptPdf";
 import { PayoutScanner } from "./PayoutScanner";
+import { PayoutOtpDialog } from "./PayoutOtpDialog";
 
 type PayoutStatus = "pending" | "accepted" | "refused" | "delayed" | "paid";
 
@@ -68,6 +69,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   const { t } = useTranslation();
   const role     = getSessionRole();
   const [showScanner, setShowScanner] = useState(false);
+  const [otpPayout, setOtpPayout] = useState<PayoutRequest | null>(null);
   const [pdfError, setPdfError] = useState("");
   const downloadPDF = async (p: PayoutRequest) => {
     setPdfError("");
@@ -181,6 +183,7 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
   }
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+      {otpPayout && <PayoutOtpDialog payout={otpPayout} onClose={() => setOtpPayout(null)} onConfirmed={() => { setOtpPayout(null); void fetchPayouts(); }} onUnauth={onUnauth} />}
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
@@ -436,6 +439,11 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                     <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(p.created_at)}</td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1 justify-end">
+                        {canUpdate && ["pending", "accepted"].includes(p.status) && (
+                          <button type="button" onClick={() => setOtpPayout(p)} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                            {t("portalUpdates.otpTitle")}
+                          </button>
+                        )}
                         {canUpdate && p.status !== "paid" && (
                           <button
                             onClick={() => openUpdate(p)}
@@ -501,6 +509,11 @@ export default function PayoutsRequestView({ onUnauth }: { onUnauth: () => void 
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      {canUpdate && ["pending", "accepted"].includes(p.status) && (
+                        <button type="button" onClick={() => setOtpPayout(p)} className="max-w-[150px] rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700">
+                          {t("portalUpdates.otpTitle")}
+                        </button>
+                      )}
                       {canUpdate && p.status !== "paid" && (
                         <button
                           onClick={() => openUpdate(p)}

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ensurePayoutOtpStorage, matchesOtp, otpHash, OTP_MAX_ATTEMPTS, OTP_TTL_MS } from "../lib/payoutOtp";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
 import { adminAuth, hashPassword, type AuthedRequest } from "../lib/adminAuth";
@@ -424,6 +425,81 @@ router.get("/expediteur/payouts/:id/receipt", adminAuth, async (req: AuthedReque
     } else if (!["admin", "office", "expediteur"].includes(role ?? "")) return res.status(403).json({ ok: false, error: "forbidden" });
     res.json({ ok: true, payout });
   } finally { conn.release(); }
+});
+
+// Codes are delivered only to the owning merchant's in-app notifications.
+// Issuing a code never confirms a payout; staff must present a valid code in a POST.
+router.post("/expediteur/payouts/:id/otp", adminAuth, async (req: AuthedRequest, res) => {
+  if (!["admin", "office"].includes(req.adminRole ?? "")) return res.status(403).json({ ok: false, error: "forbidden" });
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: "invalid_id" });
+  await ensurePayoutOtpStorage();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[payout]] = await conn.execute("SELECT * FROM expediteur_payouts WHERE id=? FOR UPDATE", [id]) as any;
+    if (!payout) { await conn.rollback(); return res.status(404).json({ ok: false, error: "not_found" }); }
+    if (req.adminRole === "office") {
+      const [[me]] = await conn.execute("SELECT office_hub FROM admins WHERE username=?", [req.adminUsername]) as any;
+      if (!me?.office_hub || me.office_hub !== payout.office_hub) { await conn.rollback(); return res.status(403).json({ ok: false, error: "forbidden" }); }
+    }
+    if (!["pending", "accepted"].includes(payout.status)) { await conn.rollback(); return res.status(409).json({ ok: false, error: "not_confirmable" }); }
+    const [[owner]] = await conn.execute("SELECT id FROM admins WHERE BINARY username=BINARY ? AND role='expediteur' AND parent_id IS NULL", [payout.expediteur_username]) as any;
+    if (!owner) { await conn.rollback(); return res.status(409).json({ ok: false, error: "owner_not_found" }); }
+    const [[previous]] = await conn.execute("SELECT * FROM payout_confirmation_otps WHERE payout_id=? FOR UPDATE", [id]) as any;
+    const now = new Date();
+    const sameWindow = previous && now.getTime() - new Date(previous.window_started_at).getTime() < 60 * 60_000;
+    if (previous && (now.getTime() - new Date(previous.sent_at).getTime() < 60_000 || (sameWindow && previous.send_count >= 10))) {
+      await conn.rollback(); return res.status(429).json({ ok: false, error: "otp_rate_limited" });
+    }
+    const code = String(crypto.randomInt(100000, 1000000));
+    const salt = crypto.randomBytes(16).toString("hex");
+    const expires = new Date(now.getTime() + OTP_TTL_MS);
+    await conn.execute(`INSERT INTO payout_confirmation_otps
+      (payout_id,code_hash,salt,expires_at,attempts,sent_at,used_at,window_started_at,send_count)
+      VALUES (?,?,?,?,0,?,NULL,?,?)
+      ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash),salt=VALUES(salt),expires_at=VALUES(expires_at),
+        attempts=0,sent_at=VALUES(sent_at),used_at=NULL,window_started_at=VALUES(window_started_at),send_count=VALUES(send_count)`,
+      [id, otpHash(id, salt, code), salt, expires, now, sameWindow ? previous.window_started_at : now, sameWindow ? previous.send_count + 1 : 1]);
+    await conn.execute(`INSERT INTO expediteur_ecotrack_notifications
+      (expediteur_id,tracking,event_type,event_key,title,body)
+      VALUES (?,?,'payout_otp',?,'Code de confirmation du paiement',?)`,
+      [owner.id, `PV${String(id).padStart(8, "0")}`, crypto.randomUUID(),
+        JSON.stringify({ payoutId: id, amount: Number(payout.amount_dzd), code, expiresAt: expires.toISOString() })]);
+    await conn.commit();
+    return res.json({ ok: true, expiresAt: expires.toISOString() });
+  } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
+});
+
+router.post("/expediteur/payouts/:id/otp/confirm", adminAuth, async (req: AuthedRequest, res) => {
+  if (!["admin", "office"].includes(req.adminRole ?? "")) return res.status(403).json({ ok: false, error: "forbidden" });
+  const id = Number(req.params.id), code = String(req.body?.code ?? "").trim();
+  if (!Number.isSafeInteger(id) || id <= 0 || !/^\d{6}$/.test(code)) return res.status(400).json({ ok: false, error: "otp_invalid" });
+  await ensurePayoutOtpStorage();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[payout]] = await conn.execute("SELECT * FROM expediteur_payouts WHERE id=? FOR UPDATE", [id]) as any;
+    if (!payout) { await conn.rollback(); return res.status(404).json({ ok: false, error: "not_found" }); }
+    if (req.adminRole === "office") {
+      const [[me]] = await conn.execute("SELECT office_hub FROM admins WHERE username=?", [req.adminUsername]) as any;
+      if (!me?.office_hub || me.office_hub !== payout.office_hub) { await conn.rollback(); return res.status(403).json({ ok: false, error: "forbidden" }); }
+    }
+    const [[otp]] = await conn.execute("SELECT * FROM payout_confirmation_otps WHERE payout_id=? FOR UPDATE", [id]) as any;
+    if (!["pending", "accepted"].includes(payout.status) || !otp || otp.used_at || new Date(otp.expires_at).getTime() <= Date.now() || otp.attempts >= OTP_MAX_ATTEMPTS) {
+      await conn.rollback(); return res.status(409).json({ ok: false, error: "otp_expired" });
+    }
+    if (!matchesOtp(id, otp.salt, code, otp.code_hash)) {
+      await conn.execute("UPDATE payout_confirmation_otps SET attempts=attempts+1 WHERE payout_id=?", [id]);
+      await conn.commit(); return res.status(400).json({ ok: false, error: "otp_invalid" });
+    }
+    await conn.execute("UPDATE payout_confirmation_otps SET used_at=CURRENT_TIMESTAMP WHERE payout_id=?", [id]);
+    await conn.execute(`UPDATE expediteur_payouts SET status='paid',paid_at=CURRENT_TIMESTAMP,
+      approved_at=COALESCE(approved_at,CURRENT_TIMESTAMP),receipt_number=COALESCE(receipt_number,?),
+      confirmation_token=NULL WHERE id=?`, [`PV${String(id).padStart(8, "0")}`, id]);
+    await conn.commit();
+    return res.json({ ok: true });
+  } catch (err) { await conn.rollback(); throw err; } finally { conn.release(); }
 });
 
 router.post("/expediteur/payouts/:id/confirm", adminAuth, async (req: AuthedRequest, res) => {

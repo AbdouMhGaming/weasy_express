@@ -240,3 +240,17 @@ mtime_ms = 1790878237995
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/5e689aed-e2b1-4cf0-a6a2-17b545fe7b04/689ec54b-9a9b-4126-a5b7-216b465ca1f9"
 storage_version_token = "1790878297976299"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "rkCF_79uFEkj5QOkmQ6tL"
+uri = "file://deploy/weasy-express-2026-10-06-order-payout-updates.zip"
+type = "unspecified"
+title = "Weasy Express — Updated Hostinger Build"
+description = "Updated frontend and backend with Ecotrack delivery/weight tariffs, corrected return statuses and history, mobile order improvements, courier details, bulk actions, payout OTP confirmation, and older-browser rendering fixes."
+logical_id = "fe49476e-50d9-48cb-b624-cd43c630ca4c"
+content_hash = "sha256:e354634869b9944a91d0a842ee798c4d70557b0c8e6a2232104a705285bb1a65"
+size = 7797335
+mtime_ms = 1791310382817
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/fe49476e-50d9-48cb-b624-cd43c630ca4c/fffd80b1-f3ff-40dd-8bf7-579e5b92209f"
+storage_version_token = "1791310392100148"
+content_type = "application/octet-stream"

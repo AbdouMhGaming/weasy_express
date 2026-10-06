@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import "@/lib/portalUpdatesI18n";
 import {
   Search, Plus, Download, Trash2, Edit2,
   CheckCircle, ArrowLeftRight, X, AlertCircle, Loader2, Package, MapPin,
@@ -36,6 +37,13 @@ import { displayEcotrackRemark } from "@/lib/ecotrackRemarks";
 import { PaginationBar } from "@/components/Pagination";
 import { useToast } from "@/hooks/use-toast";
 import { authenticatedFetch, adminHeaders, API_BASE } from "@/lib/api";
+import { OrderFormModal } from "./orders/OrderFormModal";
+import { OrderFilterSheet } from "./orders/OrderFilterSheet";
+import { ReadySelectionBar, useTrackingSelection } from "./orders/ReadySelection";
+import { getDriver, normalizeDzMobile } from "./orders/orderUpdates";
+import "./orders/orderUpdatesI18n";
+
+export { OrderFormModal };
 
 // Format numbers
 const formatDZD = (num: number) => new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(num);
@@ -97,6 +105,8 @@ const ECOTRACK_STATUS_KEYS: Record<string, string> = {
   return_asked: "returnRequested",
   return_received: "returnReceived",
   retour_recu: "returnReceived",
+  retour_archive: "returnReceived",
+  paye_et_archive: "paymentArchived",
   livred: "delivered",
   encaissed: "collected",
   payed: "paid",
@@ -105,14 +115,15 @@ const ECOTRACK_STATUS_KEYS: Record<string, string> = {
 export function humanizeEcotrackStatus(status: unknown, t: (key: string) => string) {
   const raw = String(status ?? "").trim();
   if (!raw || /^\d+$/.test(raw)) return t("admin.ecotrackPortal.tracking.statusLabels.unknown");
-  const normalized = raw.toLocaleLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/[\s-]+/g, "_");
+  if (["retours_prets", "retour_pret", "retours_pret", "retour_recu", "return_ready"].includes(normalized)) return t("portalUpdates.returnsReady");
   const key = ECOTRACK_STATUS_KEYS[normalized];
   if (key) return t(`admin.ecotrackPortal.tracking.statusLabels.${key}`);
   const words = raw.replaceAll("_", " ");
   return words.charAt(0).toLocaleUpperCase() + words.slice(1);
 }
 
-type WorkspaceMode = "commands" | "desks" | "fees" | "products";
+type WorkspaceMode = "commands" | "desks" | "fees" | "products" | "history" | "history-payments" | "history-returns";
 
 export default function EcotrackWorkspaceView({
   onOpenSettings,
@@ -120,10 +131,11 @@ export default function EcotrackWorkspaceView({
   initialStatus = "all"
 }: {
   onOpenSettings?: () => void;
-  mode?: WorkspaceMode | "history";
+  mode?: WorkspaceMode;
   initialStatus?: string;
 }) {
   const { t } = useTranslation();
+  const isHistoryMode = mode.startsWith("history");
 
   const { data: dashboard, isLoading: isLoadingDashboard, error: dashboardError, refetch: refetchDashboard } = useEcotrackDashboard();
   const syncNow = useEcotrackSync();
@@ -170,8 +182,8 @@ export default function EcotrackWorkspaceView({
             <h1 className="text-2xl font-bold text-slate-900">
               {mode === "commands"
                 ? t("admin.ecotrackPortal.title")
-                : mode === "history"
-                  ? t("admin.ecotrackPortal.history")
+                : isHistoryMode
+                  ? t(mode === "history-payments" ? "portalUpdates.receivedPayments" : mode === "history-returns" ? "portalUpdates.receivedReturns" : "portalUpdates.allParcels")
                   : mode === "desks"
                     ? t("admin.ecotrackPortal.desksNav")
                     : mode === "fees"
@@ -197,7 +209,7 @@ export default function EcotrackWorkspaceView({
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        {(mode === "commands" || mode === "history") && initialSyncPending ? (
+        {(mode === "commands" || isHistoryMode) && initialSyncPending ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center p-8">
             <Loader2 className="h-9 w-9 animate-spin text-[#E10600]" />
             <p className="font-semibold text-slate-700">{t("admin.ecotrackPortal.initialSync")}</p>
@@ -205,12 +217,12 @@ export default function EcotrackWorkspaceView({
           </div>
         ) : mode === "commands" && isReadyToShip ? (
           <OrdersTab status={initialStatus} />
-        ) : mode === "commands" || mode === "history" ? (
+        ) : mode === "commands" || isHistoryMode ? (
           <TrackingTab
             key={initialStatus + mode}
             statuses={dashboard?.statuses || []}
             initialStatus={initialStatus}
-            isHistory={mode === "history"}
+            isHistory={isHistoryMode}
           />
         ) : mode === "desks" ? <DesksTab />
           : mode === "fees" ? <FeesTab />
@@ -261,14 +273,13 @@ function AdvancedOrderFilters({
         {activeCount > 0 && <span className="ms-2 rounded-full bg-[#E10600] px-1.5 py-0.5 text-[10px] font-bold text-white">{activeCount}</span>}
       </Button>
       {open && (
-        <>
-          <button type="button" aria-label="Close filters" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 top-12 z-50 w-[min(92vw,420px)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900">{t("admin.ecotrackPortal.orders.filters.title")}</h3>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}><X className="h-4 w-4" /></Button>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <OrderFilterSheet
+          title={t("admin.ecotrackPortal.orders.filters.title")}
+          onClose={() => setOpen(false)}
+          onApply={() => { onApply(draft); setOpen(false); }}
+          onClear={() => { setDraft(EMPTY_ORDER_FILTERS); onApply(EMPTY_ORDER_FILTERS); setOpen(false); }}
+        >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_label]:min-w-0 [&_select]:min-w-0">
               <label className="space-y-1 text-xs font-semibold text-slate-600">
                 <span>{t("admin.ecotrackPortal.orders.filters.from")}</span>
                 <Input type="date" value={draft.from} onChange={event => update("from", event.target.value)} />
@@ -313,18 +324,20 @@ function AdvancedOrderFilters({
                 </label>
               ))}
             </div>
-            <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
-              <Button type="button" variant="ghost" onClick={() => { setDraft(EMPTY_ORDER_FILTERS); onApply(EMPTY_ORDER_FILTERS); setOpen(false); }}>
-                {t("admin.ecotrackPortal.orders.filters.clear")}
-              </Button>
-              <Button type="button" className="bg-[#E10600] text-white hover:bg-[#C50500]" onClick={() => { onApply(draft); setOpen(false); }}>
-                {t("admin.ecotrackPortal.orders.filters.apply")}
-              </Button>
-            </div>
-          </div>
-        </>
+        </OrderFilterSheet>
       )}
     </div>
+  );
+}
+
+function DriverCell({ order }: { order: any }) {
+  const driver = getDriver(order);
+  if (!driver.name && !driver.phone) return <span className="text-slate-400">—</span>;
+  return (
+    <>
+      {driver.name && <div className="font-medium text-slate-900">{driver.name}</div>}
+      {driver.phone && <div className="text-xs text-slate-500 mt-0.5">{driver.phone}</div>}
+    </>
   );
 }
 
@@ -344,6 +357,13 @@ function OrdersTab({ status }: { status: string }) {
     return () => clearTimeout(timer);
   }, [search]);
   const { data: ordersData, isLoading, isFetching, error } = useEcotrackOrders({ page, search: debouncedSearch, status, sort, ...filters });
+  const filterParams: Record<string, string> = {
+    status, search: debouncedSearch, from: filters.from ?? "", to: filters.to ?? "", wilaya: filters.wilaya ?? "",
+    commune: filters.commune ?? "", type: filters.type ?? "", fragile: filters.fragile ?? "", stop_desk: filters.stopDesk ?? "",
+  };
+  const selection = useTrackingSelection(JSON.stringify(filterParams));
+  const pageTrackings: string[] = (ordersData?.data ?? []).map((o: any) => String(o.tracking));
+  const pageAllSelected = pageTrackings.length > 0 && pageTrackings.every(x => selection.selected.has(x));
   const { data: wilayas = [] } = useEcotrackWilayas();
   const wilayaNames = useMemo(
     () => new Map(wilayas.map((wilaya: any) => [String(wilaya.wilaya_id), wilaya.wilaya_name])),
@@ -403,6 +423,12 @@ function OrdersTab({ status }: { status: string }) {
         )}
       </div>
 
+      <ReadySelectionBar
+        selected={selection.selected} pageTrackings={pageTrackings} total={ordersData?.pagination?.total ?? 0}
+        filterParams={filterParams} onSetMany={selection.setMany} onClear={selection.clear}
+        onRemove={(done) => { const doneSet = new Set(done); selection.setMany(Array.from(selection.selected).filter(x => !doneSet.has(x))); }}
+      />
+
       <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto">
           {isLoading ? (
@@ -411,7 +437,7 @@ function OrdersTab({ status }: { status: string }) {
             <div className="flex flex-col h-full items-center justify-center text-center p-8">
               <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
               <p className="text-slate-900 font-semibold">{t("admin.ecotrackPortal.common.error")}</p>
-              <p className="text-sm text-slate-500 mt-1">{error.message}</p>
+              <p className="text-sm text-slate-500 mt-1">{t("orderUpdates.listError")} {error.message}</p>
             </div>
           ) : ordersData?.data?.length === 0 ? (
             <div className="flex flex-col h-full items-center justify-center text-center p-8">
@@ -422,8 +448,10 @@ function OrdersTab({ status }: { status: string }) {
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
                 <tr>
+                  <th className="w-10 px-4 py-3"><input type="checkbox" aria-label={t("orderUpdates.selectPage")} title={t("orderUpdates.selectPage")} checked={pageAllSelected} onChange={() => pageAllSelected ? selection.setMany(Array.from(selection.selected).filter(x => !pageTrackings.includes(x))) : selection.setMany(Array.from(new Set([...Array.from(selection.selected), ...pageTrackings])))} /></th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.tracking")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.recipient")}</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">{t("orderUpdates.driver")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.destination")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700 text-right">{t("admin.ecotrackPortal.orders.table.amount")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700 text-right">{t("admin.ecotrackPortal.orders.table.actions")}</th>
@@ -436,6 +464,7 @@ function OrdersTab({ status }: { status: string }) {
                     const communeName = readableLocation(order.commune_name, order.commune);
                     return (
                   <tr key={order.tracking} className="hover:bg-slate-50/70 transition-colors group">
+                    <td className="w-10 px-4 py-3"><input type="checkbox" aria-label={t("orderUpdates.selectRow")} checked={selection.selected.has(String(order.tracking))} onChange={() => selection.toggle(String(order.tracking))} /></td>
                     <td className="px-4 py-3">
                       <div className="font-mono font-bold text-slate-900">{order.tracking}</div>
                       <div className="text-xs text-slate-400 mt-0.5">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</div>
@@ -444,6 +473,7 @@ function OrdersTab({ status }: { status: string }) {
                       <div className="font-medium text-slate-900">{order.client}</div>
                       <div className="text-xs text-slate-500 mt-0.5">{order.phone}</div>
                     </td>
+                    <td className="px-4 py-3"><DriverCell order={order} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -503,14 +533,14 @@ function TrackingTab({ statuses, initialStatus = "all", isHistory = false }: { s
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<EcotrackOrderSort>("updated_desc");
   const [filters, setFilters] = useState<EcotrackOrderFilters>(EMPTY_ORDER_FILTERS);
-  const currentStatus = isHistory ? "all" : initialStatus;
+  const currentStatus = initialStatus || "all";
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 500);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data: ordersData, isLoading, isFetching } = useEcotrackOrders({ page, search: debouncedSearch, status: currentStatus, sort, ...filters });
+  const { data: ordersData, isLoading, isFetching, error: ordersError, refetch: refetchOrders } = useEcotrackOrders({ page, search: debouncedSearch, status: currentStatus, sort, ...filters });
   const returnMutation = useRequestReturnEcotrackOrder();
 
   const [detailTracking, setDetailTracking] = useState<string | null>(null);
@@ -550,6 +580,13 @@ function TrackingTab({ statuses, initialStatus = "all", isHistory = false }: { s
         <div className="flex-1 overflow-auto">
           {isLoading ? (
             <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#E10600]" /></div>
+          ) : ordersError ? (
+            <div className="flex flex-col h-full items-center justify-center text-center p-8">
+              <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+              <p className="text-slate-900 font-semibold">{t("orderUpdates.listError")}</p>
+              <p className="text-sm text-slate-500 mt-1">{ordersError.message}</p>
+              <Button type="button" variant="outline" className="mt-3" onClick={() => void refetchOrders()}>{t("orderUpdates.retry")}</Button>
+            </div>
           ) : ordersData?.data?.length === 0 ? (
             <div className="flex flex-col h-full items-center justify-center text-center p-8">
               <Package className="h-12 w-12 text-slate-200 mb-3" />
@@ -562,6 +599,7 @@ function TrackingTab({ statuses, initialStatus = "all", isHistory = false }: { s
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.tracking")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.tracking.status")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.orders.table.recipient")}</th>
+                  <th className="px-4 py-3 font-semibold text-slate-700">{t("orderUpdates.driver")}</th>
                   <th className="px-4 py-3 font-semibold text-slate-700 text-right">{t("admin.ecotrackPortal.orders.table.actions")}</th>
                 </tr>
               </thead>
@@ -579,6 +617,7 @@ function TrackingTab({ statuses, initialStatus = "all", isHistory = false }: { s
                       <div className="font-medium text-slate-900">{order.client}</div>
                       <div className="text-xs text-slate-500 mt-0.5">{order.phone}</div>
                     </td>
+                    <td className="px-4 py-3"><DriverCell order={order} /></td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-700 hover:text-slate-900 hover:bg-slate-100" title={t("admin.ecotrackPortal.orders.details.title")} onClick={() => setDetailOrder(order)}>
@@ -885,172 +924,6 @@ function ProductPhoto({ src }: { src: string }) {
 // -----------------------------------------------------------------------------
 // MODALS
 // -----------------------------------------------------------------------------
-export function OrderFormModal({ isOpen, onClose, parcel, isEdit }: { isOpen: boolean; onClose: () => void; parcel: any; isEdit: boolean; }) {
-  const { t } = useTranslation();
-  const { toast } = useToast();
-  const createMutation = useCreateEcotrackOrder();
-  const updateMutation = useUpdateEcotrackOrder();
-  const { data: wilayas } = useEcotrackWilayas();
-  const { data: savedCommuneName, isLoading: isLoadingSavedCommune } = useEcotrackOrderCommune(
-    isEdit ? parcel?.tracking : undefined,
-    isEdit ? String(parcel?.wilaya_id ?? "") : undefined,
-  );
-
-  const [formData, setFormData] = useState<any>(() => parcel ? {
-    reference: parcel.reference ?? "",
-    client: parcel.client ?? "",
-    phone: parcel.phone ?? "",
-    phone_2: parcel.phone_2 ?? "",
-    adresse: parcel.adresse ?? "",
-    wilaya_id: String(parcel.wilaya_id ?? ""),
-    commune_name: parcel.commune_name || parcel.commune || (parcel.commune_id ? "__unchanged__" : ""),
-    montant: parcel.montant ?? "",
-    products: parcel.products ?? "",
-    weight: parcel.weight ?? "",
-    remarque: parcel.remarque ?? "",
-    type: String(parcel.type_id ?? parcel.type ?? "1"),
-    stop_desk: Boolean(parcel.stop_desk),
-    fragile: parcel.fragile == null ? null : Boolean(parcel.fragile),
-  } : {
-    reference: "", client: "", phone: "", phone_2: "", adresse: "", wilaya_id: "",
-    commune_name: "", montant: "", products: "", weight: "", stop_desk: false,
-    fragile: false, remarque: "", type: "1",
-  });
-
-  const { data: communes } = useEcotrackCommunes(formData.wilaya_id);
-
-  useEffect(() => {
-    if (isEdit && formData.commune_name === "__unchanged__" && savedCommuneName) {
-      setFormData((current: any) => ({ ...current, commune_name: savedCommuneName }));
-    }
-  }, [isEdit, formData.commune_name, savedCommuneName]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const communeVal = formData.commune_name === "__unchanged__"
-      ? undefined
-      : communes?.find((c: any) => c.nom === formData.commune_name)?.nom || formData.commune_name;
-
-    if (isEdit && parcel) {
-      const payload = {
-        tracking: parcel.tracking, client: formData.client, tel: formData.phone, tel2: formData.phone_2,
-        adresse: formData.adresse, commune: communeVal, wilaya: formData.wilaya_id, montant: formData.montant,
-        remarque: formData.remarque, product: formData.products, weight: formData.weight, type: Number(formData.type || 1),
-        stop_desk: formData.stop_desk ? 1 : 0,
-        fragile: formData.fragile == null ? undefined : formData.fragile ? 1 : 0,
-      };
-      updateMutation.mutate(payload, {
-        onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
-        onError: (err) => toast({ title: t("admin.ecotrackPortal.common.error"), description: err.message, variant: "destructive" })
-      });
-    } else {
-      const payload = {
-        nom_client: formData.client, telephone: normalizeOrderPhone(formData.phone), telephone_2: normalizeOrderPhone(formData.phone_2),
-        adresse: formData.adresse, commune: communeVal, code_wilaya: formData.wilaya_id, montant: formData.montant,
-        type: Number(formData.type || 1), reference: formData.reference, remarque: formData.remarque,
-        produit: formData.products, weight: formData.weight, stop_desk: formData.stop_desk ? 1 : 0, fragile: formData.fragile ? 1 : 0
-      };
-      createMutation.mutate(payload, {
-        onSuccess: () => { toast({ title: t("admin.ecotrackPortal.common.success") }); onClose(); },
-        onError: (err) => toast({ title: t("admin.ecotrackPortal.common.error"), description: err.message, variant: "destructive" })
-      });
-    }
-  };
-
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex justify-between items-center p-5 border-b border-slate-100">
-          <h2 className="text-xl font-bold">{isEdit ? t("admin.ecotrackPortal.orders.modify") : t("admin.ecotrackPortal.orders.addOne")}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
-        </div>
-        <div className="p-5 overflow-auto flex-1">
-          <form id="order-form" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="col-span-2 md:col-span-1 space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.client")}</label>
-              <Input required value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} />
-            </div>
-             <div className="col-span-2 md:col-span-1 space-y-1">
-               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.reference")}</label>
-               <Input value={formData.reference} onChange={e => setFormData({ ...formData, reference: e.target.value })} />
-             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.phone")}</label>
-              <Input required value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.phone2")}</label>
-              <Input value={formData.phone_2} onChange={e => setFormData({ ...formData, phone_2: e.target.value })} />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.address")}</label>
-              <Input required value={formData.adresse} onChange={e => setFormData({ ...formData, adresse: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.wilaya")}</label>
-              <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.wilaya_id} onChange={e => setFormData({ ...formData, wilaya_id: e.target.value, commune_name: "" })}>
-                <option value="">{t("admin.ecotrackPortal.forms.wilaya")}</option>
-                 {wilayas?.map((w: any) => <option key={w.wilaya_id} value={w.wilaya_id}>{w.wilaya_name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.commune")}</label>
-              <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.commune_name} onChange={e => setFormData({ ...formData, commune_name: e.target.value })}>
-                <option value="">{t("admin.ecotrackPortal.forms.commune")}</option>
-                 {isEdit && formData.commune_name === "__unchanged__" && (
-                   <option value="__unchanged__">{isLoadingSavedCommune ? t("admin.ecotrackPortal.common.loading") : t("admin.ecotrackPortal.forms.currentCommune")}</option>
-                 )}
-                {communes?.map((c: any, i: number) => <option key={i} value={c.nom}>{c.nom}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.amount")}</label>
-              <Input required type="number" value={formData.montant} onChange={e => setFormData({ ...formData, montant: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.products")}</label>
-              <Input value={formData.products} onChange={e => setFormData({ ...formData, products: e.target.value })} />
-            </div>
-             <div className="space-y-1">
-               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.weight")}</label>
-               <Input type="number" min="0" step="0.01" value={formData.weight} onChange={e => setFormData({ ...formData, weight: e.target.value })} />
-             </div>
-             <div className="space-y-1">
-               <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.operationType")}</label>
-               <select required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
-                 <option value="1">{t("admin.ecotrackPortal.forms.delivery")}</option>
-                 <option value="2">{t("admin.ecotrackPortal.forms.exchange")}</option>
-               </select>
-             </div>
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t("admin.ecotrackPortal.forms.remark")}</label>
-              <Input value={formData.remarque} onChange={e => setFormData({ ...formData, remarque: e.target.value })} />
-            </div>
-            <div className="col-span-2 flex gap-4 mt-2">
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input type="checkbox" checked={formData.stop_desk} onChange={e => setFormData({ ...formData, stop_desk: e.target.checked })} />
-                {t("admin.ecotrackPortal.forms.stopDesk")}
-              </label>
-              <label className="flex items-center gap-2 text-sm font-medium">
-                 <input type="checkbox" checked={Boolean(formData.fragile)} onChange={e => setFormData({ ...formData, fragile: e.target.checked })} />
-                {t("admin.ecotrackPortal.forms.fragile")}
-              </label>
-            </div>
-          </form>
-        </div>
-        <div className="p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-          <Button variant="ghost" onClick={onClose}>{t("admin.ecotrackPortal.common.cancel")}</Button>
-          <Button type="submit" form="order-form" className="bg-[#E10600] text-white" disabled={createMutation.isPending || updateMutation.isPending}>
-            {createMutation.isPending || updateMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : null}
-            {t("admin.ecotrackPortal.common.save")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -1177,7 +1050,7 @@ export function BulkOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
         phone: normalizeOrderPhone(row.telephone),
         phone2: normalizeOrderPhone(row.telephone_2),
       }))
-      .filter(({ phone, phone2 }) => !/^\d{9,10}$/.test(phone) || (phone2 && !/^\d{9,10}$/.test(phone2)))
+      .filter(({ phone, phone2 }) => !normalizeDzMobile(phone) || (phone2 && !normalizeDzMobile(phone2)))
       .map(({ row }) => row);
     if (invalidPhoneRows.length) {
       toast({

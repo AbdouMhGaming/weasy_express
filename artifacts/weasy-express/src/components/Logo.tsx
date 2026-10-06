@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import logoPath from "@assets/logo-removebg-preview_1777142961208.png";
+import { BrandImage } from "./BrandImage";
 
 interface LogoProps {
   className?: string;
@@ -13,7 +14,7 @@ export function Logo({ className }: LogoProps) {
         className="flex items-center gap-2 cursor-pointer"
         data-testid="link-footer-logo"
       >
-        <img
+        <BrandImage
           src={logoPath}
           alt="Weasy Express"
           className="h-16 w-auto object-contain"

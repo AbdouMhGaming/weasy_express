@@ -6,6 +6,7 @@ import { adminAuth, hasTeamPermission, suiviAuth, type AuthedRequest } from "../
 import { recordRemark } from "../lib/ecotrackEvents";
 import { EcotrackError, ecotrackPdf, ecotrackRequest, ecotrackToken } from "../lib/ecotrackClient";
 import { cacheOrders, syncEcotrackAccount } from "../lib/ecotrackSync";
+import { canonicalOrderStatus, lookup, quoteFees, unwrap } from "../lib/ecotrackOrderRules";
 import {
   ecotrackReferenceCache as references,
   ecotrackResolvedCommuneCache as resolvedCommunes,
@@ -158,7 +159,7 @@ router.get("/expediteur/ecotrack/reports", async (req: AuthedRequest, res) => {
           SUM(${status} IN ('en_ramassage','vers_station','vers_hub','en_station','en_hub','vers_wilaya','en_preparation','stock_en_preparation')) inTransit,
           SUM(${status}='en_livraison') inDelivery,
           SUM(${status} IN ('suspendu','suspendus')) suspended,
-          SUM(${status} IN ('retour_en_traitement','retour_en_transit','retour_recu','retour_en_stock','return_received')) returnsProcessing,
+          SUM(${status} IN ('retour_en_traitement','retour_en_transit','retour_recu','retours_prets','retour_en_stock','return_received')) returnsProcessing,
           SUM(${status} IN (
             'livre_non_encaisse','livré_non_encaissé','livred','delivered',
             'encaisse_non_paye','encaissé_non_payé','encaissed','collected',
@@ -621,7 +622,10 @@ router.get("/expediteur/ecotrack/orders", async (req: AuthedRequest, res) => {
           encaisse_non_paye: ["encaisse_non_paye", "encaissé_non_payé"],
           paiements_prets: ["paiements_prets", "paiement_pret", "paiement_prêt", "paiements_prêts"],
           retour_en_traitement: ["retour_en_traitement", "retour_en_transit"],
-          retour_recu: ["retour_recu", "return_received", "retour_en_stock"],
+          retours_prets: ["retours_prets", "retour_pret", "retours_pret", "retour_prêt", "retours_prêts", "retour_recu", "retour_reçu", "return_ready"],
+          retour_recu: ["retour_archive", "return_received", "retours_recus", "retours_reçus"],
+          history_returns: ["retour_archive", "return_received", "retours_recus", "retours_reçus"],
+          history_payments: ["paye_et_archive", "payed", "paid", "paiement_archive", "paiement_archivé", "paiements_archives", "paiement_recu", "paiements_recus"],
         };
         const values = aliases[status] ?? [status];
         where.push(`status_value IN (${values.map(() => "?").join(",")})`);
@@ -656,12 +660,17 @@ router.get("/expediteur/ecotrack/orders", async (req: AuthedRequest, res) => {
         where.push(`LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_order, '$.stop_desk')), '0')) IN (${stopDesk === "yes" ? "'1','true'" : "'0','false'"})`);
       }
       const [[count]] = await conn.execute(`SELECT COUNT(*) total FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")}`, params) as any;
+      if (String(req.query.tracking_only) === "1") {
+        const [trackings] = await conn.execute(`SELECT tracking FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")} ORDER BY tracking`, params) as any;
+        return res.json({ ok: true, trackings: trackings.map((row: any) => row.tracking), total: Number(count.total) });
+      }
+      const pageSize = Math.min(200, Math.max(1, Math.floor(Number(req.query.pageSize) || PAGE_SIZE)));
       const [rows] = await conn.execute(`SELECT raw_order, status_value FROM expediteur_ecotrack_order_cache WHERE ${where.join(" AND ")}
-        ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...params, PAGE_SIZE, (page - 1) * PAGE_SIZE]) as any;
+        ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [...params, pageSize, (page - 1) * pageSize]) as any;
       const total = Number(count.total); return res.json({
         ok: true,
-        data: rows.map((r: any) => ({ ...parsedOrder(r.raw_order), status: r.status_value })),
-        pagination: { current_page: page, per_page: PAGE_SIZE, total, last_page: Math.max(1, Math.ceil(total / PAGE_SIZE)) },
+        data: rows.map((r: any) => ({ ...parsedOrder(r.raw_order), status: canonicalOrderStatus(r.status_value) })),
+        pagination: { current_page: page, per_page: pageSize, total, last_page: Math.max(1, Math.ceil(total / pageSize)) },
         source: "cache",
       });
     } finally { conn.release(); }
@@ -768,15 +777,51 @@ function bulkResultFor(results: any, item: any, index: number) {
 function normalizedPhone(value: unknown) {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  const digits = raw.replace(/\D/g, "");
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("00213")) digits = digits.slice(2);
   return digits.startsWith("213") && digits.length === 12 ? `0${digits.slice(3)}` : digits;
 }
 function normalizedCreateOrder(item: any) {
   const order = compact(item, createFields);
   if (order.telephone !== undefined) order.telephone = normalizedPhone(order.telephone);
   if (order.telephone_2 !== undefined) order.telephone_2 = normalizedPhone(order.telephone_2);
+  if (!/^0[567]\d{8}$/.test(order.telephone ?? "") || (order.telephone_2 && !/^0[567]\d{8}$/.test(order.telephone_2))) {
+    throw new EcotrackError("phone_must_start_05_06_07_and_have_10_digits", 400, null);
+  }
   return order;
 }
+async function referenceData(expediteurId: number, token: string, name: string) {
+  const key = `${expediteurId}:${name}`, cached = references.get(key);
+  if (cached && cached.until > Date.now()) return unwrap(cached.value);
+  const result = await ecotrackRequest(token, `/api/v1/get/${name}`);
+  if (references.size >= 128) references.delete(references.keys().next().value!);
+  references.set(key, { until: Date.now() + 5 * 60_000, value: result.body });
+  return unwrap(result.body);
+}
+async function assertDeskDestination(expediteurId: number, token: string, wilaya: unknown, commune: unknown, stopDesk: unknown) {
+  if (!["1", "true"].includes(String(stopDesk).toLowerCase())) return;
+  const [desks, wilayas] = await Promise.all([referenceData(expediteurId, token, "desks"), referenceData(expediteurId, token, "wilayas")]);
+  const region: any = Object.values(wilayas ?? {}).find((w: any) => String(w.wilaya_id ?? w.code ?? w.id) === String(wilaya));
+  const locations = [desks?.my_desk, ...(Array.isArray(desks?.other_desks) ? desks.other_desks : [])].filter(Boolean);
+  const valid = locations.some((d: any) => {
+    const loc = d.location ?? d;
+    const w = loc.wilaya ?? d.wilaya ?? loc.wilaya_name ?? d.wilaya_name ?? loc.wilaya_id ?? d.wilaya_id;
+    const name = w && typeof w === "object" ? w.wilaya_id ?? w.id ?? w.name ?? w.nom : w;
+    const city = loc.commune ?? d.commune ?? loc.commune_name ?? d.commune_name;
+    return (String(name) === String(wilaya) || lookup(name) === lookup(region?.wilaya_name ?? region?.nom ?? region?.name)) && lookup(city) === lookup(commune);
+  });
+  if (!valid) throw new EcotrackError("stop_desk_destination_unavailable", 400, null);
+}
+router.get("/expediteur/ecotrack/quote", async (req: AuthedRequest, res) => {
+  try {
+    const { expediteurId, token } = await upstream(req);
+    const wilaya = String(req.query.wilaya_id ?? ""), type = String(req.query.type ?? "1");
+    const weight = req.query.weight === undefined || req.query.weight === "" ? null : Number(req.query.weight);
+    if (!/^\d{1,2}$/.test(wilaya) || !["1", "2"].includes(type) || (weight !== null && (!Number.isFinite(weight) || weight < 0))) return res.status(400).json({ ok: false, error: "invalid_quote_parameters" });
+    const fees = await referenceData(expediteurId, token, "fees");
+    return res.json({ ok: true, ...quoteFees(fees, wilaya, type, String(req.query.stop_desk) === "1", weight) });
+  } catch (e) { return error(res, e); }
+});
 function cachedCreatedOrder(item: any, id: string) {
   const now = new Date().toISOString().slice(0, 19).replace("T", " ");
   return {
@@ -847,6 +892,7 @@ router.post("/expediteur/ecotrack/create/order", async (req: AuthedRequest, res)
   try {
     const { expediteurId, token } = await upstream(req);
     const item = normalizedCreateOrder(req.body);
+    await assertDeskDestination(expediteurId, token, item.code_wilaya, item.commune, item.stop_desk);
     if (!item.reference) item.reference = `WEASY-${Date.now()}-1`;
     const result = await ecotrackRequest(token, "/api/v1/create/order", { method: "POST", body: item });
     const id = createdTracking(result.body);
@@ -869,6 +915,7 @@ router.post("/expediteur/ecotrack/create/orders", async (req: AuthedRequest, res
       usedReferences.add(reference.toLocaleLowerCase());
       return { ...order, reference };
     });
+    for (const item of submitted) await assertDeskDestination(expediteurId, token, item.code_wilaya, item.commune, item.stop_desk);
     const result = await ecotrackRequest(token, "/api/v1/create/orders", {
       method: "POST",
       body: { orders: Object.fromEntries(submitted.map((item: any, index: number) => [index, item])) },
@@ -908,8 +955,18 @@ router.put("/expediteur/ecotrack/update/order", async (req: AuthedRequest, res) 
   try {
     const { expediteurId, token } = await upstream(req);
     const changes = compact(req.body, updateFields);
+    for (const key of ["tel", "tel2"]) {
+      if (changes[key] !== undefined) {
+        changes[key] = normalizedPhone(changes[key]);
+        if ((key === "tel" || changes[key]) && !/^0[567]\d{8}$/.test(changes[key])) return res.status(400).json({ ok: false, error: "phone_must_start_05_06_07_and_have_10_digits" });
+      }
+    }
     const id = tracking(changes.tracking);
     if (!id) return res.status(400).json({ ok: false, error: "invalid_tracking" });
+    const [[saved]] = await pool.execute("SELECT raw_order FROM expediteur_ecotrack_order_cache WHERE expediteur_id=? AND tracking=?", [expediteurId, id]) as any;
+    if (!saved) return res.status(404).json({ ok: false, error: "order_not_found" });
+    const old = parsedOrder(saved.raw_order);
+    await assertDeskDestination(expediteurId, token, changes.wilaya ?? old.wilaya_id, changes.commune ?? old.commune_name ?? old.commune, changes.stop_desk ?? old.stop_desk);
     const result = await ecotrackRequest(token, "/api/v1/update/order", { method: "POST", body: changes });
     await patchCachedOrder(expediteurId, id, changes);
     return res.json({ ok: true, result: result.body });
@@ -1123,7 +1180,11 @@ async function listNotifications(req: AuthedRequest, res: any) {
   try {
     const scope = await notificationScope(req, conn);
     const reader = notificationReader(req);
-    const where = scope === null ? "" : "WHERE n.expediteur_id=?";
+    // Staff and sender-team accounts must never receive the merchant's payout codes.
+    const otpVisible = req.adminRole === "expediteur" && (!req.adminDataUsername || req.adminDataUsername === req.adminUsername);
+    const where = scope === null
+      ? "WHERE n.event_type<>'payout_otp'"
+      : `WHERE n.expediteur_id=?${otpVisible ? "" : " AND n.event_type<>'payout_otp'"}`;
     const params: any[] = scope === null ? [] : [scope];
     const unread = String(req.query.unread ?? "") === "1" || String(req.query.unread ?? "") === "true";
     const finalWhere = unread ? (where ? `${where} AND nr.notification_id IS NULL` : "WHERE nr.notification_id IS NULL") : where;
@@ -1140,7 +1201,7 @@ async function listNotifications(req: AuthedRequest, res: any) {
     const [[count]] = await conn.execute(
       `SELECT COUNT(*) total FROM expediteur_ecotrack_notifications n
        LEFT JOIN expediteur_ecotrack_notification_reads nr ON nr.notification_id=n.id AND nr.reader_username=? AND nr.reader_audience=?
-       ${scope === null ? "WHERE nr.notification_id IS NULL" : "WHERE n.expediteur_id=? AND nr.notification_id IS NULL"}`,
+       ${where} AND nr.notification_id IS NULL`,
       scope === null ? [reader.username, reader.audience] : [reader.username, reader.audience, scope],
     ) as any;
     return res.json({ ok: true, notifications: rows, unreadCount: Number(count.total) });
@@ -1153,7 +1214,8 @@ async function markNotificationRead(req: AuthedRequest, res: any) {
   try {
     const scope = await notificationScope(req, conn);
     const reader = notificationReader(req);
-    const where = scope === null ? "id=?" : "id=? AND expediteur_id=?";
+    const otpVisible = req.adminRole === "expediteur" && req.adminDataUsername === req.adminUsername;
+    const where = (scope === null ? "id=?" : "id=? AND expediteur_id=?") + (otpVisible ? "" : " AND event_type<>'payout_otp'");
     const params = scope === null ? [id] : [id, scope];
     const [[notification]] = await conn.execute(`SELECT id FROM expediteur_ecotrack_notifications WHERE ${where} LIMIT 1`, params) as any;
     if (!notification) return res.status(404).json({ ok: false, error: "notification_not_found" });
@@ -1171,7 +1233,8 @@ async function notificationDetail(req: AuthedRequest, res: any) {
   try {
     const scope = await notificationScope(req, conn);
     const reader = notificationReader(req);
-    const where = scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?";
+    const otpVisible = req.adminRole === "expediteur" && req.adminDataUsername === req.adminUsername;
+    const where = (scope === null ? "n.id=?" : "n.id=? AND n.expediteur_id=?") + (otpVisible ? "" : " AND n.event_type<>'payout_otp'");
     const params = scope === null ? [id] : [id, scope];
     const [[notification]] = await conn.execute(
       `SELECT n.*,nr.read_at readerReadAt,a.username expediteur FROM expediteur_ecotrack_notifications n

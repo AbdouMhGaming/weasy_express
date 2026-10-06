@@ -14,6 +14,7 @@ import {
   type PushPortal,
 } from "@/lib/pushPreferences";
 import { TrackingDetailModal } from "@/pages/admin/EcotrackWorkspaceView";
+import "@/lib/portalUpdatesI18n";
 
 export interface NotificationsBellProps {
   portal?: PushPortal;
@@ -31,6 +32,7 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
     ? ""
     : localStorage.getItem(portal === "suivi" ? "suivi_username" : portal === "expediteur" ? "exp_username" : "admin_username") ?? "");
   const [open, setOpen] = useState(false);
+  const [payoutCode, setPayoutCode] = useState<{ payoutId: number; amount: number; code: string; expiresAt: string } | null>(null);
   const preferenceKey = getPushPreferenceKey(portal, username);
   const [, setPushPreferenceRevision] = useState(0);
   const pushEnabled = isPushEnabledForUser(portal, username);
@@ -90,7 +92,12 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
     if (!n.readAt) {
       markRead.mutate(n.id);
     }
-    setActiveTracking({ tracking: n.tracking, expediteurId: n.expediteurId, mode: n.eventType === "remark" ? "remarks" : "details" });
+    if (n.eventType === "payout_otp") {
+      try { setPayoutCode(JSON.parse(n.body)); }
+      catch { setPushError(t("portalUpdates.loadError")); }
+    } else {
+      setActiveTracking({ tracking: n.tracking, expediteurId: n.expediteurId, mode: n.eventType === "remark" ? "remarks" : "details" });
+    }
     setOpen(false);
   };
 
@@ -192,6 +199,20 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
 
   return (
     <div className="relative flex items-center" ref={containerRef}>
+      {payoutCode && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={t("portalUpdates.otpNotification")}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-slate-900 shadow-xl">
+            <h3 className="font-bold">{t("portalUpdates.otpNotification")}</h3>
+            <p className="mt-2 text-sm">{t("portalUpdates.otpAmount")}: {payoutCode.amount.toLocaleString()} DZD · PV{String(payoutCode.payoutId).padStart(8, "0")}</p>
+            {new Date(payoutCode.expiresAt).getTime() > Date.now() ? (
+              <p className="my-4 text-center text-3xl font-bold tracking-[.25em]" dir="ltr">{payoutCode.code}</p>
+            ) : <p className="my-4 text-sm text-red-600">{t("portalUpdates.otpExpiredNotice")}</p>}
+            <p className="text-xs text-slate-500">{t("portalUpdates.otpExpires")}: {new Date(payoutCode.expiresAt).toLocaleString()}</p>
+            <p className="mt-3 text-sm">{t("portalUpdates.otpNotice")}</p>
+            <button type="button" onClick={() => setPayoutCode(null)} className="mt-4 w-full rounded-xl bg-[#E10600] p-2.5 font-semibold text-white">{t("portalUpdates.close")}</button>
+          </div>
+        </div>
+      )}
       <button
         onClick={() => setOpen(!open)}
         className="relative h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:text-[#E10600] hover:bg-red-50 transition-all"
@@ -230,9 +251,9 @@ export function NotificationsBell({ portal: portalProp, username: usernameProp }
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${!n.readAt ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
-                        {n.title || (n.eventType === 'remark' ? 'Nouvelle remarque' : 'Mise à jour')}
+                        {n.eventType === "payout_otp" ? t("portalUpdates.otpNotification") : n.title || (n.eventType === 'remark' ? 'Nouvelle remarque' : 'Mise à jour')}
                       </p>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{n.body}</p>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{n.eventType === "payout_otp" ? t("portalUpdates.otpNotice") : n.body}</p>
                       <div className="flex items-center justify-between mt-2">
                         <p className="text-[10px] text-slate-400 font-mono">{n.tracking}</p>
                         <p className="text-[10px] text-slate-400">{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</p>

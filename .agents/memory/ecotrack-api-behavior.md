@@ -3,6 +3,12 @@ name: Ecotrack API behavior
 description: Production authentication behavior and integration constraints that differ from the supplied Ecotrack documentation.
 ---
 
+Consult the user's already-supplied Ecotrack documentation and inspect the owning account's live read-only API response before asking for missing integration details or pricing rules. Do not reuse one merchant's tariffs for another merchant.
+
+**Why:** The live fee response contains a service-specific `poids` tariff schedule that the supplied documentation's sample omits. The user explicitly expects these prices to come from Ecotrack, not manual values. Also, list-order `retour_reçu` was verified against tracking info as “Retours prêts”; archival returns are the received-return history, not ready returns.
+
+**How to apply:** Treat live contract shape as authoritative when documentation is incomplete, keep all credentials server-side, and compare operational labels against tracking information before categorizing history.
+
 The Ecotrack production API returns HTTP 401 with `{"message":"Unauthenticated."}` for an invalid token, although the supplied documentation describes a successful HTTP response containing `INVALID_TOKEN`.
 
 **Why:** Treating this real response as a network outage gives Expediteurs the wrong recovery guidance and can hide expired or mistyped credentials.

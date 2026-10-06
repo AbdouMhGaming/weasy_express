@@ -2,6 +2,7 @@ import { pool } from "@workspace/db";
 import { EcotrackError, ecotrackRequest, ecotrackToken } from "./ecotrackClient";
 import { logger } from "./logger";
 import { ensureEcotrackEventsStorage, recordSuspension } from "./ecotrackEvents";
+import { canonicalOrderStatus } from "./ecotrackOrderRules";
 
 const MAX_SYNC_PAGES = 10;
 const LIVE_SYNC_INTERVAL_MS = 60_000;
@@ -122,7 +123,7 @@ function mysqlDateTime(value: unknown) {
 }
 
 function cachedOrderStatus(order: any) {
-  const status = order?.status ?? order?.process_state_id ?? null;
+  const status = canonicalOrderStatus(order?.status ?? order?.process_state_id ?? null);
   const normalized = String(status ?? "")
     .trim()
     .toLocaleLowerCase()

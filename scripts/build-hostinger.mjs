@@ -141,10 +141,11 @@ const readme = `# Weasy Express — Hostinger Deployment
 ## Deployment steps
 
 1. Stop the Hostinger Node.js application before replacing files.
+   Preserve the existing \`uploads/\` directory (including commissions), database, and environment variables. This is a code update, not a data reset.
 2. Delete the old \`public/assets/\` directory so stale hashed frontend files cannot remain.
 3. Upload the complete package contents to the Node.js application root. Replace both \`public/\` and \`dist/\`; never update only one of them.
 4. Run \`npm install --omit=dev\` from the application root so all production dependencies are installed.
-5. Copy \`.env.example\` to \`.htaccess\` or set env vars in the Hostinger panel:
+5. Keep your existing environment variables, or set them in the Hostinger panel using \`.env.example\` as a reference (never copy it to \`.htaccess\`):
    - \`PORT\` — port provided by Hostinger (usually 3000)
    - \`NODE_ENV=production\`
    - \`DB_HOST\`, \`DB_USER\`, \`DB_PASS\`, \`DB_NAME\` — your MySQL credentials
@@ -154,6 +155,7 @@ const readme = `# Weasy Express — Hostinger Deployment
 6. Set the start command to: \`node --enable-source-maps ./dist/index.mjs\`
 7. Start or restart the Node.js application after every upload.
 8. The server will serve both the API (\`/api/*\`) and the frontend SPA.
+9. Payout OTP storage is created automatically using an additive CREATE TABLE IF NOT EXISTS; existing payout and commission records are preserved.
 
 If the browser reports that an API response starts with \`<!DOCTYPE\`, the frontend and API versions do not match or Hostinger has not restarted the Node.js process. Repeat steps 1–7 with the complete package.
 
