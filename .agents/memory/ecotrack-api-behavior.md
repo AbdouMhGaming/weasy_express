@@ -97,7 +97,7 @@ STOP DESK is valid only when Ecotrack lists a relay office for the destination c
 
 **Why:** Changing the commune would misroute the parcel, while forwarding `stop_desk=1` makes Ecotrack reject the order with “Aucun bureau n'est disponible”.
 
-**How to apply:** Load Ecotrack's live `other_desks` list before bulk submission, compare normalized commune names, set `stop_desk=0` for unavailable communes, and clearly warn which rows were changed.
+**How to apply:** Use `has_stop_desk` on Ecotrack's complete commune list, matching both wilaya ID and normalized commune name. Derive supported wilayas from those communes: the wilaya list has no coverage flag. `/get/desks` is incomplete and must not restrict order destinations. Keep the home-delivery fallback and explicit row warning for incompatible imported Stop Desk orders.
 
 Cached Ecotrack orders identify their commune with `commune_id`; the commune display name is commonly absent from raw order JSON.
 

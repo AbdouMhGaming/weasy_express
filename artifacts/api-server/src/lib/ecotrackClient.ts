@@ -22,7 +22,9 @@ export async function ecotrackRequest(
   const url = new URL(path, ECOTRACK_BASE_URL);
   url.searchParams.set("api_token", token); // Ecotrack production requires this as well as Bearer.
   for (const [key, value] of Object.entries(options.params ?? {})) {
-    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, String(item));
+    } else if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);

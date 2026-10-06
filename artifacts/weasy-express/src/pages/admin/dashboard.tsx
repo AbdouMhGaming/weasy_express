@@ -455,7 +455,9 @@ function SidebarInner({
               <button type="button" aria-expanded={isHistoryOpen} onClick={() => { if (isCollapsed && toggleCollapse) toggleCollapse(); setIsHistoryOpen(value => !value); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                 <History className="h-5 w-5 shrink-0" />
                 <span className={isCollapsed ? "md:hidden" : "flex-1 text-start"}>{t("admin.sidebar.history")}</span>
-                {!isCollapsed && <span aria-hidden="true">{isHistoryOpen ? "−" : "+"}</span>}
+                {!isCollapsed && (isHistoryOpen
+                  ? <ChevronDown className="h-4 w-4 shrink-0" />
+                  : <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />)}
               </button>
               {isHistoryOpen && !isCollapsed && <div className="ms-3 border-s border-gray-200 ps-2">
                 {navItem("ecotrack-history", t("portalUpdates.allParcels"), 0, <History className="h-4 w-4 shrink-0" />)}

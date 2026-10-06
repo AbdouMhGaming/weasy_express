@@ -254,3 +254,17 @@ mtime_ms = 1791310382817
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/fe49476e-50d9-48cb-b624-cd43c630ca4c/fffd80b1-f3ff-40dd-8bf7-579e5b92209f"
 storage_version_token = "1791310392100148"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "My8EAJKMcHawbhepyfMHL"
+uri = "file://deploy/weasy-express-2026-10-06-ecotrack-corrections.zip"
+type = "unspecified"
+title = "Weasy Express — Ecotrack Corrections Build"
+description = "Updated Hostinger build: full Ecotrack Stop Desk coverage, matching single/bulk order forms, conditional delivery/weight fees, archive-history recovery and corrected history arrows. Preserve your existing .env and uploads when installing."
+logical_id = "cd176a52-acb0-42ee-93c0-4dfe2664a1b8"
+content_hash = "sha256:393c5818f91fc86d8b84a2c46185a090ca5fd1a5841c0e216addb500481e939d"
+size = 7802614
+mtime_ms = 1791314194993
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/cd176a52-acb0-42ee-93c0-4dfe2664a1b8/537d022a-d7c5-49cb-b926-c8a4662d5142"
+storage_version_token = "1791314222131614"
+content_type = "application/octet-stream"

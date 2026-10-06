@@ -28,40 +28,48 @@ export function getDriver(order: any): { name: string; phone: string } {
   };
 }
 
-type DeskLoc = { wilayaRaw: string; commune: string };
-export function deskLocations(desks: any): DeskLoc[] {
-  const list: any[] = [];
-  if (desks?.my_desk) list.push(desks.my_desk);
-  if (Array.isArray(desks?.other_desks)) list.push(...desks.other_desks);
-  const out: DeskLoc[] = [];
-  for (const d of list) {
-    const loc = d?.location ?? {};
-    const w = loc.wilaya ?? d?.wilaya ?? loc.wilaya_name ?? d?.wilaya_name ?? loc.wilaya_id ?? d?.wilaya_id;
-    const wilayaRaw = w && typeof w === "object" ? firstText(w.wilaya_id, w.id, w.name, w.nom) : text(w);
-    const commune = text(loc.commune ?? d?.commune ?? loc.commune_name ?? d?.commune_name);
-    if (wilayaRaw && commune) out.push({ wilayaRaw, commune });
-  }
-  return out;
+const truthyFlag = (v: unknown) => v === true || ["1", "true", "oui", "yes"].includes(String(v ?? "").trim().toLowerCase());
+/** Ecotrack /get/communes flag. Authoritative Stop Desk availability. */
+export const communeHasStopDesk = (c: any) => truthyFlag(c?.has_stop_desk);
+export const sameId = (a: unknown, b: unknown) => {
+  const x = String(a ?? "").replace(/^DZ/i, "").replace(/^0+/, ""), y = String(b ?? "").replace(/^DZ/i, "").replace(/^0+/, "");
+  return x !== "" && x === y;
+};
+export const communeInWilaya = (c: any, wilaya: any) =>
+  Boolean(wilaya) && (sameId(c?.wilaya_id, wilaya.wilaya_id) || (c?.wilaya_id == null && c?.wilaya_name != null && normalizeLookup(c.wilaya_name) === normalizeLookup(wilaya.wilaya_name)));
+/** Wilayas (from /get/wilayas, which has no flag) that own at least one flagged commune. */
+export function stopDeskWilayas(wilayas: any[], allCommunes: any[]) {
+  const flagged = allCommunes.filter(communeHasStopDesk);
+  return wilayas.filter(w => flagged.some(c => communeInWilaya(c, w)));
 }
-export const deskMatchesWilaya = (loc: DeskLoc, wilaya: any) =>
-  String(wilaya.wilaya_id) === loc.wilayaRaw || normalizeLookup(wilaya.wilaya_name) === normalizeLookup(loc.wilayaRaw);
+export const communesOfWilaya = (wilaya: any, allCommunes: any[]) => allCommunes.filter(c => communeInWilaya(c, wilaya));
 
-export function deskWilayas(wilayas: any[], locs: DeskLoc[]) {
-  return wilayas.filter(w => locs.some(l => deskMatchesWilaya(l, w)));
-}
-export function deskCommuneSet(wilaya: any | undefined, locs: DeskLoc[]) {
-  return new Set(locs.filter(l => wilaya && deskMatchesWilaya(l, wilaya)).map(l => normalizeLookup(l.commune)));
-}
+const FEE_KEYS: Record<string, string[]> = { "1": ["livraison", "delivery"], "2": ["echange", "exchange"], "3": ["pickup", "ramassage"], "4": ["recouvrement", "collection"] };
+const findByType = (obj: any, type: string): any => {
+  if (!obj || typeof obj !== "object") return undefined;
+  const want = FEE_KEYS[type] ?? FEE_KEYS["1"];
+  for (const [k, v] of Object.entries(obj)) if (want.some(w => normalizeLookup(k).includes(w))) return v;
+  return undefined;
+};
+const num = (v: unknown) => { if (v === null || v === undefined || String(v).trim() === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
-export function feeFor(fees: any, wilayaId: string, type: string, stopDesk: boolean): number | null {
-  if (!fees || typeof fees !== "object" || !wilayaId) return null;
-  const want = type === "2" ? ["echange", "exchange"] : ["livraison", "delivery"];
-  for (const [service, rows] of Object.entries(fees)) {
-    if (!Array.isArray(rows) || !want.some(k => normalizeLookup(service).includes(k))) continue;
-    const row: any = rows.find((r: any) => String(r?.wilaya_id ?? r?.wilaya ?? "") === String(wilayaId));
-    const value = row ? (stopDesk ? row.tarif_stopdesk : row.tarif) : null;
-    const n = value === null || value === undefined || value === "" ? NaN : Number(value);
-    return Number.isFinite(n) ? n : null;
+export type FeeQuote = { delivery: number | null; weightFee: number | null; weightUnavailable: boolean; total: number | null; hasWeight: boolean };
+/** Pure derivation from /get/fees: tarif / tarif_stopdesk per wilaya + poids rules. No invented values. */
+export function quoteFromFees(fees: any, wilayaId: string, type: string, stopDesk: boolean, weightRaw: unknown): FeeQuote {
+  const w = num(weightRaw);
+  const hasWeight = w !== null && w > 0;
+  const rows = findByType(fees, type);
+  const row: any = Array.isArray(rows) ? rows.find((r: any) => sameId(r?.wilaya_id ?? r?.wilaya, wilayaId)) : null;
+  const delivery = row ? num(stopDesk ? row.tarif_stopdesk : row.tarif) : null;
+  let weightFee: number | null = null, weightUnavailable = false;
+  if (hasWeight) {
+    const rule: any = findByType(fees?.poids, type);
+    const from = num(rule?.a_partir_de_KG), step = num(rule?.pour_chaque_KG);
+    const charge = num(stopDesk ? rule?.surfacturation_stopdesk_DA : rule?.surfacturation_a_domicile_DA);
+    if (from === null || step === null || step <= 0 || charge === null) weightUnavailable = true;
+    else weightFee = Math.max(0, Math.ceil((w! - from) / step - 1e-9)) * charge;
   }
-  return null;
+  if (weightFee !== null) weightFee = Math.round(weightFee * 100) / 100 + 0;
+  const total = delivery === null || weightUnavailable ? null : delivery + (weightFee ?? 0);
+  return { delivery, weightFee, weightUnavailable, total, hasWeight };
 }

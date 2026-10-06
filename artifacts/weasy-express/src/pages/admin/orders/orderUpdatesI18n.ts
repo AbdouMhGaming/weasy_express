@@ -94,3 +94,10 @@ for (const [lng, orderUpdates] of Object.entries({ en, fr, ar })) {
   i18n.addResourceBundle(lng, "translation", { orderUpdates }, true, true);
 }
 export {};
+
+const extra = {
+  en: { destError: "Destination data could not be loaded.", rowDeskFallback: "Not available for Stop desk here: will ship as home delivery.", operation: "Operation", orderRow: "Row {{n}}", historyBanner: "This history is rebuilt from parcels Ecotrack previously tracked for your account. Older archives that were never synced cannot be listed through the Ecotrack API.", historyFetching: "Fetching archived parcels from Ecotrack... rows appear as they arrive.", historyError: "Ecotrack could not return the archive right now. Rows shown may be incomplete." },
+  fr: { destError: "Impossible de charger les destinations.", rowDeskFallback: "Stop desk indisponible ici : sera expédié à domicile.", operation: "Opération", orderRow: "Ligne {{n}}", historyBanner: "Cet historique est reconstitué à partir des colis déjà suivis par Ecotrack pour votre compte. Les anciennes archives jamais synchronisées ne peuvent pas être listées via l'API Ecotrack.", historyFetching: "Récupération des colis archivés depuis Ecotrack... les lignes apparaissent au fur et à mesure.", historyError: "Ecotrack n'a pas pu renvoyer l'archive pour le moment. Les lignes affichées peuvent être incomplètes." },
+  ar: { destError: "تعذر تحميل بيانات الوجهات.", rowDeskFallback: "مكتب التسليم غير متاح هنا: سيُشحن إلى المنزل.", operation: "العملية", orderRow: "السطر {{n}}", historyBanner: "يُعاد بناء هذا السجل من الطرود التي تتبعتها Ecotrack سابقاً لحسابك. لا يمكن عرض الأرشيفات القديمة التي لم تتم مزامنتها عبر واجهة Ecotrack.", historyFetching: "جارٍ جلب الطرود المؤرشفة من Ecotrack... تظهر الصفوف تباعاً.", historyError: "تعذر على Ecotrack إرجاع الأرشيف حالياً. قد تكون الصفوف المعروضة ناقصة." },
+};
+for (const [lng, orderUpdates] of Object.entries(extra)) i18n.addResourceBundle(lng, "translation", { orderUpdates }, true, true);

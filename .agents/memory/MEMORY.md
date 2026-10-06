@@ -22,3 +22,5 @@
 - [Payout confirmations](payout-qr-confirmations.md) — owner-only QR POSTs; admin/linked-office OTP alternative must not reveal merchant codes to staff or permit repeated paid transitions.
 - [Ecotrack credential recovery](ecotrack-credential-recovery.md) — undecryptable sender credentials require the original encryption key or that sender's reconnection; do not treat them as Suivi logout.
 - [Client browser compatibility](client-browser-compatibility.md) — older clients need visible fallback colors and gradients; verify final packaged CSS, not just current-browser previews.
+- [Ecotrack archives](ecotrack-archives.md) — recover confirmed receipts from owner-scoped retained trackers; the active list excludes archives and never-synced archives are not enumerable.
+- [Order-entry scope](order-entry-scope.md) — order-entry changes apply to single and bulk forms; destination coverage and tariffs must come from Ecotrack.
