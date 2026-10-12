@@ -282,3 +282,17 @@ mtime_ms = 1791318159168
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/0d511022-31aa-4f33-bde8-c88c4092aa66/3cd140b6-eb7f-4139-80ed-d1d4458983d8"
 storage_version_token = "1791318315273634"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "S215LtbqCB2wSurizgO60"
+uri = "file://deploy/weasy-express-2026-10-12-product-upload-fix.zip"
+type = "unspecified"
+title = "Weasy Express — Product Upload Fix"
+description = "Updated Hostinger build correcting multipart headers for product creation, editing and photo uploads. Includes the previous history and notification fixes."
+logical_id = "e422fa83-672c-4cf5-bdfe-a485f65bbd32"
+content_hash = "sha256:e043973b8ec1a8b075a053f172c15d3a819a0557e1651995c4f9cf8553478822"
+size = 7803135
+mtime_ms = 1791843212335
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:bcc35629-831a-4bd4-a0fa-0b13d2f41db3/e422fa83-672c-4cf5-bdfe-a485f65bbd32/a49d5743-8df5-4a59-9959-43d0eb6d6df4"
+storage_version_token = "1791843300112234"
+content_type = "application/octet-stream"

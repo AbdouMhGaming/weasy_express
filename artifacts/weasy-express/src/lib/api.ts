@@ -102,6 +102,14 @@ export function expireCurrentSession(): never {
 
 /** Fetch wrapper for protected endpoints that centrally handles expired sessions. */
 export async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (typeof FormData !== "undefined" && init?.body instanceof FormData) {
+    // Auth helpers default to JSON. Multipart bodies need the browser's own
+    // Content-Type (including its generated boundary), without losing auth.
+    const headers = new Headers(init.headers ??
+      (typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined));
+    headers.delete("Content-Type");
+    init = { ...init, headers };
+  }
   const response = await globalThis.fetch(input, init);
   if (response.status === 401) expireCurrentSession();
   return response;
