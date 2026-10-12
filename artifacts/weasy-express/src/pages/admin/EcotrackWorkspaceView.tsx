@@ -16,9 +16,6 @@ import {
   useEcotrackOrderCommune,
   useEcotrackDesks,
   useEcotrackFees,
-  useEcotrackProducts,
-  useCreateEcotrackProduct,
-  useUpdateEcotrackProduct,
   useCreateEcotrackOrder,
   useBulkCreateEcotrackOrders,
   useUpdateEcotrackOrder,
@@ -38,6 +35,7 @@ import { PaginationBar } from "@/components/Pagination";
 import { useToast } from "@/hooks/use-toast";
 import { authenticatedFetch, adminHeaders, API_BASE } from "@/lib/api";
 import { OrderFormModal } from "./orders/OrderFormModal";
+import ProductsTab from "./ProductsTab";
 import { OrderFilterSheet } from "./orders/OrderFilterSheet";
 import { ReadySelectionBar, useTrackingSelection } from "./orders/ReadySelection";
 import { getDriver, normalizeDzMobile, communeHasStopDesk, communesOfWilaya, sameId, stopDeskWilayas } from "./orders/orderUpdates";
@@ -126,15 +124,19 @@ export function humanizeEcotrackStatus(status: unknown, t: (key: string) => stri
 
 type WorkspaceMode = "commands" | "desks" | "fees" | "products" | "history" | "history-payments" | "history-returns";
 
-export default function EcotrackWorkspaceView({
+type WorkspaceProps = { onOpenSettings?: () => void; mode?: WorkspaceMode; initialStatus?: string };
+
+export default function EcotrackWorkspaceView(props: WorkspaceProps) {
+  // The local product catalog must not depend on carrier sync or Commands permission.
+  if (props.mode === "products") return <div className="h-[calc(100vh-4rem)] bg-slate-50/50"><ProductsTab /></div>;
+  return <EcotrackWorkspaceBody {...props} />;
+}
+
+function EcotrackWorkspaceBody({
   onOpenSettings,
   mode = "commands",
   initialStatus = "all"
-}: {
-  onOpenSettings?: () => void;
-  mode?: WorkspaceMode;
-  initialStatus?: string;
-}) {
+}: WorkspaceProps) {
   const { t } = useTranslation();
   const isHistoryMode = mode.startsWith("history");
 
@@ -872,94 +874,6 @@ function FeesTab() {
       </div>
     </div>
   );
-}
-
-// -----------------------------------------------------------------------------
-// PRODUCTS TAB
-// -----------------------------------------------------------------------------
-function ProductsTab() {
-  const { t } = useTranslation();
-  const { data, isLoading } = useEcotrackProducts();
-  const create = useCreateEcotrackProduct();
-  const update = useUpdateEcotrackProduct();
-  const [editing, setEditing] = useState<any | null>(null);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Record<string, any>>({});
-  const [error, setError] = useState("");
-  const fields = [
-    ["name", "Name", "text"], ["sku", "SKU", "text"], ["purchase_price", "Purchase Price", "number"],
-    ["sale_price", "Sale Price", "number"], ["barcode", "Barcode", "text"], ["external_id", "External ID", "text"],
-    ["brand", "Brand", "text"], ["alert_min_stock", "Alert Minimum Stock", "number"], ["weight_kg", "Weight (KG)", "number"],
-    ["marketer_percentage", "Marketer Percentage (%)", "number"], ["page_url", "Page URL", "url"],
-  ] as const;
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    try {
-      const keys: string[] = [...fields.map(([key]) => key), "description", "photo"];
-      const payload = Object.fromEntries(keys.filter(key => form[key] !== undefined).map(key => [key, form[key]]));
-      for (const key of fields.filter(([, , type]) => type === "number").map(([key]) => key)) if (payload[key] !== "" && payload[key] !== undefined && (!Number.isFinite(Number(payload[key])) || Number(payload[key]) < 0)) throw new Error(`Invalid ${key}`);
-      if (payload.page_url) { const url = new URL(payload.page_url); if (!["http:", "https:"].includes(url.protocol)) throw new Error("Invalid Page URL"); }
-      if (editing) await update.mutateAsync({ id: editing.id, data: payload });
-      else await create.mutateAsync(payload);
-      setOpen(false); setEditing(null); setForm({});
-    } catch (e) { setError(e instanceof Error ? e.message : "Unable to save product"); }
-  };
-  const begin = (product?: any) => {
-    setEditing(product ?? null); setForm(product ? { ...product } : {}); setOpen(true);
-  };
-
-  return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">{t("admin.ecotrackPortal.products.list")}</h2><Button onClick={() => begin()}><Plus className="me-2 h-4 w-4" />Add product</Button></div>
-      <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#E10600]" /></div>
-          ) : !data?.products || data.products.length === 0 ? (
-            <div className="flex flex-col h-full items-center justify-center text-center p-8">
-              <Package className="h-12 w-12 text-slate-200 mb-3" />
-              <p className="text-slate-500 font-medium">{t("admin.ecotrackPortal.products.empty")}</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 sticky top-0 shadow-[0_1px_0_0_#e2e8f0]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.products.name")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">{t("admin.ecotrackPortal.products.reference")}</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">SKU</th><th className="px-4 py-3 font-semibold text-slate-700">Sale Price</th><th className="px-4 py-3 font-semibold text-slate-700">Stock</th><th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.products.map((p: any) => (
-                  <tr key={p.reference || p.barcode} className="hover:bg-slate-50/70">
-                    <td className="px-4 py-3 font-medium text-slate-900"><div className="flex items-center gap-2">{p.photo_url && <ProductPhoto src={p.photo_url} />}<span>{p.name || p.title}</span></div></td>
-                    <td className="px-4 py-3 text-slate-700 font-mono">{p.reference || p.barcode}</td>
-                    <td className="px-4 py-3 text-slate-700 font-mono">{p.sku || p.reference || "—"}</td><td className="px-4 py-3 text-slate-700">{p.sale_price ?? "—"}</td><td className="px-4 py-3 text-slate-700">{p.stock_disponible ?? 0}</td><td><Button variant="ghost" size="sm" onClick={() => begin(p)}><Edit2 className="h-4 w-4" /></Button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-      {open && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><form onSubmit={save} className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-6 shadow-xl"><div className="mb-5 flex justify-between"><h3 className="text-xl font-bold">{editing ? "Edit product" : "New product"}</h3><Button type="button" variant="ghost" onClick={() => setOpen(false)}><X /></Button></div>{error && <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="grid grid-cols-1 gap-4 md:grid-cols-2">{fields.map(([key, label, type]) => <label key={key} className="text-sm font-semibold text-slate-600">{label}<Input required={["name"].includes(key)} type={type} value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>)}<label className="text-sm font-semibold text-slate-600">Photo<input className="mt-1 block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setForm({ ...form, photo: e.target.files?.[0] })} /></label><label className="text-sm font-semibold text-slate-600 md:col-span-2">Description<textarea className="mt-1 min-h-24 w-full rounded-md border border-slate-200 p-2 text-sm" value={form.description ?? ""} onChange={e => setForm({ ...form, description: e.target.value })} /></label></div><div className="mt-6 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={create.isPending || update.isPending} type="submit">Save</Button></div></form></div>}
-    </div>
-  );
-}
-
-function ProductPhoto({ src }: { src: string }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    let objectUrl = "";
-    const controller = new AbortController();
-    authenticatedFetch(`${API_BASE}${src}`, { headers: adminHeaders(), signal: controller.signal }).then(async res => {
-      if (!res.ok) throw new Error("photo_failed");
-      const blob = await res.blob(); objectUrl = URL.createObjectURL(blob); setUrl(objectUrl);
-    }).catch(() => {});
-    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [src]);
-  return url ? <img src={url} alt="" className="h-9 w-9 rounded object-cover" /> : <span className="h-9 w-9 rounded bg-slate-100" />;
 }
 
 // -----------------------------------------------------------------------------

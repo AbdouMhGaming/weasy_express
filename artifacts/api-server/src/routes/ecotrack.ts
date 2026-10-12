@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { createRequire } from "node:module";
 import { pool } from "@workspace/db";
@@ -19,6 +19,15 @@ const PAGE_SIZE = 40;
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 const productUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadProductPhoto: RequestHandler = (req, res, next) => {
+  productUpload.single("photo")(req, res, err => {
+    if (!err) return next();
+    const tooLarge = err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE";
+    return res.status(tooLarge ? 413 : 400).json({
+      ok: false, error: tooLarge ? "photo_too_large" : "invalid_photo_upload",
+    });
+  });
+};
 
 async function accountFor(req: AuthedRequest, requiredPermission: string | string[] = "ecotrack"): Promise<any | null> {
   if (req.adminRole !== "expediteur") return null;
@@ -1316,7 +1325,7 @@ router.get("/expediteur/ecotrack/orders/:tracking/label", async (req: AuthedRequ
 });
 
 async function productOwner(req: AuthedRequest) {
-  const account = await accountFor(req);
+  const account = await accountFor(req, "ecotrack-products");
   if (!account) throw new EcotrackError("forbidden", 403, null);
   return account.id;
 }
@@ -1332,10 +1341,12 @@ router.get("/expediteur/ecotrack/products/:id/photo", async (req: AuthedRequest,
     const owner = await productOwner(req);
     const [[row]] = await pool.execute("SELECT photo_data, photo_mime FROM expediteur_products WHERE id=? AND expediteur_id=?", [Number(req.params.id), owner]) as any;
     if (!row?.photo_data) return res.status(404).end();
+    res.set("Cache-Control", "private, no-store").set("X-Content-Type-Options", "nosniff");
     res.type(row.photo_mime || "application/octet-stream"); return res.send(row.photo_data);
   } catch (e) { return error(res, e); }
 });
 function validateProduct(body: any, file?: Express.Multer.File) {
+  if (body.name !== undefined && !String(body.name).trim()) return "name_required";
   const numeric = ["purchase_price", "sale_price", "alert_min_stock", "weight_kg", "marketer_percentage"];
   for (const key of numeric) if (body[key] !== undefined && body[key] !== "" && (!Number.isFinite(Number(body[key])) || Number(body[key]) < 0)) return `invalid_${key}`;
   if (body.page_url) { try { const url = new URL(String(body.page_url)); if (!["http:", "https:"].includes(url.protocol)) return "invalid_page_url"; } catch { return "invalid_page_url"; } }
@@ -1347,7 +1358,7 @@ function validateProduct(body: any, file?: Express.Multer.File) {
   }
   return null;
 }
-router.post("/expediteur/ecotrack/products", productUpload.single("photo"), async (req: AuthedRequest, res) => {
+router.post("/expediteur/ecotrack/products", uploadProductPhoto, async (req: AuthedRequest, res) => {
   try {
     const owner = await productOwner(req);
     const name = String(req.body.name ?? "").trim();
@@ -1360,7 +1371,7 @@ router.post("/expediteur/ecotrack/products", productUpload.single("photo"), asyn
     return res.status(201).json({ ok: true, product: { ...product, photo_url: product.has_photo ? `/api/expediteur/ecotrack/products/${result.insertId}/photo` : null } });
   } catch (e) { return error(res, e); }
 });
-router.put("/expediteur/ecotrack/products/:id", productUpload.single("photo"), async (req: AuthedRequest, res) => {
+router.put("/expediteur/ecotrack/products/:id", uploadProductPhoto, async (req: AuthedRequest, res) => {
   try {
     const owner = await productOwner(req); const id = Number(req.params.id);
     const [[current]] = await pool.execute("SELECT * FROM expediteur_products WHERE id=? AND expediteur_id=?", [id, owner]) as any;

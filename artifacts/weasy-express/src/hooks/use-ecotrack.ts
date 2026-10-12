@@ -338,7 +338,8 @@ export function useEcotrackProducts(page = 1) {
       if (res.status === 401 || res.status === 403 || res.status === 409) throw new Error("disconnected");
       const body = await readApiJson(res);
       const raw = body.products ? body : (body.data?.data ?? body.data);
-      return raw && typeof raw === "object" ? raw : { products: [], pagination: {} };
+      if (!res.ok || body.ok === false || !Array.isArray(raw?.products)) throw new Error(body.error || "products_load_failed");
+      return raw;
     }
   });
 }
@@ -369,7 +370,7 @@ export function useUpdateEcotrackProduct() {
     mutationFn: async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
       const body = new FormData();
       Object.entries(data).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== "") {
+        if (value !== undefined && value !== null) {
           if (value instanceof File) body.append(key, value);
           else body.append(key, String(value));
         }
